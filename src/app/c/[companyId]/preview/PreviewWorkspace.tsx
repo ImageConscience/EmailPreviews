@@ -7,6 +7,7 @@ import {
   looksLikeImageUrl,
   looksLikeUrl,
   matchTemplateName,
+  metadataColumns,
   normalizeKey,
   renderTemplate,
   unusedColumns as computeUnusedColumns,
@@ -97,6 +98,32 @@ function rowLabel(data: Record<string, string>, columns: string[]): string {
   }
   const first = columns.find((c) => data[c]?.trim());
   return first ? data[first].trim() : "(empty row)";
+}
+
+/**
+ * The second line under each row in the rail. With one sheet holding every
+ * month and three options each, "Row 27" identifies nothing -- the send month
+ * and which option it is are what you actually navigate by.
+ */
+function rowSubLabel(
+  data: Record<string, string>,
+  position: number,
+  templateColumn: string | null,
+): string {
+  const find = (names: string[]) => {
+    const key = Object.keys(data).find((c) => names.includes(normalizeKey(c)));
+    return key ? data[key]?.trim() : "";
+  };
+  const month = find(["send_month", "month", "send_date"]);
+  const option = find(["option", "variant"]);
+  const template = templateColumn ? data[templateColumn]?.trim() : "";
+
+  const parts = [
+    month || `Row ${position + 1}`,
+    option ? (option.length <= 2 ? `Option ${option}` : option) : "",
+    template,
+  ].filter(Boolean);
+  return parts.join(" \u00b7 ");
 }
 
 function isDirty(draft: Record<string, string>, baseline: Record<string, string>): boolean {
@@ -355,11 +382,10 @@ export function PreviewWorkspace({
     if (!template || !sheet) return [];
     // The template column steers the preview rather than filling it, so it is
     // never an oversight that a template does not reference it.
-    return computeUnusedColumns(
-      sheet.columns,
-      template.placeholders,
-      templateColumn ? [templateColumn] : [],
-    );
+    return computeUnusedColumns(sheet.columns, template.placeholders, [
+      ...(templateColumn ? [templateColumn] : []),
+      ...metadataColumns(sheet.columns),
+    ]);
   }, [template, sheet, templateColumn]);
 
   const visibleRows = useMemo(() => {
@@ -605,10 +631,7 @@ export function PreviewWorkspace({
                   )}
                   {rowLabel(row.data, sheet?.columns ?? [])}
                   <span className="sub">
-                    Row {row.position + 1}
-                    {templateColumn && row.data[templateColumn]?.trim()
-                      ? ` \u00b7 ${row.data[templateColumn].trim()}`
-                      : ""}
+                    {rowSubLabel(row.data, row.position, templateColumn)}
                   </span>
                 </button>
               </li>

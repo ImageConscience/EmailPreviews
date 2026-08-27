@@ -1,63 +1,65 @@
 # Content sheets
 
-`campaign-content.csv` (and the identical `campaign-content.xlsx`) holds **every
-campaign for every template in one sheet**. Upload it once under **Content**.
+`campaign-content.csv` (and the identical `campaign-content.xlsx`) holds every
+campaign for every template in one sheet. Upload it once under **Content**.
 
-26 columns × 3 rows: the three mockups, one per template. Columns that do not
-apply to a row are simply empty — a seasonal row leaves the pest columns blank
-and vice versa.
+**54 rows × 30 columns** — three series, six months each, three copy options per
+month, generated from `SFS_Email_Content_Planner_2026_V2_2.xlsx`.
+
+| Series | Template | Months | Rows |
+| --- | --- | --- | --- |
+| Core service focus | `Core Service` | Sep 2026 – Feb 2027 | 18 |
+| Seasonal rotating | `Seasonal` | Sep 2026 – Feb 2027 | 18 |
+| Pest control (P1) | `Pest Control` | Oct 2026 – Mar 2027 | 18 |
+
+Every option is loaded as its own row rather than picked in the spreadsheet
+first, so you can see all three side by side in the real layout and approve the
+one you want. Columns that do not apply to a row are simply empty.
+
+## Regenerating from the planner
+
+```bash
+node scripts/planner-to-content.mjs path/to/planner.xlsx
+```
+
+The planner is transposed relative to what the app wants — its rows are fields
+and its columns are month × option, so one email is a *column* there and a *row*
+here. The script also drops what the templates already own (logo, nav bar, view
+-as-webpage) and strips the planner's own annotations, so `SAFETY TIP  (fixed
+label for the cream box)` arrives as `SAFETY TIP`.
 
 ## The `template` column
 
-The first column names the template each row is meant to be previewed in:
+The first column names the template each row is previewed in. Select a row and
+that template is chosen automatically; you can still switch to see the same copy
+in a different layout, and the app shows which template the row asked for.
 
-| template | headline | … |
-| --- | --- | --- |
-| Seasonal | August is when small HVAC problems get expensive. | |
-| Core Service | Nobody notices clean. Everybody notices the day it slips. | |
-| Pest Control | Roaches don't walk in. They arrive on the freight. | |
+Matching ignores case and punctuation. If a row names a template that does not
+exist yet, the preview falls back to the first template and says so.
 
-Select a row in the preview and that template is chosen automatically. You can
-still switch templates to see the same copy in a different layout; the app shows
-which template the row asked for and offers a one-click way back. Moving to
-another row applies that row's own template again.
+## Planning columns
 
-Matching ignores case and punctuation, so `pest control`, `Pest Control` and a
-template named `03 Pest Control` all find each other. If a row names a template
-that does not exist yet, the preview falls back to the first template and says
-so rather than failing.
+`send_month`, `option` and `subject` describe the campaign rather than filling
+the template. The app knows these are planning columns and does not report them
+as ignored, and they appear under each row in the rail so a 54-row sheet reads
+as a schedule: *Sep 2026 · Janitorial · Option A · Core Service*.
 
-`template`, `template_name`, `email_template`, `default_template` and `layout`
-are all recognised as this column, so name it whichever suits you.
+`subject` is not rendered — the subject line belongs to Constant Contact, not to
+the email body — but it is carried here so it is approved alongside the copy it
+belongs to. `preheader` **is** rendered, as the hidden preview line beside the
+subject in the inbox.
 
-## Column layout
+## Images
 
-`template` first, then the 5 fields every template shares (hero image and alt
-text, headline, two body paragraphs), then the 20 that belong to one template
-each. That keeps the sheet readable left to right as it grows.
-
-The sheet carries only what changes per campaign. Header bars, and everything
-from the first dark band below the hero downward, are fixed in the templates —
-so the credentials line, address, Our Services block and footer links are not
-columns here.
+`hero_image` points at the placeholder photos in `public/brand/` for every row.
+`hero_alt` carries the planner's art direction for that campaign (for example
+*"P1 tech sealing a gap along a warehouse dock door"*), so it doubles as the
+brief for the photo still to be sourced and as real alt text once it is.
 
 ## Before a real send
 
-**The Constant Contact links live in the templates now**, not here — the four it
-injects (view-as-webpage, unsubscribe, update profile, data notice) are `href="#"`
-with a comment beside them. Set them once per template.
+The Constant Contact links live in the templates, not here — the four it injects
+(view-as-webpage, unsubscribe, update profile, data notice) are `href="#"` with a
+comment beside them. Set them once per template.
 
-**The site URLs are inferred** from the address in the footer —
-`safetyfacilityservices.com/services`, `/contact`, `/customer-portal`,
-`/request-a-quote`, and `p1pestsolutions.com/site-inspection`. Check they exist;
-the ones inside the templates are hardcoded, and `cta_url` is a column.
-
-## Adding campaigns
-
-Add a row, set `template`, and fill the columns that template uses. The preview
-reports anything left blank, so you do not have to remember which columns belong
-to which template.
-
-`hero_image` points at the mockup photos in `public/brand/`; swap in a real URL
-per campaign. Anything constant across sends — the credentials line, the postal
-address, the Our Services block — lives in the template, not here.
+The site URLs are inferred from the address in the footer. Check they exist.

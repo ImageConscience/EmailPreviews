@@ -219,6 +219,34 @@ const TEMPLATE_COLUMNS = [
   "layout",
 ];
 
+/**
+ * Columns that plan or label a campaign rather than fill a template: the
+ * subject line, the send month, which option a row is. They are legitimately
+ * absent from every template, so reporting them as ignored on each one trains
+ * people to stop reading the panel that also flags real mistakes.
+ */
+const METADATA_COLUMNS = [
+  "subject",
+  "subject_line",
+  "send_month",
+  "month",
+  "send_date",
+  "option",
+  "variant",
+  "theme",
+  "status",
+  "owner",
+  "notes",
+  "campaign",
+  "campaign_name",
+];
+
+/** Planning and labelling columns present in this sheet. */
+export function metadataColumns(columns: string[]): string[] {
+  const wanted = new Set(METADATA_COLUMNS);
+  return columns.filter((column) => wanted.has(normalizeKey(column)));
+}
+
 /** The column in this sheet that names each row's template, if there is one. */
 export function findTemplateColumn(columns: string[]): string | null {
   const wanted = new Set(TEMPLATE_COLUMNS);
