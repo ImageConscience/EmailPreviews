@@ -126,10 +126,24 @@ via `engines` in `package.json` and `.nvmrc`, so it should not arise.
 
 **The port Railway routes to does not match the one the app listens on.** This
 shows up as a **502 Bad Gateway** rather than a blank page: the container is
-running, but the router is knocking on the wrong door. The start log prints
-`[startup] Listening on 0.0.0.0:<port>` — compare that with the target port on
-Settings → Networking → your domain. The simplest fix is to delete any `PORT`
-variable you set by hand and let Railway provide it, so the two cannot disagree.
+running, but the router is knocking on the wrong door.
+
+Railway injects its own `PORT` — commonly **8080** — and the app follows it. The
+domain's target port is configured separately, and defaults to whatever Railway
+guessed when the domain was created, so the two drift apart easily.
+
+The start log prints the answer:
+
+```
+[startup]  Listening on 0.0.0.0:8080
+```
+
+Set **Settings → Networking → your domain → target port** to that number. Domain
+changes apply immediately, with no redeploy.
+
+Do not set a `PORT` variable by hand to force a different number — Railway
+provides one and the app honours it, so overriding it only recreates the
+mismatch from the other side.
 
 **The container starts and then exits.** Also a 502. Check the deploy's runtime
 log, not the build log — if the last lines are the app starting and then
