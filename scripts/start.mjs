@@ -38,7 +38,21 @@ function startServer(issue) {
       }
     : {};
 
-  const child = spawn("next", ["start"], {
+  // Bind explicitly rather than relying on defaults. A platform routes to a
+  // port it decided on separately, so a mismatch here shows up as a 502 on a
+  // deploy that otherwise looks healthy -- log the address plainly so that
+  // comparison takes seconds instead of a guess.
+  const port = process.env.PORT || "3000";
+  const host = process.env.HOST || "0.0.0.0";
+  console.log(`[startup]  Listening on ${host}:${port}`);
+  if (onRailway()) {
+    console.log(
+      `[startup]  Railway must be routing to port ${port} for this to be reachable.\n` +
+        "           Settings -> Networking -> your domain shows the target port it uses.",
+    );
+  }
+
+  const child = spawn("next", ["start", "-H", host, "-p", port], {
     stdio: "inherit",
     shell: process.platform === "win32",
     env: { ...process.env, ...env },

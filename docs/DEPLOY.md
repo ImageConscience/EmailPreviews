@@ -124,6 +124,19 @@ domain on that service.
 last. A missing Node version is the usual culprit on Railway; this repo pins one
 via `engines` in `package.json` and `.nvmrc`, so it should not arise.
 
+**The port Railway routes to does not match the one the app listens on.** This
+shows up as a **502 Bad Gateway** rather than a blank page: the container is
+running, but the router is knocking on the wrong door. The start log prints
+`[startup] Listening on 0.0.0.0:<port>` — compare that with the target port on
+Settings → Networking → your domain. The simplest fix is to delete any `PORT`
+variable you set by hand and let Railway provide it, so the two cannot disagree.
+
+**The container starts and then exits.** Also a 502. Check the deploy's runtime
+log, not the build log — if the last lines are the app starting and then
+nothing, it is exiting. The app is built not to exit over database
+configuration, so if you see this, confirm the deployment is running the latest
+commit.
+
 **The healthcheck never passed.** Railway holds traffic back until
 `healthcheckPath` (`/login`) answers. That path does not touch the database, so
 it answers as soon as the server is up.
