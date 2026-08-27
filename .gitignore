@@ -14,3 +14,6 @@ data/
 
 .DS_Store
 *.log
+
+# Stray output if a screenshot script runs without its output dir set
+undefined/
