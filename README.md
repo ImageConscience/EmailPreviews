@@ -103,9 +103,10 @@ themselves** — migrations run at start (not at build, since a build container 
 no access to the database), so a committed migration is applied on the next boot
 and already-applied ones are skipped.
 
-`scripts/check-db.mjs` runs before the migrations and turns the two easy mistakes
-— an unlinked database service, and a `DATABASE_URL` whose kind disagrees with
-the schema — into a message naming the step that was missed.
+If the app starts without a usable database it still serves the site, in a mode
+where every page names the missing step. A container that exits instead would
+leave the URL blank with the reason buried in platform logs, which is a much
+worse place to be when the URL is your only window into the deploy.
 
 [**docs/DEPLOY.md**](docs/DEPLOY.md) has the click-by-click walkthrough, local
 development setup, how to make a schema change, and backups.
@@ -119,7 +120,7 @@ src/lib/sheet.ts         .xlsx / .csv ingestion
 src/lib/auth.ts          sessions, roles, the single tenancy choke point
 src/actions/             server actions: auth, content, members
 src/app/c/[companyId]/   the signed-in app; preview/ is the workspace
-scripts/check-db.mjs     startup guard: explains database misconfiguration
+scripts/start.mjs        production start: check database, migrate, serve
 scripts/db-export.ts     dump every table to JSON (portable backup)
 scripts/db-import.ts     load a dump into an empty database
 railway.json             build and start commands for Railway

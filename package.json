@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "node scripts/check-db.mjs && prisma migrate deploy && next start",
+    "start": "node scripts/start.mjs",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
@@ -31,5 +31,8 @@
     "@types/react-dom": "^19.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   }
 }

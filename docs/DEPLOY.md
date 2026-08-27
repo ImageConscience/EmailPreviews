@@ -55,8 +55,8 @@ where it is.
   deploy time, so the credentials are never copied around or committed. If your
   database service has a different name, use that name instead of `Postgres`.
 
-If you skip this, the app stops on boot and prints these instructions rather
-than failing with a database error.
+If you skip this, the app still starts, and its URL shows a page naming this
+exact step rather than a blank screen.
 
 ### 4. Get your URL
 
@@ -89,10 +89,10 @@ Once deployed, pushing to the repo's default branch redeploys automatically, and
 
 - **Build** runs `prisma generate && next build`. No database work happens here,
   because Railway builds in a throwaway container.
-- **Start** runs `scripts/check-db.mjs`, then `prisma migrate deploy`, then the
-  server. Any migration committed to the repo and not yet applied runs against
-  the live database at that moment. Already-applied migrations are skipped, so
-  restarts and redeploys with no schema change are no-ops.
+- **Start** runs `scripts/start.mjs`, which checks the database, applies any
+  migration committed to the repo and not yet applied, then runs the server.
+  Already-applied migrations are skipped, so restarts and redeploys with no
+  schema change are no-ops.
 
 So the loop for a schema change is: the migration is generated and committed
 here, you push, Railway applies it on boot. Nothing manual.
@@ -101,6 +101,36 @@ here, you push, Railway applies it on boot. Nothing manual.
 migration files it has not seen. Destructive changes are only ever destructive if
 a migration file says so, which is worth a read of the SQL for anything that
 renames or removes a column.
+
+---
+
+## When the URL shows nothing
+
+A generated domain that serves nothing almost always means the container is not
+running, so there is nothing for Railway to route to. In order of likelihood:
+
+**No deploy has succeeded yet.** Generating a domain does not deploy anything.
+Open the service → **Deployments**. You want a deployment marked *Success*. If
+the newest one is *Failed* or *Crashed*, open it and read the log — the cause is
+in the last twenty lines.
+
+**The service was created from an empty project.** If you made a project and a
+domain but never chose the GitHub repo, there is no application at all. The
+service's Settings → Source should name `ImageConscience/EmailPreviews`. If it
+does not, deploy the repo into the project (**New → GitHub Repo**) and put the
+domain on that service.
+
+**The build failed.** Check the build log for the first error rather than the
+last. A missing Node version is the usual culprit on Railway; this repo pins one
+via `engines` in `package.json` and `.nvmrc`, so it should not arise.
+
+**The healthcheck never passed.** Railway holds traffic back until
+`healthcheckPath` (`/login`) answers. That path does not touch the database, so
+it answers as soon as the server is up.
+
+The app deliberately starts even when its database is missing or unreachable, so
+"nothing at all" points at the deploy or the build rather than at configuration.
+A configuration problem shows up as a page explaining itself.
 
 ---
 
