@@ -226,8 +226,6 @@ const TEMPLATE_COLUMNS = [
  * people to stop reading the panel that also flags real mistakes.
  */
 const METADATA_COLUMNS = [
-  "subject",
-  "subject_line",
   "send_month",
   "month",
   "send_date",
@@ -240,6 +238,33 @@ const METADATA_COLUMNS = [
   "campaign",
   "campaign_name",
 ];
+
+/**
+ * The subject line and the preview text beside it in the inbox.
+ *
+ * Neither belongs in the email body -- the sending platform sets them -- but
+ * both are campaign copy that gets written, reviewed and approved along with
+ * everything else, so the preview shows them above the render rather than
+ * discarding them as columns no template uses.
+ */
+const ENVELOPE_ALIASES = {
+  subject: ["subject", "subject_line"],
+  preheader: ["preheader", "pre_header", "preview_text", "preview", "preheader_text"],
+};
+
+export interface EnvelopeColumns {
+  subject: string | null;
+  preheader: string | null;
+}
+
+export function findEnvelopeColumns(columns: string[]): EnvelopeColumns {
+  const pick = (names: string[]) =>
+    columns.find((column) => names.includes(normalizeKey(column))) ?? null;
+  return {
+    subject: pick(ENVELOPE_ALIASES.subject),
+    preheader: pick(ENVELOPE_ALIASES.preheader),
+  };
+}
 
 /** Planning and labelling columns present in this sheet. */
 export function metadataColumns(columns: string[]): string[] {

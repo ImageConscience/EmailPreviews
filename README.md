@@ -34,6 +34,10 @@ previews itself correctly without anyone choosing from a list. Switching
 template is still one click, and the app says which template the row asked for
 so you can get back.
 
+**Subject and preview text** sit above the render rather than inside it. The
+sending platform sets both, so they are not placeholders in the template, but
+they are campaign copy that gets written and approved with everything else.
+
 **Approvals.** Each person can sign off the row currently on screen, in the
 template currently on screen, and the bar next to the preview shows who has.
 The record is per row *and* template, because the same copy in a different

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  findEnvelopeColumns,
   findTemplateColumn,
   looksLikeImageUrl,
   looksLikeUrl,
@@ -15,6 +16,7 @@ import {
 import { saveRowAction } from "@/actions/content";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
+import { EnvelopeFields } from "./EnvelopeFields";
 import type { ApprovalView } from "@/lib/approval";
 
 export interface TemplateSummary {
@@ -254,6 +256,16 @@ export function PreviewWorkspace({
     return { matched, unresolved: Boolean(value) && !matched };
   }, [templateColumn, currentRow, templates]);
 
+  /** Subject and preview text, shown above the render rather than inside it. */
+  const envelopeColumns = useMemo(
+    () => findEnvelopeColumns(sheet?.columns ?? []),
+    [sheet],
+  );
+  const envelopeKeys = useMemo(
+    () => [envelopeColumns.subject, envelopeColumns.preheader].filter((c): c is string => Boolean(c)),
+    [envelopeColumns],
+  );
+
   const rowTemplate = useMemo<RowTemplateInfo>(() => {
     if (!templateColumn || !currentRow) {
       return { column: templateColumn, value: "", matched: null, unresolved: false };
@@ -285,12 +297,14 @@ export function PreviewWorkspace({
       });
     }
     for (const column of columns) {
-      // The template column is offered as a picker above, not as a text field.
+      // The template picker and the envelope fields each have their own place
+      // in the UI, so they are not repeated as text fields here.
       if (claimed.has(column) || column === templateColumn) continue;
+      if (envelopeKeys.includes(column)) continue;
       rest.push({ label: column, key: column, inTemplate: false, hasColumn: true });
     }
     return { templateFields: inTemplate, otherFields: rest };
-  }, [template, sheet, templateColumn]);
+  }, [template, sheet, templateColumn, envelopeKeys]);
 
   const fields = useMemo(
     () => [...templateFields, ...otherFields],
@@ -384,9 +398,10 @@ export function PreviewWorkspace({
     // never an oversight that a template does not reference it.
     return computeUnusedColumns(sheet.columns, template.placeholders, [
       ...(templateColumn ? [templateColumn] : []),
+      ...envelopeKeys,
       ...metadataColumns(sheet.columns),
     ]);
-  }, [template, sheet, templateColumn]);
+  }, [template, sheet, templateColumn, envelopeKeys]);
 
   const visibleRows = useMemo(() => {
     if (!sheet) return [];
@@ -722,7 +737,23 @@ export function PreviewWorkspace({
 
         <div className="ws-canvas">
           {template ? (
-            <PreviewFrame html={result.html} maxWidth={deviceWidth} />
+            <div
+              className="ws-stack"
+              style={{ maxWidth: deviceWidth ? `${deviceWidth}px` : "100%" }}
+            >
+              {currentRow && (
+                <EnvelopeFields
+                  columns={envelopeColumns}
+                  values={draft}
+                  baseline={baseline}
+                  width={null}
+                  onChange={(key, value) =>
+                    setDraft((previous) => ({ ...previous, [key]: value }))
+                  }
+                />
+              )}
+              <PreviewFrame html={result.html} maxWidth={null} />
+            </div>
           ) : (
             <div className="empty">Select a template to preview.</div>
           )}

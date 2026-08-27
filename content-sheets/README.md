@@ -39,15 +39,22 @@ exist yet, the preview falls back to the first template and says so.
 
 ## Planning columns
 
-`send_month`, `option` and `subject` describe the campaign rather than filling
+`send_month` and `option` describe the campaign rather than filling
 the template. The app knows these are planning columns and does not report them
 as ignored, and they appear under each row in the rail so a 54-row sheet reads
 as a schedule: *Sep 2026 · Janitorial · Option A · Core Service*.
 
-`subject` is not rendered — the subject line belongs to Constant Contact, not to
-the email body — but it is carried here so it is approved alongside the copy it
-belongs to. `preheader` **is** rendered, as the hidden preview line beside the
-subject in the inbox.
+## Subject and preview text
+
+`subject` and `preheader` are shown above the render, styled like the inbox
+line they become, and are editable there. Neither is a placeholder: the sending
+platform sets both, so nothing about them belongs in the email body. Carrying
+them here means they are written, reviewed and approved with the copy they
+belong to, and editing either marks existing approvals stale like any other
+change.
+
+Recognised header names: `subject` / `subject_line`, and `preheader` /
+`preview_text` / `preview`. A sheet without them simply shows no bar.
 
 ## Images
 
