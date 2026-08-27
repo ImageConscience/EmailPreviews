@@ -23,10 +23,16 @@ placeholders exist. A company can have as many templates as it likes.
 into records that live in the app — the original file is not kept or needed
 again. Column headers correspond to placeholder names.
 
-**Preview.** Pick a template and a row and the merged email renders in an
-isolated frame at mobile, desktop or full width. Edit any field and the preview
-updates as you type. Save writes the change back to the row and keeps the
-previous values as a revision, so a collaborator's edit is always recoverable.
+**Preview.** Pick a row and the merged email renders in an isolated frame at
+mobile, desktop or full width. Edit any field and the preview updates as you
+type. Save writes the change back to the row and keeps the previous values as a
+revision, so a collaborator's edit is always recoverable.
+
+**One sheet, many templates.** A sheet can carry a `template` column naming the
+template each row belongs to, so every campaign lives in one place and each row
+previews itself correctly without anyone choosing from a list. Switching
+template is still one click, and the app says which template the row asked for
+so you can get back.
 
 ### The parts that usually go wrong
 
@@ -44,6 +50,9 @@ previous values as a revision, so a collaborator's edit is always recoverable.
 - **A missing image placeholder is a gap, not a broken image.** An unfilled
   `src="{{ hero_image }}"` renders as a labelled dashed box at the right size
   instead of leaving a raw token the browser tries to fetch.
+- **One sheet across templates means most columns are irrelevant to any one
+  row.** The editor lists the fields the current template actually uses and
+  folds the rest away, so a 42-column sheet does not read as a 42-field form.
 
 ---
 

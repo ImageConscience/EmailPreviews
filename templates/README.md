@@ -58,6 +58,14 @@ files.
 `sample-hero-*.jpg` files are the mockup photos, useful as defaults while
 testing.
 
+## Choosing the template per row
+
+The content sheet carries a `template` column naming which of these each row
+uses — `Seasonal`, `Core Service` or `Pest Control`. Name the templates that way
+when you paste them in and rows will select themselves in the preview. Matching
+ignores case and punctuation, so `01 Seasonal` still matches a sheet that says
+`Seasonal`.
+
 ## Placeholders
 
 Names are matched case- and punctuation-insensitively, so a spreadsheet column

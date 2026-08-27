@@ -186,10 +186,71 @@ export function renderTemplate(
   };
 }
 
-/** Columns present in the sheet that this template never references. */
-export function unusedColumns(columns: string[], placeholders: string[]): string[] {
+/**
+ * Columns present in the sheet that this template never references.
+ * `ignore` drops columns that are deliberately metadata rather than content,
+ * so they are not reported as an oversight on every single template.
+ */
+export function unusedColumns(
+  columns: string[],
+  placeholders: string[],
+  ignore: string[] = [],
+): string[] {
   const used = new Set(placeholders.map(normalizeKey));
-  return columns.filter((c) => !used.has(normalizeKey(c)));
+  const skipped = new Set(ignore.map(normalizeKey));
+  return columns.filter((c) => !used.has(normalizeKey(c)) && !skipped.has(normalizeKey(c)));
+}
+
+/* ------------------------------------------------------------------ */
+/* Per-row template selection                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Header names understood as "which template does this row belong to".
+ *
+ * One sheet holding every campaign is easier to maintain than one sheet per
+ * template, but only if each row can say how it is meant to be rendered.
+ */
+const TEMPLATE_COLUMNS = [
+  "template",
+  "template_name",
+  "email_template",
+  "default_template",
+  "layout",
+];
+
+/** The column in this sheet that names each row's template, if there is one. */
+export function findTemplateColumn(columns: string[]): string | null {
+  const wanted = new Set(TEMPLATE_COLUMNS);
+  return columns.find((column) => wanted.has(normalizeKey(column))) ?? null;
+}
+
+export interface NamedTemplate {
+  id: string;
+  name: string;
+}
+
+/**
+ * Resolve a cell value to one of the company's templates. Matching is
+ * punctuation- and case-insensitive, and falls back to a containment match so
+ * that a sheet saying "Seasonal" still finds a template named "01 Seasonal".
+ */
+export function matchTemplateName<T extends NamedTemplate>(
+  value: string,
+  templates: T[],
+): T | null {
+  const wanted = normalizeKey(value ?? "");
+  if (!wanted) return null;
+
+  const exact = templates.find((t) => normalizeKey(t.name) === wanted);
+  if (exact) return exact;
+
+  const partial = templates.filter((t) => {
+    const name = normalizeKey(t.name);
+    return name.includes(wanted) || wanted.includes(name);
+  });
+  // Only accept a loose match when it is unambiguous.
+  return partial.length === 1 ? partial[0] : null;
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp)(\?|#|$)/i;

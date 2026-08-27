@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  findTemplateColumn,
   looksLikeImageUrl,
   looksLikeUrl,
+  matchTemplateName,
   normalizeKey,
   renderTemplate,
+  unusedColumns as computeUnusedColumns,
 } from "@/lib/template";
 import { saveRowAction } from "@/actions/content";
 import { PreviewFrame } from "./PreviewFrame";
@@ -54,6 +57,18 @@ interface Field {
   key: string;
   inTemplate: boolean;
   hasColumn: boolean;
+}
+
+/** Rendered above the fields rather than among them; it selects the template. */
+interface RowTemplateInfo {
+  /** The sheet column naming each row's template, if the sheet has one. */
+  column: string | null;
+  /** Raw cell value for the current row. */
+  value: string;
+  /** The template that value resolves to, if any. */
+  matched: TemplateSummary | null;
+  /** A value was given but matches no template the company has yet. */
+  unresolved: boolean;
 }
 
 const DEVICES = [
@@ -120,6 +135,10 @@ export function PreviewWorkspace({
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
 
   const wantedRowId = useRef(initialRowId);
+  /** Row whose default template has already been applied, so a manual pick sticks. */
+  const templateAppliedFor = useRef<string | null>(null);
+  const [showOtherFields, setShowOtherFields] = useState(false);
+  const [showAllUnused, setShowAllUnused] = useState(false);
 
   /* ---------------- data loading ---------------- */
 
@@ -178,16 +197,50 @@ export function PreviewWorkspace({
 
   /* ---------------- field mapping ---------------- */
 
-  const fields = useMemo<Field[]>(() => {
+  /** The sheet column that names each row's template, if the sheet has one. */
+  const templateColumn = useMemo(
+    () => (sheet ? findTemplateColumn(sheet.columns) : null),
+    [sheet],
+  );
+
+  /**
+   * The template this row asks for, read from the saved row.
+   *
+   * Deliberately not derived from `draft`: the draft is reset by an effect, so
+   * on the first render after switching rows it still holds the previous row's
+   * values, and auto-selection would apply the previous row's template.
+   */
+  const rowDefaultTemplate = useMemo(() => {
+    if (!templateColumn || !currentRow) return { matched: null, unresolved: false };
+    const value = (currentRow.data[templateColumn] ?? "").trim();
+    const matched = matchTemplateName(value, templates);
+    return { matched, unresolved: Boolean(value) && !matched };
+  }, [templateColumn, currentRow, templates]);
+
+  const rowTemplate = useMemo<RowTemplateInfo>(() => {
+    if (!templateColumn || !currentRow) {
+      return { column: templateColumn, value: "", matched: null, unresolved: false };
+    }
+    const value = (draft[templateColumn] ?? currentRow.data[templateColumn] ?? "").trim();
+    const matched = matchTemplateName(value, templates);
+    return { column: templateColumn, value, matched, unresolved: Boolean(value) && !matched };
+  }, [templateColumn, currentRow, draft, templates]);
+
+  /**
+   * One sheet holds every campaign, so a template's own fields are a minority of
+   * the columns. They are listed on their own; the rest fold away.
+   */
+  const { templateFields, otherFields } = useMemo(() => {
     const columns = sheet?.columns ?? [];
     const byKey = new Map(columns.map((c) => [normalizeKey(c), c]));
     const claimed = new Set<string>();
-    const out: Field[] = [];
+    const inTemplate: Field[] = [];
+    const rest: Field[] = [];
 
     for (const placeholder of template?.placeholders ?? []) {
       const column = byKey.get(normalizeKey(placeholder));
       if (column) claimed.add(column);
-      out.push({
+      inTemplate.push({
         label: placeholder,
         key: column ?? placeholder,
         inTemplate: true,
@@ -195,12 +248,17 @@ export function PreviewWorkspace({
       });
     }
     for (const column of columns) {
-      if (!claimed.has(column)) {
-        out.push({ label: column, key: column, inTemplate: false, hasColumn: true });
-      }
+      // The template column is offered as a picker above, not as a text field.
+      if (claimed.has(column) || column === templateColumn) continue;
+      rest.push({ label: column, key: column, inTemplate: false, hasColumn: true });
     }
-    return out;
-  }, [template, sheet]);
+    return { templateFields: inTemplate, otherFields: rest };
+  }, [template, sheet, templateColumn]);
+
+  const fields = useMemo(
+    () => [...templateFields, ...otherFields],
+    [templateFields, otherFields],
+  );
 
   // Reset the draft whenever the selected row (or the field set) changes.
   useEffect(() => {
@@ -217,6 +275,30 @@ export function PreviewWorkspace({
     setRevisions(null);
   }, [currentRow, fields]);
 
+  /**
+   * Each row carries its own template, so moving between rows shows every
+   * campaign the way it is meant to look without anyone picking from a list.
+   * The choice is applied once per row, so a deliberate change to a different
+   * template stays put until you move to another row.
+   */
+  useEffect(() => {
+    if (!currentRow) return;
+    if (templateAppliedFor.current === currentRow.id) return;
+    templateAppliedFor.current = currentRow.id;
+
+    if (rowDefaultTemplate.matched) {
+      setTemplateId(rowDefaultTemplate.matched.id);
+    } else if (rowDefaultTemplate.unresolved && templates[0]) {
+      // Named a template that does not exist yet -- fall back to the first.
+      setTemplateId(templates[0].id);
+    }
+  }, [currentRow, rowDefaultTemplate, templates]);
+
+  /** True when what is on screen is not what this row asks for. */
+  const templateOverridden = Boolean(
+    rowTemplate.matched && templateId && rowTemplate.matched.id !== templateId,
+  );
+
   const dirty = useMemo(() => isDirty(draft, baseline), [draft, baseline]);
 
   /* ---------------- rendering ---------------- */
@@ -230,9 +312,14 @@ export function PreviewWorkspace({
 
   const unusedColumnNames = useMemo(() => {
     if (!template || !sheet) return [];
-    const used = new Set(template.placeholders.map(normalizeKey));
-    return sheet.columns.filter((c) => !used.has(normalizeKey(c)));
-  }, [template, sheet]);
+    // The template column steers the preview rather than filling it, so it is
+    // never an oversight that a template does not reference it.
+    return computeUnusedColumns(
+      sheet.columns,
+      template.placeholders,
+      templateColumn ? [templateColumn] : [],
+    );
+  }, [template, sheet, templateColumn]);
 
   const visibleRows = useMemo(() => {
     if (!sheet) return [];
@@ -400,6 +487,25 @@ export function PreviewWorkspace({
               </option>
             ))}
           </select>
+          {templateOverridden && rowTemplate.matched && (
+            <p className="hint" style={{ marginTop: 6 }}>
+              This row asks for <strong>{rowTemplate.matched.name}</strong>.{" "}
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                style={{ padding: "1px 6px" }}
+                onClick={() => setTemplateId(rowTemplate.matched!.id)}
+              >
+                Use it
+              </button>
+            </p>
+          )}
+          {rowTemplate.unresolved && (
+            <p className="hint" style={{ marginTop: 6, color: "var(--warn)" }}>
+              This row asks for &ldquo;{rowTemplate.value}&rdquo;, which does not exist yet &mdash;
+              showing {templates[0]?.name}.
+            </p>
+          )}
           {template && (
             <p className="hint">
               <Link href={`/c/${companyId}/templates/${template.id}`}>Edit this template</Link>
@@ -443,7 +549,12 @@ export function PreviewWorkspace({
                   onClick={() => selectRow(row.id)}
                 >
                   {rowLabel(row.data, sheet?.columns ?? [])}
-                  <span className="sub">Row {row.position + 1}</span>
+                  <span className="sub">
+                    Row {row.position + 1}
+                    {templateColumn && row.data[templateColumn]?.trim()
+                      ? ` \u00b7 ${row.data[templateColumn].trim()}`
+                      : ""}
+                  </span>
                 </button>
               </li>
             ))}
@@ -572,11 +683,23 @@ export function PreviewWorkspace({
               <div className="grp">
                 <strong>Columns this template ignores</strong>
                 <div className="chiplist">
-                  {unusedColumnNames.map((name) => (
-                    <span key={name} className="chip chip-unused">
-                      {name}
-                    </span>
-                  ))}
+                  {(showAllUnused ? unusedColumnNames : unusedColumnNames.slice(0, 6)).map(
+                    (name) => (
+                      <span key={name} className="chip chip-unused">
+                        {name}
+                      </span>
+                    ),
+                  )}
+                  {unusedColumnNames.length > 6 && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ padding: "1px 6px", fontSize: 11 }}
+                      onClick={() => setShowAllUnused((open) => !open)}
+                    >
+                      {showAllUnused ? "show fewer" : `+${unusedColumnNames.length - 6} more`}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -586,7 +709,45 @@ export function PreviewWorkspace({
         {currentRow ? (
           <>
             <div className="field-editor">
-              {fields.map((field) => (
+              {rowTemplate.column && (
+                <div className="fld" style={{ background: "var(--surface-2)" }}>
+                  <div className="fld-head">
+                    <span className="fld-name" title={rowTemplate.column}>
+                      {rowTemplate.column}
+                    </span>
+                    <span className="badge badge-accent">row template</span>
+                    <div className="spacer" />
+                    {(draft[rowTemplate.column] ?? "") !==
+                      (baseline[rowTemplate.column] ?? "") && (
+                      <span className="badge badge-accent">edited</span>
+                    )}
+                  </div>
+                  <select
+                    value={rowTemplate.matched ? rowTemplate.matched.name : rowTemplate.value}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setDraft((previous) => ({ ...previous, [rowTemplate.column!]: value }));
+                      const next = matchTemplateName(value, templates);
+                      if (next) setTemplateId(next.id);
+                    }}
+                  >
+                    <option value="">(none — keep whatever is selected)</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.name}>
+                        {t.name}
+                      </option>
+                    ))}
+                    {rowTemplate.unresolved && (
+                      <option value={rowTemplate.value}>
+                        {rowTemplate.value} (not found)
+                      </option>
+                    )}
+                  </select>
+                  <div className="hint">Which template this row is previewed in by default.</div>
+                </div>
+              )}
+
+              {templateFields.map((field) => (
                 <FieldRow
                   key={field.key}
                   field={field}
@@ -597,6 +758,39 @@ export function PreviewWorkspace({
                   }
                 />
               ))}
+
+              {otherFields.length > 0 && (
+                <>
+                  <div className="fld" style={{ paddingTop: 12, paddingBottom: 12 }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ width: "100%", justifyContent: "flex-start" }}
+                      onClick={() => setShowOtherFields((open) => !open)}
+                    >
+                      {showOtherFields ? "▾" : "▸"} Other columns ({otherFields.length})
+                    </button>
+                    {!showOtherFields && (
+                      <div className="hint" style={{ marginTop: 4 }}>
+                        Columns this template does not use — usually another template&rsquo;s fields.
+                      </div>
+                    )}
+                  </div>
+                  {showOtherFields &&
+                    otherFields.map((field) => (
+                      <FieldRow
+                        key={field.key}
+                        field={field}
+                        value={draft[field.key] ?? ""}
+                        changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
+                        onChange={(value) =>
+                          setDraft((previous) => ({ ...previous, [field.key]: value }))
+                        }
+                      />
+                    ))}
+                </>
+              )}
+
               {fields.length === 0 && <div className="ws-section hint">No fields to edit.</div>}
             </div>
 
