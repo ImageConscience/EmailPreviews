@@ -1,0 +1,158 @@
+// Datasource is SQLite for easy local/Railway-volume deployment.
+//
+// PORTABILITY NOTE: this schema deliberately sticks to the subset of Prisma
+// that both SQLite and PostgreSQL support -- no `enum` blocks, no scalar
+// lists, no native `Json` columns. Role and JSON payloads are stored as
+// `String`. Moving to Postgres later is: change `provider` to "postgresql",
+// point DATABASE_URL at the new server, delete prisma/migrations, and run
+// `prisma migrate dev`. See docs/DEPLOY.md for the data-copy script.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  memberships   Membership[]
+  sessions      Session[]
+  revisions     RowRevision[]
+  sentInvites   Invite[]      @relation("InviteSender")
+  createdRows   SheetRow[]    @relation("RowCreator")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// A Company is the tenant: one store of content, many collaborating users.
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  memberships Membership[]
+  templates   Template[]
+  sheets      ContentSheet[]
+  invites     Invite[]
+}
+
+/// Joins a login to a company. Roles: "owner" | "admin" | "member".
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+}
+
+/// Pending invitation for someone to join a company.
+model Invite {
+  id          String    @id @default(cuid())
+  companyId   String
+  email       String
+  role        String    @default("member")
+  token       String    @unique
+  invitedById String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy User?   @relation("InviteSender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([email])
+}
+
+/// An HTML email template containing {{ placeholder_name }} tokens.
+model Template {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  description  String?
+  html         String
+  /// JSON array of placeholder names discovered in `html`, cached on write.
+  placeholders String   @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+/// An uploaded .xlsx/.csv, parsed into records that live in the app.
+model ContentSheet {
+  id             String   @id @default(cuid())
+  companyId      String
+  name           String
+  sourceFilename String?
+  /// JSON array of column headers, in sheet order.
+  columns        String   @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rows    SheetRow[]
+
+  @@index([companyId])
+}
+
+/// One record from a content sheet: the values for a single email.
+model SheetRow {
+  id          String   @id @default(cuid())
+  sheetId     String
+  position    Int
+  /// JSON object mapping column header -> string value.
+  data        String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  sheet     ContentSheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("RowCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  revisions RowRevision[]
+
+  @@index([sheetId, position])
+}
+
+/// Immutable snapshot of a row's values, written on every save.
+model RowRevision {
+  id          String   @id @default(cuid())
+  rowId       String
+  /// JSON object: the row's values *before* this change.
+  data        String
+  changedById String?
+  changedAt   DateTime @default(now())
+  note        String?
+
+  row       SheetRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  changedBy User?    @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([rowId, changedAt])
+}
