@@ -3,7 +3,7 @@
 `campaign-content.csv` (and the identical `campaign-content.xlsx`) holds **every
 campaign for every template in one sheet**. Upload it once under **Content**.
 
-24 columns × 3 rows: the three mockups, one per template. Columns that do not
+26 columns × 3 rows: the three mockups, one per template. Columns that do not
 apply to a row are simply empty — a seasonal row leaves the pest columns blank
 and vice versa.
 
@@ -33,7 +33,7 @@ are all recognised as this column, so name it whichever suits you.
 ## Column layout
 
 `template` first, then the 5 fields every template shares (hero image and alt
-text, headline, two body paragraphs), then the 18 that belong to one template
+text, headline, two body paragraphs), then the 20 that belong to one template
 each. That keeps the sheet readable left to right as it grows.
 
 The sheet carries only what changes per campaign. Header bars, and everything

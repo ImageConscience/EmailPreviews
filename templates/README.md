@@ -72,10 +72,14 @@ Only the parts that genuinely change from send to send are placeholders. Two
 regions are fixed in the template itself:
 
 - **The header bars** — logo, navigation, and the "View as Webpage" strip.
-- **Everything from the first dark band below the hero downward** — the
-  "Good to know" / stats / "Field note" band, the Our Services block, the
-  closing call to action, the credentials line, the address and the footer
-  links.
+- **Everything from the first dark band below the hero downward** — the Our
+  Services block, the closing call to action, the credentials line, the address
+  and the footer links.
+
+The dark band itself splits by what it holds. The core template's is company
+facts (CIMS-GB, 98%+ retention, 30+ years) and is fixed. The seasonal "Good to
+know" and the pest "Field note" carry advice tied to that particular send, so
+they stay as `note_label` / `note_body`.
 
 That leaves the hero, the body copy and the section immediately under it as the
 per-campaign content, which is what the sheet carries.
@@ -85,10 +89,10 @@ template, `p1pestsolutions.com`. The four links Constant Contact injects
 (view-as-webpage, unsubscribe, update profile, data notice) are `href="#"` with
 a comment beside them — set those once per template, not once per campaign.
 
-### 01-seasonal (13)
+### 01-seasonal (15)
 `hero_image` `hero_alt` `eyebrow` `headline` `body_paragraph_1`
 `body_paragraph_2` `cta_url` `cta_text` `tip_label` `tip_headline` `tip_body`
-`tip_link_url` `tip_link_text`
+`tip_link_url` `tip_link_text` `note_label` `note_body`
 
 ### 02-core-service (15)
 `eyebrow` `headline` `hero_image` `hero_alt` `body_paragraph_1`
@@ -96,10 +100,11 @@ a comment beside them — set those once per template, not once per campaign.
 `point_2_title` `point_2_body` `point_3_title` `point_3_body` `aside_label`
 `aside_body`
 
-### 03-pest-control (15)
+### 03-pest-control (17)
 `issue_date` `hero_image` `hero_alt` `headline` `body_paragraph_1`
 `body_paragraph_2` `cta_url` `cta_text` `points_label` `point_1_title`
 `point_1_body` `point_2_title` `point_2_body` `point_3_title` `point_3_body`
+`note_label` `note_body`
 
 Names are matched case- and punctuation-insensitively, so a spreadsheet column
 called `Body Paragraph 1` fills `{{ body_paragraph_1 }}` without renaming.
