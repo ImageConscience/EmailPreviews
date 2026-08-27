@@ -1,18 +1,18 @@
-// Datasource is SQLite for easy local/Railway-volume deployment.
+// Datasource is PostgreSQL, which is what Railway provisions as a service.
 //
-// PORTABILITY NOTE: this schema deliberately sticks to the subset of Prisma
-// that both SQLite and PostgreSQL support -- no `enum` blocks, no scalar
-// lists, no native `Json` columns. Role and JSON payloads are stored as
-// `String`. Moving to Postgres later is: change `provider` to "postgresql",
-// point DATABASE_URL at the new server, delete prisma/migrations, and run
-// `prisma migrate dev`. See docs/DEPLOY.md for the data-copy script.
+// The schema deliberately sticks to the subset of Prisma that PostgreSQL and
+// SQLite both support -- no `enum` blocks, no scalar lists, no native `Json`
+// columns. Roles and JSON payloads are stored as `String`. That keeps the
+// door open to running on a plain SQLite file (useful for a throwaway local
+// instance) without a schema rewrite, and it means the two databases produce
+// identical application behaviour.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

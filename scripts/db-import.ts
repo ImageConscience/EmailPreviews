@@ -1,6 +1,7 @@
 /**
  * Load a db-export.ts dump into the database DATABASE_URL points at.
- * The target must already have the schema (run `npx prisma migrate deploy`).
+ * The target must already have the schema (run `npx prisma migrate deploy`)
+ * and must be empty -- this refuses to half-merge into a live system.
  *
  *   npx tsx scripts/db-import.ts backup.json
  */

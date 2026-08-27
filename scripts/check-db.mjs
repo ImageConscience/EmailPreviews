@@ -1,13 +1,12 @@
 /**
  * Startup sanity check for DATABASE_URL, run before migrations.
  *
- * It exists to catch the two configuration mistakes that are silent until it is
- * too late: deploying SQLite onto a container with no persistent disk (every
- * redeploy wipes every account), and pointing a Postgres URL at a schema still
- * set to sqlite (which fails later with an opaque Prisma error).
+ * It exists to turn the two configuration mistakes that otherwise surface as
+ * opaque Prisma errors into a message that names the step you missed: no
+ * DATABASE_URL because the database service was never linked to the app, and a
+ * URL whose kind disagrees with the provider in schema.prisma.
  */
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 
 /**
  * Load .env for local runs. Prisma and Next each do this themselves, but this
@@ -17,8 +16,9 @@ import { dirname, isAbsolute, resolve } from "node:path";
 function loadDotEnv() {
   if (!existsSync(".env")) return;
   for (const line of readFileSync(".env", "utf8").split("\n")) {
+    if (line.trimStart().startsWith("#")) continue;
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (!match || line.trimStart().startsWith("#")) continue;
+    if (!match) continue;
     const [, key, rawValue] = match;
     if (process.env[key] !== undefined) continue;
     process.env[key] = rawValue.trim().replace(/^["'](.*)["']$/s, "$1");
@@ -27,18 +27,27 @@ function loadDotEnv() {
 
 loadDotEnv();
 
-const url = process.env.DATABASE_URL;
+const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
 
 function die(message) {
   console.error(`\n[database] ${message}\n`);
   process.exit(1);
 }
 
+const url = process.env.DATABASE_URL;
+
 if (!url) {
   die(
     "DATABASE_URL is not set.\n" +
-      "  For SQLite on a mounted disk:  DATABASE_URL=file:/data/app.db\n" +
-      "  For PostgreSQL:                DATABASE_URL=postgresql://user:pass@host:5432/dbname",
+      (onRailway
+        ? "  Adding a Postgres service to the project is not enough on its own -- the app\n" +
+          "  service needs a variable pointing at it.\n\n" +
+          "  In your app service: Variables -> New Variable\n" +
+          "    Name:  DATABASE_URL\n" +
+          "    Value: ${{Postgres.DATABASE_URL}}\n\n" +
+          "  (If the database service is named something other than Postgres, use that name.)"
+        : "  Copy .env.example to .env and set a connection string, e.g.\n" +
+          "    DATABASE_URL=\"postgresql://user:pass@localhost:5432/emailpreviews\""),
   );
 }
 
@@ -48,56 +57,32 @@ const provider = schema.match(/datasource\s+db\s*\{[^}]*provider\s*=\s*"([^"]+)"
 const isPostgresUrl = /^postgres(ql)?:\/\//i.test(url);
 const isFileUrl = url.startsWith("file:");
 
-if (isPostgresUrl && provider !== "postgresql") {
+if (provider === "postgresql" && !isPostgresUrl) {
   die(
-    `DATABASE_URL is a PostgreSQL connection but prisma/schema.prisma still says provider = "${provider}".\n` +
-      "  Change it to \"postgresql\", delete prisma/migrations, and run `npx prisma migrate dev --name init`.\n" +
-      "  See docs/DEPLOY.md for the full switch, including copying existing data across.",
+    `prisma/schema.prisma expects PostgreSQL, but DATABASE_URL is ${
+      isFileUrl ? "a SQLite file path" : "not a postgres:// connection string"
+    }.\n` +
+      `  Got: ${url.replace(/:\/\/[^@]*@/, "://***@")}\n` +
+      "  It should look like: postgresql://user:password@host:5432/dbname",
   );
 }
-if (isFileUrl && provider !== "sqlite") {
+if (provider === "sqlite" && !isFileUrl) {
   die(
-    `DATABASE_URL is a SQLite file path but prisma/schema.prisma says provider = "${provider}".`,
+    `prisma/schema.prisma expects SQLite, but DATABASE_URL is not a file: path.\n` +
+      "  Either set DATABASE_URL=file:./dev.db or change the provider to \"postgresql\".",
   );
 }
 
 if (isPostgresUrl) {
-  console.log("[database] PostgreSQL");
-  process.exit(0);
+  // Log the destination without ever printing the password.
+  let where = "PostgreSQL";
+  try {
+    const parsed = new URL(url);
+    where = `PostgreSQL at ${parsed.hostname}:${parsed.port || 5432}${parsed.pathname}`;
+  } catch {
+    /* an unparseable URL is Prisma's error to report, not ours */
+  }
+  console.log(`[database] ${where}`);
+} else {
+  console.log(`[database] SQLite at ${url.slice("file:".length)}`);
 }
-
-if (!isFileUrl) {
-  die(`DATABASE_URL "${url}" is neither a file: path nor a postgres:// connection.`);
-}
-
-// --- SQLite: is the file on something that survives a redeploy? ---
-const raw = url.slice("file:".length);
-const path = isAbsolute(raw) ? raw : resolve(process.cwd(), "prisma", raw);
-
-// Railway sets this only when a volume is actually attached to the service.
-const volume = process.env.RAILWAY_VOLUME_MOUNT_PATH;
-const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
-const persistent = volume ? path.startsWith(volume) : false;
-
-if (onRailway && !persistent && process.env.ALLOW_EPHEMERAL_DB !== "1") {
-  die(
-    "This service has no persistent disk, so the database would be erased on every deploy.\n" +
-      (volume
-        ? `  A volume is mounted at ${volume}, but DATABASE_URL points at ${path}.\n` +
-          `  Set DATABASE_URL=file:${volume.replace(/\/$/, "")}/app.db\n`
-        : "  In Railway: open the service, Settings -> Volumes -> add one mounted at /data,\n" +
-          "  then set DATABASE_URL=file:/data/app.db\n") +
-      "\n  To run without persistence anyway (throwaway demo only), set ALLOW_EPHEMERAL_DB=1.",
-  );
-}
-
-// `prisma migrate deploy` will create the file, but not the directory above it.
-try {
-  mkdirSync(dirname(path), { recursive: true });
-} catch (error) {
-  die(`Could not create the directory for ${path}: ${error.message}`);
-}
-
-console.log(
-  `[database] SQLite at ${path}${onRailway ? (persistent ? " (on the mounted volume)" : " (ephemeral)") : ""}`,
-);

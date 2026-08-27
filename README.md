@@ -49,10 +49,19 @@ previous values as a revision, so a collaborator's edit is always recoverable.
 
 ## Running it
 
+Needs a PostgreSQL database. To run one locally:
+
+```bash
+docker run -d --name ep-postgres -p 5432:5432 \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=emailpreviews postgres:16
+```
+
+Then:
+
 ```bash
 npm install
-cp .env.example .env
-npx prisma migrate deploy    # creates prisma/dev.db
+cp .env.example .env         # already points at the container above
+npx prisma migrate deploy    # create the tables
 npm run seed                 # optional demo company
 npm run dev                  # http://localhost:3000
 ```
@@ -69,7 +78,7 @@ For production: `npm run build && npm start`.
 
 ## Stack
 
-Next.js (App Router) · TypeScript · Prisma · SQLite · no CSS framework.
+Next.js (App Router) · TypeScript · Prisma · PostgreSQL · no CSS framework.
 
 Authentication is email + password (bcrypt) with database-backed sessions in an
 httpOnly cookie. There is no email provider to configure: invitations produce a
@@ -78,31 +87,28 @@ starts.
 
 ### Putting it online
 
-This needs a host that runs a server and keeps a disk — **Railway, Render or
-Fly.io**. GitHub Pages cannot host it: Pages serves fixed files, and there is no
-process there to check a password or save an edit, so accounts are impossible on
-it. Vercel works only with PostgreSQL, since it discards the filesystem between
-requests.
+This needs a host that runs a server, plus a database — **Railway** is the
+straightforward choice, since it provisions both in the same project. Render and
+Fly.io work the same way; Vercel runs the app but needs an external database.
 
-On Railway it is roughly: deploy from the repo, add a volume at `/data`, set
-`DATABASE_URL=file:/data/app.db`, generate a domain. `railway.json` configures
-the build and start commands automatically.
+GitHub Pages cannot host it: Pages serves fixed files, and there is no process
+there to check a password or save an edit, so accounts are impossible on it.
 
-The one genuine footgun is deploying without a volume, which would erase every
-account on the next deploy — so the app refuses to start in that state and says
-which step was missed, rather than losing the data quietly.
+On Railway it is: deploy from the repo, add a PostgreSQL database, set
+`DATABASE_URL` to `${{Postgres.DATABASE_URL}}` on the app service, generate a
+domain. `railway.json` supplies the build and start commands.
 
-Migrations run at **start**, not at build, because a build container has no
-access to your disk.
+After that, pushing to the default branch redeploys, and **schema changes apply
+themselves** — migrations run at start (not at build, since a build container has
+no access to the database), so a committed migration is applied on the next boot
+and already-applied ones are skipped.
 
-The schema is deliberately written in the subset of Prisma that SQLite and
-PostgreSQL both support — no `enum` blocks, no scalar lists, no native `Json`
-columns — so switching is a configuration change rather than a rewrite.
+`scripts/check-db.mjs` runs before the migrations and turns the two easy mistakes
+— an unlinked database service, and a `DATABASE_URL` whose kind disagrees with
+the schema — into a message naming the step that was missed.
 
-[**docs/DEPLOY.md**](docs/DEPLOY.md) has the click-by-click walkthrough, the
-PostgreSQL switch, and backups.
-
----
+[**docs/DEPLOY.md**](docs/DEPLOY.md) has the click-by-click walkthrough, local
+development setup, how to make a schema change, and backups.
 
 ## Project layout
 
@@ -113,8 +119,8 @@ src/lib/sheet.ts         .xlsx / .csv ingestion
 src/lib/auth.ts          sessions, roles, the single tenancy choke point
 src/actions/             server actions: auth, content, members
 src/app/c/[companyId]/   the signed-in app; preview/ is the workspace
-scripts/check-db.mjs     startup guard: refuses configurations that lose data
-scripts/db-export.ts     dump every table to JSON (SQLite -> Postgres path)
+scripts/check-db.mjs     startup guard: explains database misconfiguration
+scripts/db-export.ts     dump every table to JSON (portable backup)
 scripts/db-import.ts     load a dump into an empty database
 railway.json             build and start commands for Railway
 ```

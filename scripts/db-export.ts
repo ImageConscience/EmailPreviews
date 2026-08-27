@@ -1,8 +1,8 @@
 /**
- * Dump every table to a single JSON file.
+ * Dump every table to a single JSON file -- the portable backup.
  *
- * Paired with db-import.ts this is the move-to-Postgres path: export from
- * SQLite, repoint DATABASE_URL, run the migrations, import.
+ * Paired with db-import.ts it also moves the whole dataset between databases
+ * (staging to production, or on to a different host).
  *
  *   npx tsx scripts/db-export.ts backup.json
  */

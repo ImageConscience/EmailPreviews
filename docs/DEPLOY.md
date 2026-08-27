@@ -8,70 +8,71 @@ That rules some hosts in and others out.
 
 | Host | Works? | Why |
 | --- | --- | --- |
-| **Railway** | **Yes — use this** | Runs the server and gives you a disk that survives deploys. |
-| Render, Fly.io | Yes | Same shape as Railway; the steps below translate directly. |
-| Vercel | Only with PostgreSQL | Runs the app, but throws the disk away between requests, so SQLite would lose everything. See *Switching to PostgreSQL*. |
+| **Railway** | **Yes — use this** | Runs the server and provisions the Postgres database alongside it. |
+| Render, Fly.io | Yes | Same shape; the steps below translate directly. |
+| Vercel | Yes, with an external database | Runs the app fine, but has no database of its own — point `DATABASE_URL` at Neon, Supabase or Railway Postgres. |
 | **GitHub Pages** | **No** | Serves fixed files only. It cannot run a server, so there is nowhere for logins or saved content to live. |
 
-GitHub Pages is the common misconception here, and it is worth being clear about:
-it is not a matter of configuration. Pages hands visitors files exactly as they
-sit in the repository. There is no process running to check a password or write
-an edit to a database, so accounts and saved changes are impossible on it.
+GitHub Pages is the common misconception, and it is worth being clear about: it
+is not a matter of configuration. Pages hands visitors files exactly as they sit
+in the repository. There is no process running to check a password or write an
+edit to a database, so accounts and saved changes are impossible on it.
 
 ---
 
 ## Railway, step by step
 
-You need a Railway account (railway.com — sign in with GitHub). About five
-minutes, no terminal.
+You need a Railway account (railway.com — sign in with GitHub). No terminal
+required.
 
-### 1. Create the project
+### 1. Deploy the app
 
 - **New Project → Deploy from GitHub repo → `ImageConscience/EmailPreviews`.**
-- Railway reads `railway.json` from the repo and configures the build and start
-  commands itself. Nothing to fill in.
-- It will start building. **Let this first build fail or sit** — it has nowhere to
-  put the database yet. That is what the next step fixes.
+- Railway reads `railway.json` from the repo and sets the build and start
+  commands itself.
+- The first build will succeed but the app will not start yet — it has no
+  database. That is the next step.
 
-### 2. Give it a disk
+### 2. Add Postgres
 
-This is the step that matters, and the one that is easy to miss.
+- In the same project: **New → Database → Add PostgreSQL.**
 
-- Open the service → **Settings → Volumes → Add Volume**.
-- Set the mount path to **`/data`**.
+Railway provisions it with backups and its own credentials. You do not need to
+create tables — the app does that itself on its next boot.
 
-Without this, the database lives in temporary space and **every deploy wipes
-every account and every template.** The app refuses to start in that state rather
-than let it happen quietly — if you see a message about "no persistent disk",
-this is the step you skipped.
+### 3. Link the two
 
-### 3. Point the app at the disk
+Adding the database is not enough on its own; the app service has to be told
+where it is.
 
-- Service → **Variables → New Variable**:
+- Open your **app** service → **Variables → New Variable**:
 
   | Name | Value |
   | --- | --- |
-  | `DATABASE_URL` | `file:/data/app.db` |
+  | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
 
-- Redeploy. The logs should show `[database] SQLite at /data/app.db (on the
-  mounted volume)` followed by the migration being applied.
+  Type it exactly like that, braces included — Railway resolves the reference at
+  deploy time, so the credentials are never copied around or committed. If your
+  database service has a different name, use that name instead of `Postgres`.
+
+If you skip this, the app stops on boot and prints these instructions rather
+than failing with a database error.
 
 ### 4. Get your URL
 
-- Service → **Settings → Networking → Generate Domain**.
-- Railway gives you something like `emailpreviews-production.up.railway.app`.
-  That is the link you share with your team.
+- App service → **Settings → Networking → Generate Domain**.
+- You get something like `emailpreviews-production.up.railway.app`. That is the
+  link you share with your team.
 
 ### 5. Create your account
 
-Visit the URL and you land on the sign-in page. Click **Create one**, and the
-first account you make becomes the owner of your company. From **Team** you can
-invite everyone else — each person gets their own login attached to the same
-company.
+Visit the URL and you land on the sign-in page. Click **Create one** — the first
+account becomes the owner of your company. From **Team** you can invite everyone
+else; each person gets their own login attached to the same company.
 
-The app does not send email, so an invitation produces a link that you pass along
-yourself (Slack, email, however you like). That is deliberate: it means there is
-no mail provider to sign up for before the app is usable.
+The app does not send email, so an invitation produces a link you pass along
+yourself (Slack, email, however you like). That is deliberate: no mail provider
+to sign up for before the app is usable.
 
 ### Using your own domain
 
@@ -81,20 +82,25 @@ session cookies are marked secure in production.
 
 ---
 
-## What the deploy actually does
+## The ongoing workflow
 
-Worth knowing, because it explains the shape of the setup:
+Once deployed, pushing to the repo's default branch redeploys automatically, and
+**schema changes apply themselves**:
 
 - **Build** runs `prisma generate && next build`. No database work happens here,
-  because Railway builds in a throwaway container where your disk is not mounted.
+  because Railway builds in a throwaway container.
 - **Start** runs `scripts/check-db.mjs`, then `prisma migrate deploy`, then the
-  server. Migrations run against the real disk, on the real machine, every boot.
-  Applying an already-applied migration does nothing, so restarts are safe.
+  server. Any migration committed to the repo and not yet applied runs against
+  the live database at that moment. Already-applied migrations are skipped, so
+  restarts and redeploys with no schema change are no-ops.
 
-`scripts/check-db.mjs` is the guard. It stops the boot with an explanation when
-the database is configured in a way that would lose data or fail confusingly
-later. To run deliberately without persistence (a throwaway demo), set
-`ALLOW_EPHEMERAL_DB=1`.
+So the loop for a schema change is: the migration is generated and committed
+here, you push, Railway applies it on boot. Nothing manual.
+
+`prisma migrate deploy` never rewrites or drops existing data — it only applies
+migration files it has not seen. Destructive changes are only ever destructive if
+a migration file says so, which is worth a read of the SQL for anything that
+renames or removes a column.
 
 ---
 
@@ -102,67 +108,69 @@ later. To run deliberately without persistence (a throwaway demo), set
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | Yes | `file:/data/app.db` on Railway, or a `postgresql://` connection string. |
+| `DATABASE_URL` | Yes | `${{Postgres.DATABASE_URL}}` on Railway, or any `postgresql://` connection string. |
 | `SESSION_COOKIE_NAME` | No | Defaults to `ep_session`. |
-| `ALLOW_EPHEMERAL_DB` | No | Set to `1` to allow running with a database that does not persist. |
 
 `PORT` is set by the host; you do not need to configure it.
 
 ---
 
-## Switching to PostgreSQL
+## Working on the code locally
 
-Worth doing once several people are editing at the same time — SQLite handles one
-write at a time, which is fine for a small team and not for a large one. It is
-also what Vercel would require.
+The app needs a Postgres to talk to. Two options:
 
-On Railway, add a PostgreSQL service to the project and it provides a connection
-string you can reference from your app's variables.
+**Use the Railway database.** In the Postgres service → **Variables**, copy
+`DATABASE_PUBLIC_URL` (not `DATABASE_URL` — that one is only reachable from
+inside Railway) into your local `.env`. Quickest, but you are working against
+live data.
 
-The schema deliberately avoids everything that differs between the two databases
-(no enums, no scalar lists, no native JSON columns), so this is a configuration
-change rather than a rewrite:
+**Run one locally.** With Docker:
 
 ```bash
-# 1. Dump what you have
-npx tsx scripts/db-export.ts backup.json
-
-# 2. In prisma/schema.prisma change:  provider = "sqlite"  ->  provider = "postgresql"
-
-# 3. Point at the new database and rebuild the migration history
-export DATABASE_URL="postgresql://user:pass@host:5432/emailpreviews"
-rm -rf prisma/migrations
-npx prisma migrate dev --name init
-
-# 4. Load the data back in
-npx tsx scripts/db-import.ts backup.json
+docker run -d --name ep-postgres -p 5432:5432 \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=emailpreviews postgres:16
 ```
 
-`db-import.ts` refuses to run against a database that already has users, so it
-cannot half-merge into a live system. Sessions are not copied — everyone signs in
-again, which is the right outcome for a database move.
+Then in `.env`:
 
-If you set a Postgres `DATABASE_URL` but forget step 2, the startup guard says so
-plainly instead of failing later with a Prisma error.
+```
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/emailpreviews"
+```
 
-### What survives the move
+Either way:
 
-- Row content and template placeholder lists are JSON strings in ordinary text
-  columns on both databases; nothing needs converting.
-- Roles are plain strings, not a database enum, so no type needs creating.
-- Record ids are generated by Prisma rather than the database, so they come
-  across unchanged and every relationship stays intact.
+```bash
+npm install
+npx prisma migrate deploy   # create the tables
+npm run seed                # optional demo company
+npm run dev                 # http://localhost:3000
+```
+
+### Changing the schema
+
+Edit `prisma/schema.prisma`, then:
+
+```bash
+npx prisma migrate dev --name describe_the_change
+```
+
+That updates your local database and writes a migration file under
+`prisma/migrations/`. **Commit that file** — it is what Railway applies on the
+next deploy.
 
 ---
 
 ## Backups
 
-`scripts/db-export.ts` writes every table except sessions to one JSON file, and
-is the portable backup:
+Railway takes its own Postgres backups. For a portable copy that does not depend
+on the host:
 
 ```bash
 npx tsx scripts/db-export.ts backup-2026-08-27.json
 ```
 
-On SQLite you can also copy `app.db` off the volume. The JSON dump is the one
-that works regardless of which database you are on.
+That writes every table except sessions to one JSON file.
+`scripts/db-import.ts` loads it into an empty database, and refuses to run
+against one that already has users so it cannot half-merge into a live system.
+Sessions are not carried across — everyone signs in again, which is the right
+outcome for a database move.
