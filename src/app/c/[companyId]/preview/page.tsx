@@ -14,7 +14,7 @@ export default async function PreviewPage({
 }) {
   const { companyId } = await params;
   const { template, sheet, row } = await searchParams;
-  await guardCompany(companyId);
+  const access = await guardCompany(companyId);
 
   const [templates, sheets] = await Promise.all([
     prisma.template.findMany({
@@ -32,6 +32,7 @@ export default async function PreviewPage({
   return (
     <PreviewWorkspace
       companyId={companyId}
+      currentUserId={access.user.id}
       templates={templates.map((t) => ({
         id: t.id,
         name: t.name,

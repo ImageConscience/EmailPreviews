@@ -28,6 +28,7 @@ model User {
   revisions     RowRevision[]
   sentInvites   Invite[]      @relation("InviteSender")
   createdRows   SheetRow[]    @relation("RowCreator")
+  approvals     Approval[]
 }
 
 model Session {
@@ -101,7 +102,8 @@ model Template {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  approvals Approval[]
 
   @@index([companyId])
 }
@@ -137,8 +139,33 @@ model SheetRow {
   sheet     ContentSheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
   createdBy User?         @relation("RowCreator", fields: [createdById], references: [id], onDelete: SetNull)
   revisions RowRevision[]
+  approvals Approval[]
 
   @@index([sheetId, position])
+}
+
+/// One person signing off one row as rendered in one template.
+///
+/// The approved thing is the pair, not the row: the same copy in a different
+/// layout is a different email and is approved separately. `contentHash`
+/// records what was actually on screen, so editing the copy afterwards leaves
+/// the approval visibly stale instead of silently standing.
+model Approval {
+  id          String   @id @default(cuid())
+  rowId       String
+  templateId  String
+  userId      String
+  /// Fingerprint of the row values and template at the moment of approval.
+  contentHash String
+  createdAt   DateTime @default(now())
+
+  row      SheetRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([rowId, templateId, userId])
+  @@index([rowId])
+  @@index([templateId])
 }
 
 /// Immutable snapshot of a row's values, written on every save.

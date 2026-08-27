@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireCompanyAccess } from "@/lib/auth";
 import { parseRecord, parseStringArray } from "@/lib/json";
+import { approvalFingerprint, presentApprovals } from "@/lib/approval";
 import { apiError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,29 @@ export async function GET(
     const sheet = await prisma.contentSheet.findFirst({
       where: { id: sheetId, companyId },
       include: {
-        rows: { orderBy: { position: "asc" }, take: ROW_LIMIT },
+        rows: {
+          orderBy: { position: "asc" },
+          take: ROW_LIMIT,
+          include: {
+            approvals: {
+              orderBy: { createdAt: "asc" },
+              include: { user: { select: { name: true, email: true } } },
+            },
+          },
+        },
         _count: { select: { rows: true } },
       },
     });
     if (!sheet) return NextResponse.json({ error: "Sheet not found." }, { status: 404 });
+
+    // An approval is only current while the row and the template it was given
+    // against are both unchanged, so staleness is worked out per pair here
+    // rather than trusted from what was stored.
+    const templates = await prisma.template.findMany({
+      where: { companyId },
+      select: { id: true, updatedAt: true },
+    });
+    const templateUpdatedAt = new Map(templates.map((t) => [t.id, t.updatedAt]));
 
     return NextResponse.json({
       id: sheet.id,
@@ -37,6 +56,16 @@ export async function GET(
         position: row.position,
         updatedAt: row.updatedAt.toISOString(),
         data: parseRecord(row.data),
+        approvals: row.approvals.map((approval) => {
+          const updatedAt = templateUpdatedAt.get(approval.templateId);
+          const currentHash = updatedAt
+            ? approvalFingerprint(row.data, approval.templateId, updatedAt)
+            : "";
+          return {
+            templateId: approval.templateId,
+            ...presentApprovals([approval], currentHash)[0],
+          };
+        }),
       })),
     });
   } catch (error) {

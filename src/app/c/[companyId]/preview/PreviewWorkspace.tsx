@@ -13,6 +13,8 @@ import {
 } from "@/lib/template";
 import { saveRowAction } from "@/actions/content";
 import { PreviewFrame } from "./PreviewFrame";
+import { ApprovalBar } from "./ApprovalBar";
+import type { ApprovalView } from "@/lib/approval";
 
 export interface TemplateSummary {
   id: string;
@@ -32,7 +34,13 @@ interface SheetPayload {
   columns: string[];
   totalRows: number;
   truncated: boolean;
-  rows: { id: string; position: number; updatedAt: string; data: Record<string, string> }[];
+  rows: {
+    id: string;
+    position: number;
+    updatedAt: string;
+    data: Record<string, string>;
+    approvals: (ApprovalView & { templateId: string })[];
+  }[];
 }
 
 interface TemplatePayload {
@@ -101,6 +109,7 @@ function isDirty(draft: Record<string, string>, baseline: Record<string, string>
 
 export function PreviewWorkspace({
   companyId,
+  currentUserId,
   templates,
   sheets,
   initialTemplateId,
@@ -108,6 +117,7 @@ export function PreviewWorkspace({
   initialRowId,
 }: {
   companyId: string;
+  currentUserId: string;
   templates: TemplateSummary[];
   sheets: SheetSummary[];
   initialTemplateId?: string;
@@ -294,6 +304,37 @@ export function PreviewWorkspace({
     }
   }, [currentRow, rowDefaultTemplate, templates]);
 
+  /** Sign-off is per row and template, so only this pair's approvals show. */
+  const rowApprovals = useMemo(
+    () => (currentRow?.approvals ?? []).filter((a) => a.templateId === templateId),
+    [currentRow, templateId],
+  );
+
+  const applyApprovals = useCallback(
+    (next: ApprovalView[]) => {
+      if (!currentRow) return;
+      setSheet((previous) =>
+        previous
+          ? {
+              ...previous,
+              rows: previous.rows.map((row) =>
+                row.id === currentRow.id
+                  ? {
+                      ...row,
+                      approvals: [
+                        ...row.approvals.filter((a) => a.templateId !== templateId),
+                        ...next.map((a) => ({ ...a, templateId })),
+                      ],
+                    }
+                  : row,
+              ),
+            }
+          : previous,
+      );
+    },
+    [currentRow, templateId],
+  );
+
   /** True when what is on screen is not what this row asks for. */
   const templateOverridden = Boolean(
     rowTemplate.matched && templateId && rowTemplate.matched.id !== templateId,
@@ -381,7 +422,13 @@ export function PreviewWorkspace({
             ...previous,
             rows: previous.rows.map((row) =>
               row.id === currentRow.id
-                ? { ...row, data: { ...payload }, updatedAt: response.updatedAt ?? row.updatedAt }
+                ? {
+                    ...row,
+                    data: { ...payload },
+                    updatedAt: response.updatedAt ?? row.updatedAt,
+                    // The saved content is no longer what anyone signed off on.
+                    approvals: row.approvals.map((a) => ({ ...a, stale: true })),
+                  }
                 : row,
             ),
           }
@@ -548,6 +595,14 @@ export function PreviewWorkspace({
                   className={row.id === rowId ? "selected" : ""}
                   onClick={() => selectRow(row.id)}
                 >
+                  {row.approvals.some((a) => !a.stale) && (
+                    <span
+                      title="Has a current approval"
+                      style={{ color: "var(--ok)", marginRight: 5, fontWeight: 700 }}
+                    >
+                      ✓
+                    </span>
+                  )}
                   {rowLabel(row.data, sheet?.columns ?? [])}
                   <span className="sub">
                     Row {row.position + 1}
@@ -622,6 +677,16 @@ export function PreviewWorkspace({
           <button type="button" className="btn btn-sm" onClick={downloadHtml}>
             Download
           </button>
+
+          <ApprovalBar
+            companyId={companyId}
+            rowId={currentRow?.id ?? null}
+            templateId={templateId}
+            currentUserId={currentUserId}
+            approvals={rowApprovals}
+            dirty={dirty}
+            onChange={applyApprovals}
+          />
         </div>
 
         {loadError && (

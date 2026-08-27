@@ -34,6 +34,13 @@ previews itself correctly without anyone choosing from a list. Switching
 template is still one click, and the app says which template the row asked for
 so you can get back.
 
+**Approvals.** Each person can sign off the row currently on screen, in the
+template currently on screen, and the bar next to the preview shows who has.
+The record is per row *and* template, because the same copy in a different
+layout is a different email. Editing the copy or the template marks existing
+approvals stale rather than letting them silently stand, so an approval always
+means "this version was approved".
+
 ### The parts that usually go wrong
 
 - **Headers rarely match placeholders exactly.** A column called `Hero Image URL`
@@ -52,7 +59,11 @@ so you can get back.
   instead of leaving a raw token the browser tries to fetch.
 - **One sheet across templates means most columns are irrelevant to any one
   row.** The editor lists the fields the current template actually uses and
-  folds the rest away, so a 42-column sheet does not read as a 42-field form.
+  folds the rest away, so a wide sheet does not read as an equally wide form.
+- **An approval has to be attached to a version, or it means nothing.** Each one
+  fingerprints the row values and the template it was given against, so a later
+  edit shows the sign-off as stale instead of carrying it forward. Approving
+  is blocked while there are unsaved changes, for the same reason.
 
 ---
 
@@ -127,7 +138,8 @@ prisma/schema.prisma     data model, with the portability notes
 src/lib/template.ts      placeholder parsing and merging (runs on server and client)
 src/lib/sheet.ts         .xlsx / .csv ingestion
 src/lib/auth.ts          sessions, roles, the single tenancy choke point
-src/actions/             server actions: auth, content, members
+src/actions/             server actions: auth, content, members, approvals
+src/lib/approval.ts      approval fingerprinting and reviewer initials
 src/app/c/[companyId]/   the signed-in app; preview/ is the workspace
 scripts/start.mjs        production start: check database, migrate, serve
 scripts/db-export.ts     dump every table to JSON (portable backup)
