@@ -687,15 +687,16 @@ function FieldRow({
   // the URL alone, every URL value is probed by actually loading it. A probe
   // that succeeds is an image and gets a thumbnail; one that fails only raises
   // a warning if the URL looked like an image, so a plain link never false-alarms.
-  const [probe, setProbe] = useState<"idle" | "loaded" | "failed">("idle");
+  //
+  // The probe result is tagged with the value it belongs to rather than reset
+  // in an effect: a cached or `data:` image fires onLoad during commit, before
+  // an effect would run, and a reset effect would clobber the result.
+  const [probe, setProbe] = useState<{ value: string; state: "loaded" | "failed" } | null>(null);
   const isUrl = looksLikeUrl(value);
+  const state = probe?.value === value ? probe.state : "idle";
 
-  useEffect(() => {
-    setProbe("idle");
-  }, [value]);
-
-  const showThumb = probe === "loaded";
-  const showBroken = probe === "failed" && looksLikeImageUrl(value);
+  const showThumb = state === "loaded";
+  const showBroken = state === "failed" && looksLikeImageUrl(value);
 
   return (
     <div className="fld">
@@ -727,8 +728,8 @@ function FieldRow({
             key={value}
             src={value}
             alt=""
-            onLoad={() => setProbe("loaded")}
-            onError={() => setProbe("failed")}
+            onLoad={() => setProbe({ value, state: "loaded" })}
+            onError={() => setProbe({ value, state: "failed" })}
             style={
               showThumb
                 ? {

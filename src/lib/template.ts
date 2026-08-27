@@ -203,5 +203,5 @@ export function looksLikeImageUrl(value: string): boolean {
 }
 
 export function looksLikeUrl(value: string): boolean {
-  return /^(https?:\/\/|\/\/)/i.test(value.trim());
+  return /^(https?:\/\/|\/\/|data:)/i.test(value.trim());
 }
