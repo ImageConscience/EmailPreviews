@@ -3,7 +3,7 @@
 `campaign-content.csv` (and the identical `campaign-content.xlsx`) holds **every
 campaign for every template in one sheet**. Upload it once under **Content**.
 
-42 columns × 3 rows: the three mockups, one per template. Columns that do not
+24 columns × 3 rows: the three mockups, one per template. Columns that do not
 apply to a row are simply empty — a seasonal row leaves the pest columns blank
 and vice versa.
 
@@ -32,19 +32,25 @@ are all recognised as this column, so name it whichever suits you.
 
 ## Column layout
 
-`template` first, then the 11 fields every template shares (headline, hero
-image, body copy, CTA, footer links), then the 30 that belong to one template
+`template` first, then the 5 fields every template shares (hero image and alt
+text, headline, two body paragraphs), then the 18 that belong to one template
 each. That keeps the sheet readable left to right as it grows.
 
-## Two things to change before a real send
+The sheet carries only what changes per campaign. Header bars, and everything
+from the first dark band below the hero downward, are fixed in the templates —
+so the credentials line, address, Our Services block and footer links are not
+columns here.
 
-**The four platform links are `#`**, matching the mockup: `webview_url`,
-`unsubscribe_url`, `update_profile_url` and `data_notice_url`. Constant Contact
-injects these at send time — replace them with whatever tokens it gives you.
+## Before a real send
+
+**The Constant Contact links live in the templates now**, not here — the four it
+injects (view-as-webpage, unsubscribe, update profile, data notice) are `href="#"`
+with a comment beside them. Set them once per template.
 
 **The site URLs are inferred** from the address in the footer —
 `safetyfacilityservices.com/services`, `/contact`, `/customer-portal`,
-`/request-a-quote`, and `p1pestsolutions.com/site-inspection`. Check they exist.
+`/request-a-quote`, and `p1pestsolutions.com/site-inspection`. Check they exist;
+the ones inside the templates are hardcoded, and `cta_url` is a column.
 
 ## Adding campaigns
 

@@ -66,41 +66,45 @@ when you paste them in and rows will select themselves in the preview. Matching
 ignores case and punctuation, so `01 Seasonal` still matches a sheet that says
 `Seasonal`.
 
-## Placeholders
+## What is a placeholder, and what is not
 
-Names are matched case- and punctuation-insensitively, so a spreadsheet column
-called `Body Paragraph 1` fills `{{ body_paragraph_1 }}` without renaming.
+Only the parts that genuinely change from send to send are placeholders. Two
+regions are fixed in the template itself:
 
-Values are HTML-escaped. Use `{{{ name }}}` (triple braces) for a cell that
-contains markup you want rendered, such as a `<br>`-separated address.
+- **The header bars** — logo, navigation, and the "View as Webpage" strip.
+- **Everything from the first dark band below the hero downward** — the
+  "Good to know" / stats / "Field note" band, the Our Services block, the
+  closing call to action, the credentials line, the address and the footer
+  links.
 
-### 01-seasonal
-`webview_url` `services_url` `contact_url` `portal_url` `hero_image` `hero_alt`
-`eyebrow` `headline` `body_paragraph_1` `body_paragraph_2` `cta_url` `cta_text`
-`tip_label` `tip_headline` `tip_body` `tip_link_url` `tip_link_text`
-`note_label` `note_body` `footer_cta_url` `unsubscribe_url` `update_profile_url`
-`data_notice_url`
+That leaves the hero, the body copy and the section immediately under it as the
+per-campaign content, which is what the sheet carries.
 
-### 02-core-service
-`webview_url` `services_url` `contact_url` `portal_url` `eyebrow` `headline`
-`hero_image` `hero_alt` `body_paragraph_1` `body_paragraph_2` `points_label`
-`point_1_title` `point_1_body` `point_2_title` `point_2_body` `point_3_title`
-`point_3_body` `aside_label` `aside_body` `stat_1_value` `stat_1_label`
-`stat_2_value` `stat_2_label` `stat_3_value` `stat_3_label` `cta_headline`
-`cta_body` `cta_url` `cta_text` `footer_cta_url` `unsubscribe_url`
-`update_profile_url` `data_notice_url`
+Site links are hardcoded to `safetyfacilityservices.com` and, for the pest
+template, `p1pestsolutions.com`. The four links Constant Contact injects
+(view-as-webpage, unsubscribe, update profile, data notice) are `href="#"` with
+a comment beside them — set those once per template, not once per campaign.
 
-### 03-pest-control
+### 01-seasonal (13)
+`hero_image` `hero_alt` `eyebrow` `headline` `body_paragraph_1`
+`body_paragraph_2` `cta_url` `cta_text` `tip_label` `tip_headline` `tip_body`
+`tip_link_url` `tip_link_text`
+
+### 02-core-service (15)
+`eyebrow` `headline` `hero_image` `hero_alt` `body_paragraph_1`
+`body_paragraph_2` `points_label` `point_1_title` `point_1_body`
+`point_2_title` `point_2_body` `point_3_title` `point_3_body` `aside_label`
+`aside_body`
+
+### 03-pest-control (15)
 `issue_date` `hero_image` `hero_alt` `headline` `body_paragraph_1`
 `body_paragraph_2` `cta_url` `cta_text` `points_label` `point_1_title`
 `point_1_body` `point_2_title` `point_2_body` `point_3_title` `point_3_body`
-`note_label` `note_body` `footer_cta_url` `unsubscribe_url`
-`update_profile_url` `data_notice_url`
 
-Deliberately **not** placeholders: the nav bar, the "Our Services" block, the
-closing CTA, the credentials line and the postal address. They are the same on
-every send. Anything there can be turned into a placeholder by replacing the
-text with `{{ name }}`.
+Names are matched case- and punctuation-insensitively, so a spreadsheet column
+called `Body Paragraph 1` fills `{{ body_paragraph_1 }}` without renaming.
+Values are HTML-escaped; use `{{{ name }}}` for a cell containing markup you
+want rendered.
 
 ## Fonts
 
