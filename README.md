@@ -76,16 +76,31 @@ httpOnly cookie. There is no email provider to configure: invitations produce a
 link that the inviter passes along, and the app is fully usable the moment it
 starts.
 
-### Deployment and the database
+### Putting it online
 
-SQLite is the default so the app runs anywhere with no database server. On
-Railway or any container host, mount a volume and point `DATABASE_URL` at a file
-inside it (`file:/data/app.db`), otherwise the database is lost on redeploy.
+This needs a host that runs a server and keeps a disk — **Railway, Render or
+Fly.io**. GitHub Pages cannot host it: Pages serves fixed files, and there is no
+process there to check a password or save an edit, so accounts are impossible on
+it. Vercel works only with PostgreSQL, since it discards the filesystem between
+requests.
+
+On Railway it is roughly: deploy from the repo, add a volume at `/data`, set
+`DATABASE_URL=file:/data/app.db`, generate a domain. `railway.json` configures
+the build and start commands automatically.
+
+The one genuine footgun is deploying without a volume, which would erase every
+account on the next deploy — so the app refuses to start in that state and says
+which step was missed, rather than losing the data quietly.
+
+Migrations run at **start**, not at build, because a build container has no
+access to your disk.
 
 The schema is deliberately written in the subset of Prisma that SQLite and
 PostgreSQL both support — no `enum` blocks, no scalar lists, no native `Json`
-columns — so switching is a configuration change rather than a rewrite. See
-[docs/DEPLOY.md](docs/DEPLOY.md) for the exact steps and the data-copy scripts.
+columns — so switching is a configuration change rather than a rewrite.
+
+[**docs/DEPLOY.md**](docs/DEPLOY.md) has the click-by-click walkthrough, the
+PostgreSQL switch, and backups.
 
 ---
 
@@ -98,8 +113,10 @@ src/lib/sheet.ts         .xlsx / .csv ingestion
 src/lib/auth.ts          sessions, roles, the single tenancy choke point
 src/actions/             server actions: auth, content, members
 src/app/c/[companyId]/   the signed-in app; preview/ is the workspace
+scripts/check-db.mjs     startup guard: refuses configurations that lose data
 scripts/db-export.ts     dump every table to JSON (SQLite -> Postgres path)
 scripts/db-import.ts     load a dump into an empty database
+railway.json             build and start commands for Railway
 ```
 
 Every company-scoped read and write goes through `requireCompanyAccess`, which
