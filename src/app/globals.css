@@ -608,3 +608,86 @@ input:focus, select:focus, textarea:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Hiding, date range, and the overview ---------- */
+
+.check { display: flex; align-items: center; gap: 7px; margin-top: 9px; font-size: 13px; color: var(--text-muted); cursor: pointer; }
+.check input { width: auto; margin: 0; }
+
+.daterange { display: flex; gap: 8px; }
+.daterange label { flex: 1; min-width: 0; }
+.daterange label span {
+  display: block; margin-bottom: 3px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.daterange input { width: 100%; }
+
+/* A hidden row stays legible but visibly set aside. */
+.rowlist button.is-hidden { opacity: 0.55; }
+.rowlist button.is-hidden .sub { text-decoration: line-through; }
+.row-hidden-mark { display: inline-flex; vertical-align: -2px; margin-right: 5px; color: var(--text-faint); }
+
+.btn-icon { padding: 5px 8px; display: inline-flex; align-items: center; }
+.btn-hidden-on { border-color: var(--warn); color: var(--warn); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- Overview: filters, list, calendar ---------- */
+
+.ov-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.ov-checks { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding-bottom: 8px; }
+
+.ov-table td { vertical-align: top; }
+.ov-when { min-width: 148px; color: var(--text-muted); font-size: 12.5px; }
+.ov-when strong { display: block; color: var(--text); font-size: 13px; }
+.ov-time { display: block; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.ov-nodate { color: var(--text-faint); font-style: italic; }
+.ov-title { font-weight: 600; color: var(--text); }
+.ov-title:hover { color: var(--accent); }
+.ov-sub { color: var(--text-faint); font-size: 12.5px; margin-top: 2px; }
+.ov-table tr.is-hidden .ov-title { color: var(--text-faint); text-decoration: line-through; }
+
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-head {
+  padding: 8px 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.cal-day {
+  min-height: 104px;
+  padding: 6px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.cal-day:nth-child(7n + 7) { border-right: none; }
+.cal-day.outside { background: var(--surface-2); }
+.cal-day.outside .cal-date { color: var(--text-faint); }
+.cal-day.is-today { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-date { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+
+.cal-item {
+  display: block;
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.cal-item:hover { text-decoration: none; box-shadow: var(--shadow); }
+.cal-item.is-approved { border-left-color: var(--ok); background: var(--ok-soft); }
+.cal-item.is-hidden { opacity: 0.55; border-left-color: var(--text-faint); background: var(--surface-2); text-decoration: line-through; }
+.cal-time { display: block; font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }

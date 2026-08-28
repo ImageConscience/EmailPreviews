@@ -19,6 +19,7 @@ export function TopBar({ companyId, companyName, userName, role, otherCompanies 
   const pathname = usePathname();
   const base = `/c/${companyId}`;
   const links = [
+    { href: `${base}/overview`, label: "Overview" },
     { href: `${base}/preview`, label: "Preview" },
     { href: `${base}/templates`, label: "Templates" },
     { href: `${base}/sheets`, label: "Content" },

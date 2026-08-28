@@ -25,6 +25,12 @@ placeholders exist. A company can have as many templates as it likes.
 into records that live in the app — the original file is not kept or needed
 again. Column headers correspond to placeholder names.
 
+**Overview.** Everything the company has planned, as a list or a calendar. The
+list groups by send date and opens on the next thirty days; the calendar walks
+month by month. Either way, clicking an item opens it in the preview. This is
+the "what is going out, and is any of it ready" view; the preview is the "what
+does this one look like" view.
+
 **Preview.** Pick a row and the merged email renders in an isolated frame at
 mobile, desktop or full width. Edit any field and the preview updates as you
 type. Save writes the change back to the row and keeps the previous values as a
@@ -48,6 +54,17 @@ names every blank and unmatched placeholder in both modes.
 than inside it. The sending platform sets all four, so they are not placeholders
 in the template, but each is a campaign decision that gets written and approved
 with everything else.
+
+**Hiding.** The eye beside Approve sets a row aside — rejected outright, or not
+ready to show. Hidden rows drop out of the rail, the list and the calendar until
+**Show hidden** is ticked, and the app remembers who hid each one. Hiding is not
+deleting: the reason something was dropped is in its copy, and next quarter
+someone will ask.
+
+**Send dates.** Where a sheet has a `send_date` column, both the rail and the
+overview filter on it, opening on today through thirty days out. Rows with no
+readable date are their own category — *No date* — so a draft without a slot
+yet is one checkbox away rather than lost.
 
 **Images.** Anyone with a login can upload images under **Images**, and each one
 gets a permanent public link to use in a campaign. The bytes live in the

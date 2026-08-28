@@ -1,0 +1,112 @@
+import { prisma } from "@/lib/db";
+import { guardCompany } from "@/lib/guard";
+import { parseRecord, parseStringArray } from "@/lib/json";
+import { approvalFingerprint } from "@/lib/approval";
+import { findEnvelopeColumns, findTemplateColumn, matchTemplateName } from "@/lib/template";
+import { parseSendDate, rowLabel } from "@/lib/campaign";
+import { OverviewBoard, type OverviewItem } from "./OverviewBoard";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Everything the company has, in one place.
+ *
+ * The preview answers "what does this one look like"; this answers "what is
+ * going out, and is any of it ready". Summarising happens on the server so the
+ * browser is handed one small list rather than every row of every sheet.
+ */
+export default async function OverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
+  const { companyId } = await params;
+  await guardCompany(companyId);
+
+  const [sheets, templates] = await Promise.all([
+    prisma.contentSheet.findMany({
+      where: { companyId },
+      orderBy: { name: "asc" },
+      include: {
+        rows: {
+          orderBy: { position: "asc" },
+          include: {
+            hiddenBy: { select: { name: true, email: true } },
+            approvals: { select: { templateId: true, contentHash: true } },
+          },
+        },
+      },
+    }),
+    prisma.template.findMany({
+      where: { companyId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, updatedAt: true },
+    }),
+  ]);
+
+  const templateSummaries = templates.map((t) => ({ id: t.id, name: t.name }));
+  const templateUpdatedAt = new Map(templates.map((t) => [t.id, t.updatedAt]));
+
+  const items: OverviewItem[] = [];
+  for (const sheet of sheets) {
+    const columns = parseStringArray(sheet.columns);
+    const templateColumn = findTemplateColumn(columns);
+    const envelope = findEnvelopeColumns(columns);
+
+    for (const row of sheet.rows) {
+      const data = parseRecord(row.data);
+      const matched = templateColumn
+        ? matchTemplateName(data[templateColumn] ?? "", templateSummaries)
+        : null;
+
+      // An approval only counts while the row and the template it was given
+      // against are both unchanged -- the same rule the preview applies.
+      let approvals = 0;
+      let staleApprovals = 0;
+      for (const approval of row.approvals) {
+        const updatedAt = templateUpdatedAt.get(approval.templateId);
+        const current =
+          updatedAt && approval.contentHash === approvalFingerprint(row.data, approval.templateId, updatedAt);
+        if (current) approvals += 1;
+        else staleApprovals += 1;
+      }
+
+      items.push({
+        rowId: row.id,
+        sheetId: sheet.id,
+        sheetName: sheet.name,
+        position: row.position,
+        title: rowLabel(data, columns),
+        campaign: pick(data, ["campaign", "campaign_name"]),
+        theme: pick(data, ["theme", "series"]),
+        templateId: matched?.id ?? null,
+        templateName: matched?.name ?? (templateColumn ? (data[templateColumn] ?? "").trim() : ""),
+        templateKnown: Boolean(matched),
+        sendDate: envelope.sendDate ? parseSendDate(data[envelope.sendDate]) : null,
+        sendTime: envelope.sendTime ? (data[envelope.sendTime] ?? "").trim() : "",
+        subject: envelope.subject ? (data[envelope.subject] ?? "").trim() : "",
+        approvals,
+        staleApprovals,
+        hidden: Boolean(row.hiddenAt),
+        hiddenBy: row.hiddenBy?.name ?? row.hiddenBy?.email ?? null,
+      });
+    }
+  }
+
+  return (
+    <OverviewBoard
+      companyId={companyId}
+      items={items}
+      templates={templateSummaries}
+      sheets={sheets.map((s) => ({ id: s.id, name: s.name }))}
+    />
+  );
+}
+
+/** First non-empty value among columns whose header matches one of these. */
+function pick(data: Record<string, string>, names: string[]): string {
+  for (const name of names) {
+    const key = Object.keys(data).find(
+      (column) => column.toLowerCase().replace(/[^a-z0-9]+/g, "_") === name,
+    );
+    const value = key ? data[key]?.trim() : "";
+    if (value) return value;
+  }
+  return "";
+}

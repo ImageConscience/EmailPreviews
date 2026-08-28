@@ -25,6 +25,7 @@ export async function GET(
           orderBy: { position: "asc" },
           take: ROW_LIMIT,
           include: {
+            hiddenBy: { select: { name: true, email: true } },
             approvals: {
               orderBy: { createdAt: "asc" },
               include: { user: { select: { name: true, email: true } } },
@@ -55,6 +56,8 @@ export async function GET(
         id: row.id,
         position: row.position,
         updatedAt: row.updatedAt.toISOString(),
+        hiddenAt: row.hiddenAt?.toISOString() ?? null,
+        hiddenBy: row.hiddenBy?.name ?? row.hiddenBy?.email ?? null,
         data: parseRecord(row.data),
         approvals: row.approvals.map((approval) => {
           const updatedAt = templateUpdatedAt.get(approval.templateId);

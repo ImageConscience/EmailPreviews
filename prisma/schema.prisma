@@ -28,6 +28,7 @@ model User {
   revisions     RowRevision[]
   sentInvites   Invite[]      @relation("InviteSender")
   createdRows   SheetRow[]    @relation("RowCreator")
+  hiddenRows    SheetRow[]    @relation("RowHider")
   approvals     Approval[]
   uploads       MediaAsset[]  @relation("MediaUploader")
 }
@@ -137,9 +138,14 @@ model SheetRow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdById String?
+  /// Set when someone hides the row: rejected outright, or not ready to show.
+  /// A timestamp rather than a flag so the rail can say when, and by whom.
+  hiddenAt    DateTime?
+  hiddenById  String?
 
   sheet     ContentSheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
   createdBy User?         @relation("RowCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  hiddenBy  User?         @relation("RowHider", fields: [hiddenById], references: [id], onDelete: SetNull)
   revisions RowRevision[]
   approvals Approval[]
 

@@ -366,3 +366,52 @@ export async function restoreRevisionAction(
   ]);
   revalidatePath(`/c/${companyId}/sheets/${revision.row.sheetId}`);
 }
+
+export interface HideRowResult {
+  ok: boolean;
+  error?: string;
+  hiddenAt?: string | null;
+  hiddenBy?: string | null;
+}
+
+/**
+ * Hide a row, or bring it back.
+ *
+ * Hiding is not deleting: a rejected idea and a not-ready draft are both worth
+ * keeping -- the reason it was dropped is in its copy, and next quarter someone
+ * will ask. It just stops occupying a slot in everyone's list, and stays
+ * reachable behind one checkbox.
+ */
+export async function toggleRowHiddenAction(
+  companyId: string,
+  rowId: string,
+  hidden: boolean,
+): Promise<HideRowResult> {
+  try {
+    const access = await requireCompanyAccess(companyId, "member");
+    const row = await prisma.sheetRow.findFirst({
+      where: { id: rowId, sheet: { companyId } },
+      select: { id: true, sheetId: true },
+    });
+    if (!row) return { ok: false, error: "Row not found." };
+
+    const updated = await prisma.sheetRow.update({
+      where: { id: rowId },
+      data: hidden
+        ? { hiddenAt: new Date(), hiddenById: access.user.id }
+        : { hiddenAt: null, hiddenById: null },
+      select: { hiddenAt: true, hiddenBy: { select: { name: true, email: true } } },
+    });
+
+    revalidatePath(`/c/${companyId}/overview`);
+    revalidatePath(`/c/${companyId}/sheets/${row.sheetId}`);
+    return {
+      ok: true,
+      hiddenAt: updated.hiddenAt?.toISOString() ?? null,
+      hiddenBy: updated.hiddenBy?.name ?? updated.hiddenBy?.email ?? null,
+    };
+  } catch (error) {
+    if (error instanceof AuthError) return { ok: false, error: error.message };
+    return { ok: false, error: "Could not change that. Try again." };
+  }
+}

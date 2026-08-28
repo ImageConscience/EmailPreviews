@@ -14,7 +14,16 @@ import {
   renderTemplate,
   unusedColumns as computeUnusedColumns,
 } from "@/lib/template";
-import { saveRowAction } from "@/actions/content";
+import { saveRowAction, toggleRowHiddenAction } from "@/actions/content";
+import {
+  defaultRange,
+  inRange,
+  parseSendDate,
+  rangeIsOpen,
+  rowLabel,
+  rowSubLabel,
+  type DateRange,
+} from "@/lib/campaign";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
 import { EnvelopeFields } from "./EnvelopeFields";
@@ -43,6 +52,8 @@ interface SheetPayload {
     id: string;
     position: number;
     updatedAt: string;
+    hiddenAt: string | null;
+    hiddenBy: string | null;
     data: Record<string, string>;
     approvals: (ApprovalView & { templateId: string })[];
   }[];
@@ -92,46 +103,23 @@ const DEVICES = [
 
 type DeviceId = (typeof DEVICES)[number]["id"];
 
-const LABEL_HINTS = ["subject", "headline", "title", "name", "campaign", "product"];
-
-function rowLabel(data: Record<string, string>, columns: string[]): string {
-  for (const hint of LABEL_HINTS) {
-    const column = columns.find((c) => normalizeKey(c).includes(hint));
-    const value = column ? data[column]?.trim() : "";
-    if (value) return value;
-  }
-  const first = columns.find((c) => data[c]?.trim());
-  return first ? data[first].trim() : "(empty row)";
-}
-
-/**
- * The second line under each row in the rail. With one sheet holding every
- * month and three options each, "Row 27" identifies nothing -- the send month
- * and which option it is are what you actually navigate by.
- */
-function rowSubLabel(
-  data: Record<string, string>,
-  position: number,
-  templateColumn: string | null,
-): string {
-  const find = (names: string[]) => {
-    const key = Object.keys(data).find((c) => names.includes(normalizeKey(c)));
-    return key ? data[key]?.trim() : "";
-  };
-  const month = find(["send_month", "month", "send_date"]);
-  const option = find(["option", "variant"]);
-  const template = templateColumn ? data[templateColumn]?.trim() : "";
-
-  const parts = [
-    month || `Row ${position + 1}`,
-    option ? (option.length <= 2 ? `Option ${option}` : option) : "",
-    template,
-  ].filter(Boolean);
-  return parts.join(" \u00b7 ");
-}
-
 /** Filter value for rows whose template cell is empty or names nothing real. */
 const UNASSIGNED_ROWS = "__unassigned__";
+
+/* Inline so they inherit the button's colour and need no network request. */
+const EYE = (
+  <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <path d="M1.7 10S4.9 4.6 10 4.6 18.3 10 18.3 10 15.1 15.4 10 15.4 1.7 10 1.7 10Z" />
+    <circle cx="10" cy="10" r="2.4" />
+  </svg>
+);
+const EYE_OFF = (
+  <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <path d="M7.9 5c.68-.16 1.38-.24 2.1-.24 5.1 0 8.3 5.24 8.3 5.24a15 15 0 0 1-2.4 2.94M4.6 6.3A15 15 0 0 0 1.7 10s3.2 5.4 8.3 5.4c1.5 0 2.83-.47 3.96-1.14" />
+    <path d="M8.4 8.5a2.4 2.4 0 0 0 3.3 3.4" />
+    <path d="M2.6 2.6l14.8 14.8" />
+  </svg>
+);
 
 function isDirty(draft: Record<string, string>, baseline: Record<string, string>): boolean {
   const keys = new Set([...Object.keys(draft), ...Object.keys(baseline)]);
@@ -177,6 +165,9 @@ export function PreviewWorkspace({
   const [filter, setFilter] = useState("");
   /** "" is every row; otherwise a template id, or UNASSIGNED_ROWS. */
   const [templateFilter, setTemplateFilter] = useState("");
+  const [showHidden, setShowHidden] = useState(false);
+  const [range, setRange] = useState<DateRange>(() => defaultRange());
+  const [hiding, setHiding] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
@@ -384,6 +375,38 @@ export function PreviewWorkspace({
     [currentRow, templateId],
   );
 
+  /**
+   * Hide the row on screen, or bring it back. Hiding does not move you off it:
+   * you want to see what you just hid, and one more click undoes it.
+   */
+  const toggleHidden = useCallback(async () => {
+    if (!currentRow) return;
+    setHiding(true);
+    const next = !currentRow.hiddenAt;
+    const result = await toggleRowHiddenAction(companyId, currentRow.id, next);
+    setHiding(false);
+    if (!result.ok) {
+      setStatus({ kind: "error", message: result.error ?? "Could not change that." });
+      return;
+    }
+    setSheet((previous) =>
+      previous
+        ? {
+            ...previous,
+            rows: previous.rows.map((row) =>
+              row.id === currentRow.id
+                ? { ...row, hiddenAt: result.hiddenAt ?? null, hiddenBy: result.hiddenBy ?? null }
+                : row,
+            ),
+          }
+        : previous,
+    );
+    setStatus({
+      kind: "ok",
+      message: next ? "Hidden. It stays under “Show hidden”." : "Showing again.",
+    });
+  }, [companyId, currentRow]);
+
   /** True when what is on screen is not what this row asks for. */
   const templateOverridden = Boolean(
     rowTemplate.matched && templateId && rowTemplate.matched.id !== templateId,
@@ -427,10 +450,19 @@ export function PreviewWorkspace({
     return byRow;
   }, [sheet, templateColumn, templates]);
 
+  const sendDateColumn = envelopeColumns.sendDate;
+
   const visibleRows = useMemo(() => {
     if (!sheet) return [];
     const needle = filter.trim().toLowerCase();
     return sheet.rows.filter((row) => {
+      // The row you are looking at never vanishes underneath you -- hiding it
+      // would leave the editor pointed at something not in the list.
+      const isCurrent = row.id === rowId;
+      if (row.hiddenAt && !showHidden && !isCurrent) return false;
+      if (!isCurrent && sendDateColumn) {
+        if (!inRange(parseSendDate(row.data[sendDateColumn]), range)) return false;
+      }
       if (templateFilter) {
         const assigned = rowTemplateIds.get(row.id) ?? null;
         if (templateFilter === UNASSIGNED_ROWS ? assigned !== null : assigned !== templateFilter) {
@@ -440,7 +472,12 @@ export function PreviewWorkspace({
       if (!needle) return true;
       return Object.values(row.data).some((value) => value.toLowerCase().includes(needle));
     });
-  }, [sheet, filter, templateFilter, rowTemplateIds]);
+  }, [sheet, filter, templateFilter, rowTemplateIds, showHidden, rowId, sendDateColumn, range]);
+
+  const hiddenCount = useMemo(
+    () => (sheet?.rows ?? []).filter((row) => row.hiddenAt).length,
+    [sheet],
+  );
 
   /** How many rows each template owns, so the filter can say so up front. */
   const rowsPerTemplate = useMemo(() => {
@@ -666,7 +703,60 @@ export function PreviewWorkspace({
             onChange={(e) => setFilter(e.target.value)}
             style={{ marginTop: 8 }}
           />
+
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={showHidden}
+              onChange={(e) => setShowHidden(e.target.checked)}
+            />
+            <span>
+              Show hidden items{hiddenCount > 0 ? ` (${hiddenCount})` : ""}
+            </span>
+          </label>
         </div>
+
+        {sendDateColumn && (
+          <div className="ws-section">
+            <h3>Send date</h3>
+            <div className="daterange">
+              <label>
+                <span>From</span>
+                <input
+                  type="date"
+                  value={range.from}
+                  onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+                />
+              </label>
+              <label>
+                <span>To</span>
+                <input
+                  type="date"
+                  value={range.to}
+                  onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+                />
+              </label>
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={range.includeUndated}
+                onChange={(e) => setRange((r) => ({ ...r, includeUndated: e.target.checked }))}
+              />
+              <span>No date</span>
+            </label>
+            {!rangeIsOpen(range) && (
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                style={{ marginTop: 6, padding: "1px 6px" }}
+                onClick={() => setRange({ from: "", to: "", includeUndated: true })}
+              >
+                Clear — show every date
+              </button>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="ws-section hint">Loading rows…</div>
@@ -676,9 +766,14 @@ export function PreviewWorkspace({
               <li key={row.id}>
                 <button
                   type="button"
-                  className={row.id === rowId ? "selected" : ""}
+                  className={`${row.id === rowId ? "selected" : ""}${row.hiddenAt ? " is-hidden" : ""}`}
                   onClick={() => selectRow(row.id)}
                 >
+                  {row.hiddenAt && (
+                    <span title={`Hidden${row.hiddenBy ? ` by ${row.hiddenBy}` : ""}`} className="row-hidden-mark">
+                      {EYE_OFF}
+                    </span>
+                  )}
                   {row.approvals.some((a) => !a.stale) && (
                     <span
                       title="Has a current approval"
@@ -768,6 +863,22 @@ export function PreviewWorkspace({
             dirty={dirty}
             onChange={applyApprovals}
           />
+
+          <button
+            type="button"
+            className={`btn btn-sm btn-icon ${currentRow?.hiddenAt ? "btn-hidden-on" : ""}`}
+            disabled={!currentRow || hiding}
+            title={
+              currentRow?.hiddenAt
+                ? `Hidden${currentRow.hiddenBy ? ` by ${currentRow.hiddenBy}` : ""} — click to show again`
+                : "Hide this item: rejected, or not ready to show"
+            }
+            aria-pressed={Boolean(currentRow?.hiddenAt)}
+            onClick={() => void toggleHidden()}
+          >
+            {currentRow?.hiddenAt ? EYE_OFF : EYE}
+            <span className="sr-only">{currentRow?.hiddenAt ? "Show item" : "Hide item"}</span>
+          </button>
         </div>
 
         {loadError && (
