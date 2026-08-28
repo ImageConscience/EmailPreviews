@@ -54,17 +54,24 @@ the template. The app knows these are planning columns and does not report them
 as ignored, and they appear under each row in the rail so a 54-row sheet reads
 as a schedule: *Sep 2026 · Janitorial · Option A · Core Service*.
 
-## Subject and preview text
+## Subject, preview text and the send slot
 
-`subject` and `preheader` are shown above the render, styled like the inbox
-line they become, and are editable there. Neither is a placeholder: the sending
-platform sets both, so nothing about them belongs in the email body. Carrying
-them here means they are written, reviewed and approved with the copy they
-belong to, and editing either marks existing approvals stale like any other
-change.
+`subject`, `preheader`, `send_date` and `send_time` are shown above the render,
+styled like the inbox line and the schedule they become, and are editable there.
+None of them is a placeholder: the sending platform sets all four, so nothing
+about them belongs in the email body. Carrying them here means they are written,
+reviewed and approved with the copy they belong to, and editing any of them
+marks existing approvals stale like any other change.
 
-Recognised header names: `subject` / `subject_line`, and `preheader` /
-`preview_text` / `preview`. A sheet without them simply shows no bar.
+Recognised header names: `subject` / `subject_line`; `preheader` /
+`preview_text` / `preview`; `send_date` / `date` / `scheduled_date`; and
+`send_time` / `time` / `scheduled_time`. A sheet without any of them simply
+shows no bar.
+
+Date and time get native pickers when the cell is already in the format those
+emit — `yyyy-mm-dd` and `hh:mm`. Anything else (`8/27/26`, `9am ET`) stays a
+plain text box, because a date input would hand back an empty string and quietly
+lose the value.
 
 ## Images
 
@@ -87,7 +94,7 @@ The site URLs are inferred from the address in the footer. Check they exist.
 `museum-of-graffiti-content.csv` (and the identical `.xlsx`) holds the last two
 months of real sends, read back out of Klaviyo.
 
-**15 rows × 73 columns** — three series, 10 July to 27 August 2026.
+**15 rows × 74 columns** — three series, 10 July to 27 August 2026.
 
 | Series | Template | Rows |
 | --- | --- | --- |
@@ -114,9 +121,11 @@ in, or treat those rows as layout tests.
 
 ### Planning columns
 
-`send_date`, `campaign` and `theme` describe the campaign rather than filling a
-template, and the app knows not to report them as ignored. `theme` names the
-series, so the row rail reads as a schedule.
+`campaign` and `theme` describe the campaign rather than filling a template, and
+the app knows not to report them as ignored. `theme` names the series, so the
+row rail reads as a schedule. `send_date` and `send_time` carry the real send
+slot from Klaviyo, converted to the account's US/Eastern; they appear in the bar
+above the render rather than among the fields.
 
 ### Product descriptions are truncated
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  envelopeColumnNames,
   findEnvelopeColumns,
   findTemplateColumn,
   looksLikeImageUrl,
@@ -129,6 +130,9 @@ function rowSubLabel(
   return parts.join(" \u00b7 ");
 }
 
+/** Filter value for rows whose template cell is empty or names nothing real. */
+const UNASSIGNED_ROWS = "__unassigned__";
+
 function isDirty(draft: Record<string, string>, baseline: Record<string, string>): boolean {
   const keys = new Set([...Object.keys(draft), ...Object.keys(baseline)]);
   for (const key of keys) {
@@ -171,6 +175,9 @@ export function PreviewWorkspace({
   const [device, setDevice] = useState<DeviceId>("desktop");
   const [highlightMissing, setHighlightMissing] = useState(true);
   const [filter, setFilter] = useState("");
+  /** "" is every row; otherwise a template id, or UNASSIGNED_ROWS. */
+  const [templateFilter, setTemplateFilter] = useState("");
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
 
@@ -257,15 +264,15 @@ export function PreviewWorkspace({
     return { matched, unresolved: Boolean(value) && !matched };
   }, [templateColumn, currentRow, templates]);
 
-  /** Subject and preview text, shown above the render rather than inside it. */
+  /**
+   * Subject, preview text, send date and send time: shown above the render
+   * rather than inside it, because none of them is part of the email body.
+   */
   const envelopeColumns = useMemo(
     () => findEnvelopeColumns(sheet?.columns ?? []),
     [sheet],
   );
-  const envelopeKeys = useMemo(
-    () => [envelopeColumns.subject, envelopeColumns.preheader].filter((c): c is string => Boolean(c)),
-    [envelopeColumns],
-  );
+  const envelopeKeys = useMemo(() => envelopeColumnNames(envelopeColumns), [envelopeColumns]);
 
   const rowTemplate = useMemo<RowTemplateInfo>(() => {
     if (!templateColumn || !currentRow) {
@@ -404,14 +411,46 @@ export function PreviewWorkspace({
     ]);
   }, [template, sheet, templateColumn, envelopeKeys]);
 
+  /**
+   * Which template each row asks for, resolved once. Used to narrow the rail --
+   * with every campaign on one sheet, "show me the artist spotlights" is how
+   * you navigate, and it is a different question from which template is on
+   * screen.
+   */
+  const rowTemplateIds = useMemo(() => {
+    const byRow = new Map<string, string | null>();
+    if (!sheet || !templateColumn) return byRow;
+    for (const row of sheet.rows) {
+      const matched = matchTemplateName(row.data[templateColumn] ?? "", templates);
+      byRow.set(row.id, matched?.id ?? null);
+    }
+    return byRow;
+  }, [sheet, templateColumn, templates]);
+
   const visibleRows = useMemo(() => {
     if (!sheet) return [];
     const needle = filter.trim().toLowerCase();
-    if (!needle) return sheet.rows;
-    return sheet.rows.filter((row) =>
-      Object.values(row.data).some((value) => value.toLowerCase().includes(needle)),
-    );
-  }, [sheet, filter]);
+    return sheet.rows.filter((row) => {
+      if (templateFilter) {
+        const assigned = rowTemplateIds.get(row.id) ?? null;
+        if (templateFilter === UNASSIGNED_ROWS ? assigned !== null : assigned !== templateFilter) {
+          return false;
+        }
+      }
+      if (!needle) return true;
+      return Object.values(row.data).some((value) => value.toLowerCase().includes(needle));
+    });
+  }, [sheet, filter, templateFilter, rowTemplateIds]);
+
+  /** How many rows each template owns, so the filter can say so up front. */
+  const rowsPerTemplate = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const id of rowTemplateIds.values()) {
+      const key = id ?? UNASSIGNED_ROWS;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [rowTemplateIds]);
 
   /* ---------------- actions ---------------- */
 
@@ -569,35 +608,35 @@ export function PreviewWorkspace({
       <aside className="ws-pane">
         <div className="ws-section">
           <h3>Template</h3>
-          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} ({t.placeholderCount})
-              </option>
-            ))}
-          </select>
-          {templateOverridden && rowTemplate.matched && (
-            <p className="hint" style={{ marginTop: 6 }}>
-              This row asks for <strong>{rowTemplate.matched.name}</strong>.{" "}
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                style={{ padding: "1px 6px" }}
-                onClick={() => setTemplateId(rowTemplate.matched!.id)}
-              >
-                Use it
-              </button>
-            </p>
-          )}
-          {rowTemplate.unresolved && (
-            <p className="hint" style={{ marginTop: 6, color: "var(--warn)" }}>
-              This row asks for &ldquo;{rowTemplate.value}&rdquo;, which does not exist yet &mdash;
-              showing {templates[0]?.name}.
-            </p>
-          )}
-          {template && (
+          {templateColumn ? (
+            <>
+              <select value={templateFilter} onChange={(e) => setTemplateFilter(e.target.value)}>
+                <option value="">All templates ({sheet?.rows.length ?? 0})</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({rowsPerTemplate.get(t.id) ?? 0})
+                  </option>
+                ))}
+                {(rowsPerTemplate.get(UNASSIGNED_ROWS) ?? 0) > 0 && (
+                  <option value={UNASSIGNED_ROWS}>
+                    Unassigned ({rowsPerTemplate.get(UNASSIGNED_ROWS)})
+                  </option>
+                )}
+              </select>
+              <p className="hint">
+                Narrows the list below to the rows using that template. Each row still
+                previews in whichever template it asks for.
+              </p>
+              {templateFilter && currentRow && !visibleRows.some((r) => r.id === currentRow.id) && (
+                <p className="hint" style={{ color: "var(--warn)" }}>
+                  The row on screen is not in this filter.
+                </p>
+              )}
+            </>
+          ) : (
             <p className="hint">
-              <Link href={`/c/${companyId}/templates/${template.id}`}>Edit this template</Link>
+              This sheet has no <code>template</code> column, so there is nothing to filter
+              by. Choose what to render under <strong>Template shown</strong> on the right.
             </p>
           )}
         </div>
@@ -608,6 +647,9 @@ export function PreviewWorkspace({
             value={sheetId}
             onChange={(e) => {
               if (!confirmDiscard()) return;
+              // Another sheet has its own mix of templates; carrying the filter
+              // over can land you on an empty list for no visible reason.
+              setTemplateFilter("");
               setSheetId(e.target.value);
             }}
           >
@@ -879,6 +921,70 @@ export function PreviewWorkspace({
                   }
                 />
               ))}
+
+              {/*
+                Which template is on screen. It lives folded away down here on
+                purpose: rows pick their own template, so reaching for this is
+                the exception, and a stray click on a control beside the row
+                list would silently show the wrong layout.
+              */}
+              <div className="fld" style={{ paddingTop: 12, paddingBottom: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  style={{ width: "100%", justifyContent: "flex-start" }}
+                  onClick={() => setShowTemplatePicker((open) => !open)}
+                >
+                  {showTemplatePicker ? "▾" : "▸"} Template shown
+                  {template ? `: ${template.name}` : ""}
+                  {templateOverridden && " (overridden)"}
+                </button>
+                {showTemplatePicker && (
+                  <>
+                    <select
+                      value={templateId}
+                      onChange={(e) => setTemplateId(e.target.value)}
+                      style={{ marginTop: 8 }}
+                    >
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.placeholderCount})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="hint" style={{ marginTop: 4 }}>
+                      Changes the layout on screen only, until you move to another row.
+                      Nothing is saved.
+                    </div>
+                    {template && (
+                      <div className="hint">
+                        <Link href={`/c/${companyId}/templates/${template.id}`}>
+                          Edit this template
+                        </Link>
+                      </div>
+                    )}
+                  </>
+                )}
+                {templateOverridden && rowTemplate.matched && (
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    This row asks for <strong>{rowTemplate.matched.name}</strong>.{" "}
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ padding: "1px 6px" }}
+                      onClick={() => setTemplateId(rowTemplate.matched!.id)}
+                    >
+                      Use it
+                    </button>
+                  </div>
+                )}
+                {rowTemplate.unresolved && (
+                  <div className="hint" style={{ marginTop: 6, color: "var(--warn)" }}>
+                    This row asks for &ldquo;{rowTemplate.value}&rdquo;, which does not exist
+                    yet &mdash; showing {templates[0]?.name}.
+                  </div>
+                )}
+              </div>
 
               {otherFields.length > 0 && (
                 <>

@@ -456,7 +456,7 @@ input:focus, select:focus, textarea:focus {
   white-space: nowrap;
 }
 
-/* ---------- Envelope fields (subject + preview text) ---------- */
+/* ---------- Envelope fields (subject, preview text, send date and time) ---------- */
 .envelope {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -493,6 +493,12 @@ input:focus, select:focus, textarea:focus {
   padding: 6px 8px;
   font-style: italic;
 }
+
+/* Date and time share one row: they are one decision, not two. */
+.envelope .env-schedule-fields { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.envelope .env-schedule-fields .env-row { margin-top: 0; align-items: center; }
+.envelope .env-inline .env-label { flex: 0 0 auto; padding-top: 0; }
+.envelope .env-inline input { font-size: 13px; color: var(--text); width: auto; min-width: 130px; }
 
 /* The envelope sits flush on top of the frame, so square that seam. */
 .envelope + .ws-frame {

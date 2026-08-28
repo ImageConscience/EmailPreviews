@@ -240,21 +240,27 @@ const METADATA_COLUMNS = [
 ];
 
 /**
- * The subject line and the preview text beside it in the inbox.
+ * The four things that surround an email without being inside it: the subject
+ * line, the preview text beside it in the inbox, and the date and time it goes
+ * out.
  *
- * Neither belongs in the email body -- the sending platform sets them -- but
- * both are campaign copy that gets written, reviewed and approved along with
- * everything else, so the preview shows them above the render rather than
+ * None of them belongs in the email body -- the sending platform sets them all
+ * -- but each is part of the campaign that gets written, reviewed and approved
+ * along with the copy, so the preview shows them above the render rather than
  * discarding them as columns no template uses.
  */
 const ENVELOPE_ALIASES = {
   subject: ["subject", "subject_line"],
   preheader: ["preheader", "pre_header", "preview_text", "preview", "preheader_text"],
+  sendDate: ["send_date", "date", "send_day", "scheduled_date", "schedule_date"],
+  sendTime: ["send_time", "time", "scheduled_time", "schedule_time"],
 };
 
 export interface EnvelopeColumns {
   subject: string | null;
   preheader: string | null;
+  sendDate: string | null;
+  sendTime: string | null;
 }
 
 export function findEnvelopeColumns(columns: string[]): EnvelopeColumns {
@@ -263,7 +269,16 @@ export function findEnvelopeColumns(columns: string[]): EnvelopeColumns {
   return {
     subject: pick(ENVELOPE_ALIASES.subject),
     preheader: pick(ENVELOPE_ALIASES.preheader),
+    sendDate: pick(ENVELOPE_ALIASES.sendDate),
+    sendTime: pick(ENVELOPE_ALIASES.sendTime),
   };
+}
+
+/** Every column the bar above the render owns, in the order it shows them. */
+export function envelopeColumnNames(columns: EnvelopeColumns): string[] {
+  return [columns.subject, columns.preheader, columns.sendDate, columns.sendTime].filter(
+    (column): column is string => Boolean(column),
+  );
 }
 
 /** Planning and labelling columns present in this sheet. */

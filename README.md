@@ -11,9 +11,11 @@ without pasting values by hand.
 
 ## What it does
 
-**Companies.** A company is one store of content. Whoever signs up first owns it
-and can invite collaborators, each with their own login. Templates, sheets and
-rows all belong to a company and are never visible outside it.
+**Companies.** A company is one store of content. Whoever creates it owns it and
+can invite collaborators, each with their own login. Templates, sheets and rows
+all belong to a company and are never visible outside it. One login can own or
+belong to any number of companies — the picker at the top right switches
+between them, and creates new ones.
 
 **Templates.** Paste an HTML email and mark the variable parts as
 `{{ placeholder_name }}`. The app parses the markup and tracks which
@@ -30,13 +32,16 @@ revision, so a collaborator's edit is always recoverable.
 
 **One sheet, many templates.** A sheet can carry a `template` column naming the
 template each row belongs to, so every campaign lives in one place and each row
-previews itself correctly without anyone choosing from a list. Switching
-template is still one click, and the app says which template the row asked for
-so you can get back.
+previews itself correctly without anyone choosing from a list. The picker beside
+the row list narrows that list to one template's rows rather than changing what
+is rendered — with sixty campaigns on one sheet, "show me the artist spotlights"
+is how you navigate. Overriding what is on screen is a separate, deliberate
+control, folded away under the fields on the right.
 
-**Subject and preview text** sit above the render rather than inside it. The
-sending platform sets both, so they are not placeholders in the template, but
-they are campaign copy that gets written and approved with everything else.
+**Subject, preview text, send date and send time** sit above the render rather
+than inside it. The sending platform sets all four, so they are not placeholders
+in the template, but each is a campaign decision that gets written and approved
+with everything else.
 
 **Images.** Anyone with a login can upload images under **Images**, and each one
 gets a permanent public link to use in a campaign. The bytes live in the

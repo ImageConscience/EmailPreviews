@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logoutAction } from "@/actions/auth";
 
+/** Sentinel option value: not a company, a trip to the company list. */
+const NEW_COMPANY = "__new__";
+
 interface Props {
   companyId: string;
   companyName: string;
@@ -41,25 +44,29 @@ export function TopBar({ companyId, companyName, userName, role, otherCompanies 
       </nav>
       <div className="spacer" />
       <div className="row" style={{ gap: 8 }}>
-        {otherCompanies.length > 0 ? (
-          <select
-            value={companyId}
-            onChange={(e) => {
-              window.location.href = `/c/${e.target.value}`;
-            }}
-            style={{ width: "auto", maxWidth: 200 }}
-            aria-label="Switch company"
-          >
-            <option value={companyId}>{companyName}</option>
-            {otherCompanies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="badge">{companyName}</span>
-        )}
+        {/*
+          Always a select, even with one company: this is where someone looks
+          for their other companies, so it is also where "add another" belongs.
+          A static label here left new companies with nowhere to be created from.
+        */}
+        <select
+          value={companyId}
+          onChange={(e) => {
+            const next = e.target.value;
+            window.location.href = next === NEW_COMPANY ? "/companies" : `/c/${next}`;
+          }}
+          style={{ width: "auto", maxWidth: 220 }}
+          aria-label="Switch company"
+        >
+          <option value={companyId}>{companyName}</option>
+          {otherCompanies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+          <option disabled>──────────</option>
+          <option value={NEW_COMPANY}>+ New company…</option>
+        </select>
         <span className="hint" title={role} style={{ marginTop: 0 }}>
           {userName}
         </span>
