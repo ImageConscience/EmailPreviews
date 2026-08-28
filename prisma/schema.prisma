@@ -29,6 +29,7 @@ model User {
   sentInvites   Invite[]      @relation("InviteSender")
   createdRows   SheetRow[]    @relation("RowCreator")
   approvals     Approval[]
+  uploads       MediaAsset[]  @relation("MediaUploader")
 }
 
 model Session {
@@ -53,6 +54,7 @@ model Company {
   templates   Template[]
   sheets      ContentSheet[]
   invites     Invite[]
+  media       MediaAsset[]
 }
 
 /// Joins a login to a company. Roles: "owner" | "admin" | "member".
@@ -182,4 +184,34 @@ model RowRevision {
   changedBy User?    @relation(fields: [changedById], references: [id], onDelete: SetNull)
 
   @@index([rowId, changedAt])
+}
+
+/// An image uploaded through the app and served publicly for use in emails.
+///
+/// The bytes live here rather than on disk or in a bucket so that anyone with
+/// a login can add one -- a file committed to the repository can only ever be
+/// added by whoever can push to it, which is the wrong shape for a tool the
+/// whole team reviews in. Images are small and few; the database handles them
+/// comfortably and they are covered by its backups.
+model MediaAsset {
+  id           String   @id @default(cuid())
+  companyId    String
+  /// Digest of the bytes. Doubles as the public path, so a URL always points
+  /// at exactly the image it was created for and can be cached forever.
+  sha256       String
+  filename     String
+  mimeType     String
+  bytes        Bytes
+  size         Int
+  width        Int?
+  height       Int?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  /// The same file uploaded twice is one asset, not two.
+  @@unique([companyId, sha256])
+  @@index([companyId, createdAt])
 }

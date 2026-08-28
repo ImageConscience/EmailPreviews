@@ -38,6 +38,13 @@ so you can get back.
 sending platform sets both, so they are not placeholders in the template, but
 they are campaign copy that gets written and approved with everything else.
 
+**Images.** Anyone with a login can upload images under **Images**, and each one
+gets a permanent public link to use in a campaign. The bytes live in the
+database rather than in the repository, because an image committed to git can
+only be added by whoever can push to it — the wrong shape for a tool the whole
+team works in. Image fields in the preview get a picker, and still accept a
+pasted URL from anywhere else.
+
 **Approvals.** Each person can sign off the row currently on screen, in the
 template currently on screen, and the bar next to the preview shows who has.
 The record is per row *and* template, because the same copy in a different
@@ -144,6 +151,9 @@ src/lib/sheet.ts         .xlsx / .csv ingestion
 src/lib/auth.ts          sessions, roles, the single tenancy choke point
 src/actions/             server actions: auth, content, members, approvals
 src/lib/approval.ts      approval fingerprinting and reviewer initials
+src/lib/media.ts         image types and formatting (shared with the browser)
+src/lib/media-server.ts  byte-level validation of uploads
+src/app/i/[file]/        public, unauthenticated image serving
 src/app/c/[companyId]/   the signed-in app; preview/ is the workspace
 scripts/start.mjs        production start: check database, migrate, serve
 scripts/db-export.ts     dump every table to JSON (portable backup)

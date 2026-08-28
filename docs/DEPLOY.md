@@ -167,6 +167,7 @@ A configuration problem shows up as a page explaining itself.
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | `${{Postgres.DATABASE_URL}}` on Railway, or any `postgresql://` connection string. |
 | `SESSION_COOKIE_NAME` | No | Defaults to `ep_session`. |
+| `APP_URL` | No | Absolute base for uploaded-image URLs, e.g. `https://mail.example.com`. Derived from the request when unset; set it once a custom domain is in front of the app, so links minted before the move keep working. |
 
 `PORT` is set by the host; you do not need to configure it.
 
@@ -216,6 +217,20 @@ That updates your local database and writes a migration file under
 next deploy.
 
 ---
+
+## Uploaded images
+
+Images uploaded under **Images** are stored in Postgres and served from
+`/i/<digest>.<ext>` with no authentication, because an email client fetching a
+hero image has no session. The path is the content digest, so a URL always
+points at exactly the image it was created for and is cached permanently.
+
+Two consequences worth knowing. **Sent email outlives the app**: a message sent
+last year still fetches its images from here, so deleting an image, or the app,
+breaks pictures in mail already delivered. And **the database carries the
+bytes** — a few hundred images is tens of megabytes, comfortable for Postgres,
+but if the library ever grows into the gigabytes, move it to object storage and
+keep only the URL.
 
 ## Backups
 

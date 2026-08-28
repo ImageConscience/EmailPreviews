@@ -17,6 +17,7 @@ import { saveRowAction } from "@/actions/content";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
 import { EnvelopeFields } from "./EnvelopeFields";
+import { ImagePicker } from "./ImagePicker";
 import type { ApprovalView } from "@/lib/approval";
 
 export interface TemplateSummary {
@@ -869,6 +870,7 @@ export function PreviewWorkspace({
               {templateFields.map((field) => (
                 <FieldRow
                   key={field.key}
+                  companyId={companyId}
                   field={field}
                   value={draft[field.key] ?? ""}
                   changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
@@ -899,6 +901,7 @@ export function PreviewWorkspace({
                     otherFields.map((field) => (
                       <FieldRow
                         key={field.key}
+                        companyId={companyId}
                         field={field}
                         value={draft[field.key] ?? ""}
                         changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
@@ -985,17 +988,30 @@ export function PreviewWorkspace({
   );
 }
 
+const IMAGE_NAMED = /(image|img|photo|picture|logo|banner|thumbnail|artwork)/i;
+/** `hero_alt` describes the picture; it does not hold one. */
+const DESCRIBES_IMAGE = /(alt|caption|credit|description|_text\b)/i;
+
+/** Fields that hold a picture, by what they are called or what they contain. */
+function isImageField(field: Field, value: string): boolean {
+  if (DESCRIBES_IMAGE.test(field.label)) return false;
+  return IMAGE_NAMED.test(field.label) || looksLikeImageUrl(value);
+}
+
 function FieldRow({
+  companyId,
   field,
   value,
   changed,
   onChange,
 }: {
+  companyId: string;
   field: Field;
   value: string;
   changed: boolean;
   onChange: (value: string) => void;
 }) {
+  const [picking, setPicking] = useState(false);
   // Plenty of image CDNs serve extensionless URLs, so rather than guess from
   // the URL alone, every URL value is probed by actually loading it. A probe
   // that succeeds is an image and gets a thumbnail; one that fails only raises
@@ -1025,7 +1041,26 @@ function FieldRow({
         )}
         <div className="spacer" />
         {changed && <span className="badge badge-accent">edited</span>}
+        {isImageField(field, value) && (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            style={{ padding: "1px 6px", fontSize: 11 }}
+            onClick={() => setPicking(true)}
+            title="Choose from the image library"
+          >
+            Choose
+          </button>
+        )}
       </div>
+
+      {picking && (
+        <ImagePicker
+          companyId={companyId}
+          onPick={(url) => onChange(url)}
+          onClose={() => setPicking(false)}
+        />
+      )}
 
       <textarea
         value={value}
