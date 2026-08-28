@@ -38,6 +38,12 @@ is rendered — with sixty campaigns on one sheet, "show me the artist spotlight
 is how you navigate. Overriding what is on screen is a separate, deliberate
 control, folded away under the fields on the right.
 
+**Highlight gaps** is a toggle, not just a colour. On, every placeholder the row
+has no value for is shown as its token so the hole is impossible to miss. Off,
+the render is what would actually go out: an optional slot left empty is simply
+absent, rather than a stray `{{ token }}` mid-paragraph. The coverage panel
+names every blank and unmatched placeholder in both modes.
+
 **Subject, preview text, send date and send time** sit above the render rather
 than inside it. The sending platform sets all four, so they are not placeholders
 in the template, but each is a campaign decision that gets written and approved

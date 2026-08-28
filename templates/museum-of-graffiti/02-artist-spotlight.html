@@ -14,8 +14,10 @@
   body { margin:0 !important; padding:0 !important; width:100% !important; }
   table { border-collapse:collapse; }
   img { border:0; outline:none; text-decoration:none; -ms-interpolation-mode:bicubic; }
-  /* A badge left empty in the sheet should leave no coloured chip behind. */
+  /* A slot left empty in the sheet should leave nothing behind: no coloured
+     chip, and no gap where a paragraph would have been. */
   .badge:empty { display:none !important; }
+  p:empty { display:none !important; margin:0 !important; }
   @media only screen and (max-width:620px) {
     /* These cells go full width and also carry padding -- without border-box
        the padding is added on top and the cell overflows the table. */

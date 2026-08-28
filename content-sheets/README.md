@@ -3,7 +3,7 @@
 | Sheet | Company | Rows |
 | --- | --- | --- |
 | `campaign-content.{csv,xlsx}` | Safety Facility Services | 54 |
-| `museum-of-graffiti-content.{csv,xlsx}` | Museum of Graffiti | 15 |
+| `museum-of-graffiti-content.{csv,xlsx}` | Museum of Graffiti | 14 |
 
 Each is a single sheet covering every template for that company, with a
 `template` column naming which layout each row belongs to.
@@ -91,14 +91,14 @@ The site URLs are inferred from the address in the footer. Check they exist.
 
 ## Museum of Graffiti
 
-`museum-of-graffiti-content.csv` (and the identical `.xlsx`) holds the last two
-months of real sends, read back out of Klaviyo.
+`museum-of-graffiti-content.csv` (and the identical `.xlsx`) holds every send in
+the three series from 17 July onwards, read back out of Klaviyo.
 
-**15 rows × 74 columns** — three series, 10 July to 27 August 2026.
+**14 rows × 74 columns**, newest first, 18 July to 31 August 2026.
 
 | Series | Template | Rows |
 | --- | --- | --- |
-| Category spotlight | `Category Spotlight` | 7 |
+| Category spotlight | `Category Spotlight` | 6 |
 | Artist spotlight | `Artist Spotlight` | 5 |
 | Monthly tee drop | `Tee of the Month` | 3 |
 
@@ -110,14 +110,30 @@ the rendered output rather than the stored template.
 `templates/museum-of-graffiti/README.md` covers what became a placeholder and
 what stayed fixed.
 
-### Three rows are copy-only
+### The first row has not gone out yet
 
-Klaviyo's render endpoint returns a server error for three of the fifteen —
-*Pins, Patches & Stickers* (10 Aug), *Apparel* (14 Jul) and *Prints & Posters*
-(10 Jul) — most likely a product in those sends that no longer exists in the
-catalog. Their headline, intro, section labels and accent colour came from the
-stored template and are correct; their eight product tiles are empty. Fill them
-in, or treat those rows as layout tests.
+*Collectibles & Toys* is scheduled for 31 August, not sent. It is in here
+because it is the next campaign anyone would want to look at, and it is the one
+row where approving in this app happens before the send rather than after.
+
+### One row is copy-only
+
+Klaviyo's render endpoint returns a server error for *Pins, Patches & Stickers*
+(10 August) — on the original and on its clone, so a product in that send is
+almost certainly gone from the catalog, which is what breaks the render. Its
+headline, intro, section labels and accent colour came from the stored template
+and are correct; its eight product tiles are empty. Klaviyo's catalog API is no
+help either: this account's catalog is a Shopify integration, and that endpoint
+only serves `$custom` items.
+
+### The evergreen tee was standardised
+
+The 7 August membership email used a different hero from the two monthly drops —
+no member/retail price block and a headline where the announcement strip goes.
+It is mapped onto the monthly-drop layout: the strip carries its own
+*Artist Tee Membership · Presented by AS Colour* line plus the subject as the
+second line, and the price block uses the same shirt's pricing from the August
+drop that sent a week later.
 
 ### Planning columns
 
@@ -135,6 +151,6 @@ faithful to what was sent; rewrite them if you want the full copy.
 
 ### Preview text
 
-Every one of these fifteen sends went out with an empty preview text in
-Klaviyo, so the `preheader` column is blank throughout. Worth filling in — it is
+Every one of these sends went out with an empty preview text in Klaviyo, so the
+`preheader` column is blank throughout. Worth filling in — it is
 the second line every recipient reads in the inbox.

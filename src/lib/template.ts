@@ -168,7 +168,13 @@ export function renderTemplate(
     if (attribute && IMAGE_ATTRS.has(attribute)) {
       return options.highlightMissing ? missingImageDataUri(name) : BLANK_IMAGE;
     }
-    if (options.highlightMissing && !isInsideTag(html, offset)) {
+    // With gaps highlighted, show the token so the hole is obvious. With
+    // highlighting off the question is "what does this actually look like",
+    // and the answer is never a stray {{ token }} mid-paragraph -- an optional
+    // slot left empty should simply not be there. The coverage panel still
+    // names every blank and unmatched placeholder either way.
+    if (!options.highlightMissing) return "";
+    if (!isInsideTag(html, offset)) {
       return `<span style="${MISSING_STYLE}" title="No value for &quot;${escapeHtml(name)}&quot;">${escapeHtml(match)}</span>`;
     }
     return match;
