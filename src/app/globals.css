@@ -691,3 +691,42 @@ input:focus, select:focus, textarea:focus {
 .cal-item.is-approved { border-left-color: var(--ok); background: var(--ok-soft); }
 .cal-item.is-hidden { opacity: 0.55; border-left-color: var(--text-faint); background: var(--surface-2); text-decoration: line-through; }
 .cal-time { display: block; font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Settings menu in the top bar ---------- */
+
+.menu { position: relative; }
+.menu-trigger {
+  padding: 6px 11px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.menu-trigger:hover { background: var(--surface-2); color: var(--text); }
+.menu-trigger.active { background: var(--accent-soft); color: var(--accent); }
+
+.menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.menu-list a {
+  display: block;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.menu-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.menu-list a.active { background: var(--accent-soft); color: var(--accent); }

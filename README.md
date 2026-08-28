@@ -25,6 +25,12 @@ placeholders exist. A company can have as many templates as it likes.
 into records that live in the app — the original file is not kept or needed
 again. Column headers correspond to placeholder names.
 
+**Getting around.** Two tabs for the work — **Overview** and **Preview** — and
+everything you set up once behind **Settings**: Profile (what this company
+holds), Templates, Content, Images and Team. A company's own URL lands on the
+Overview, because the first question is what is going out, not what the company
+is made of.
+
 **Overview.** Everything the company has planned, as a list or a calendar. The
 list groups by send date and opens on the next thirty days; the calendar walks
 month by month. Either way, clicking an item opens it in the preview. This is
