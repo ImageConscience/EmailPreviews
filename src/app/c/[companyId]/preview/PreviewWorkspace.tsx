@@ -1214,6 +1214,9 @@ export function PreviewWorkspace({
                     {revisions.map((revision) => (
                       <li key={revision.id} className="hint" style={{ marginBottom: 6 }}>
                         {new Date(revision.changedAt).toLocaleString()} · {revision.by}
+                        {/* Notes were stored but never shown, so a bulk change
+                            read as an ordinary hand edit. */}
+                        {revision.note && <> · {revision.note}</>}
                         <button
                           type="button"
                           className="btn btn-sm btn-ghost"

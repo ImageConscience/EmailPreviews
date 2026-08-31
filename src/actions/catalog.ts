@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { AuthError, requireCompanyAccess } from "@/lib/auth";
 import { StoreError, fetchAllProducts, normalizeShopDomain } from "@/lib/shopify";
+import { parseRecord, parseStringArray } from "@/lib/json";
+import { rowLabel } from "@/lib/campaign";
 
 export interface SyncResult {
   ok: boolean;
@@ -159,4 +161,164 @@ export async function searchProductsAction(
     },
   });
   return products;
+}
+
+/* ------------------------------------------------------------------ */
+/* Relinking existing rows to the catalog                              */
+/* ------------------------------------------------------------------ */
+
+export interface RelinkChange {
+  sheetName: string;
+  rowLabel: string;
+  group: string;
+  field: string;
+  from: string;
+  to: string;
+}
+
+export interface RelinkReport {
+  ok: boolean;
+  error?: string;
+  /** Product tiles whose link was recognised and can be refreshed. */
+  matched: number;
+  /** Rows that would change at all. */
+  rows: number;
+  /** Individual cell changes. */
+  changes: number;
+  /** Handles in the sheets that no longer exist in the store. */
+  unmatched: string[];
+  sample: RelinkChange[];
+  applied?: boolean;
+}
+
+/** "https://shop/products/subway-art?v=2" -> "subway-art" */
+function handleOf(url: string): string | null {
+  const match = /\/products\/([^/?#]+)/.exec(url);
+  return match ? match[1].toLowerCase() : null;
+}
+
+const GROUP = /^product[_ -]?(\d+)[_ -]?url$/i;
+const norm = (key: string) => key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+
+/**
+ * Re-point every product tile in every sheet at the synced catalog.
+ *
+ * The sheets were built from Klaviyo's rendering, which resolves products to
+ * `*.myshopify.com` and to whatever price and image were current that day. This
+ * walks the stored links, finds each product by its handle, and refreshes the
+ * tile from the cache -- customer-facing URL, current price, current image.
+ *
+ * `apply` false reports what would change and writes nothing.
+ */
+export async function relinkProductsAction(
+  companyId: string,
+  apply: boolean,
+): Promise<RelinkReport> {
+  const empty: RelinkReport = { ok: true, matched: 0, rows: 0, changes: 0, unmatched: [], sample: [] };
+  try {
+    const access = await requireCompanyAccess(companyId, "member");
+
+    const products = await prisma.catalogProduct.findMany({ where: { companyId } });
+    if (products.length === 0) {
+      return { ...empty, ok: false, error: "Nothing is cached yet — sync the storefront first." };
+    }
+    const byHandle = new Map(products.map((product) => [product.handle.toLowerCase(), product]));
+
+    const sheets = await prisma.contentSheet.findMany({
+      where: { companyId },
+      include: { rows: { orderBy: { position: "asc" } } },
+    });
+
+    const report: RelinkReport = { ...empty, unmatched: [], sample: [], applied: apply };
+    const unmatched = new Set<string>();
+    const writes: { rowId: string; previous: string; next: Record<string, string> }[] = [];
+
+    for (const sheet of sheets) {
+      for (const row of sheet.rows) {
+        const data = parseRecord(row.data);
+        const next = { ...data };
+        let touchedRow = false;
+
+        for (const key of Object.keys(data)) {
+          const match = GROUP.exec(norm(key));
+          if (!match) continue;
+          const handle = handleOf(data[key] ?? "");
+          if (!handle) continue;
+
+          const product = byHandle.get(handle);
+          if (!product) {
+            unmatched.add(handle);
+            continue;
+          }
+          report.matched += 1;
+
+          const group = `product_${match[1]}`;
+          const wanted: Record<string, string> = {
+            [`${group}_url`]: product.url,
+            [`${group}_image`]: product.imageUrl ?? "",
+            [`${group}_title`]: product.title,
+            [`${group}_price`]: product.price ? `$${product.price}` : "",
+          };
+
+          for (const [wantedKey, value] of Object.entries(wanted)) {
+            // Only columns the sheet already has, and only a real change. An
+            // empty replacement is skipped: losing a value to a gap in the
+            // catalog would be worse than a slightly stale one.
+            const column = Object.keys(data).find((c) => norm(c) === wantedKey);
+            if (!column || !value) continue;
+            const from = data[column] ?? "";
+            if (from === value) continue;
+
+            next[column] = value;
+            touchedRow = true;
+            report.changes += 1;
+            if (report.sample.length < 12) {
+              report.sample.push({
+                sheetName: sheet.name,
+                rowLabel: rowLabel(data, parseStringArray(sheet.columns)),
+                group,
+                field: column,
+                from,
+                to: value,
+              });
+            }
+          }
+        }
+
+        if (touchedRow) {
+          report.rows += 1;
+          writes.push({ rowId: row.id, previous: row.data, next });
+        }
+      }
+    }
+
+    report.unmatched = [...unmatched].sort();
+
+    if (apply && writes.length > 0) {
+      // Each row keeps its previous values as a revision, exactly as a hand
+      // edit would, so this is undoable row by row from History.
+      await prisma.$transaction(
+        writes.flatMap((write) => [
+          prisma.rowRevision.create({
+            data: {
+              rowId: write.rowId,
+              data: write.previous,
+              changedById: access.user.id,
+              note: "Relinked to the product catalog",
+            },
+          }),
+          prisma.sheetRow.update({
+            where: { id: write.rowId },
+            data: { data: JSON.stringify(write.next) },
+          }),
+        ]),
+      );
+      revalidatePath(`/c/${companyId}/integrations`);
+    }
+
+    return report;
+  } catch (error) {
+    if (error instanceof AuthError) return { ...empty, ok: false, error: error.message };
+    return { ...empty, ok: false, error: "Could not check the sheets." };
+  }
 }

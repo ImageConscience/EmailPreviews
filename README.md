@@ -84,6 +84,14 @@ walks to the end. Klaviyo was the other candidate — the products are synced
 there — but its Catalog API only serves `$custom` catalogs and returns nothing
 for a store on the native Shopify integration.
 
+Templates need no change to benefit: the catalog fills the sheet cells a
+template already reads. Content written before the catalog existed can be
+brought up to date in one pass with **Relink existing content**, which finds
+each tile by its product handle and refreshes the link, price and image. It
+shows what it would change before writing anything, leaves products that have
+left the store alone rather than blanking them, and keeps every row's previous
+values in History.
+
 **Images.** Anyone with a login can upload images under **Images**, and each one
 gets a permanent public link to use in a campaign. The bytes live in the
 database rather than in the repository, because an image committed to git can
