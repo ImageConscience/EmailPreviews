@@ -113,6 +113,32 @@ beside a 13px label stretched to the label's height and rendered as a block
 instead of a rule -- and the dot came out an oval. Nesting gives the swatch a
 row of its own to set the height of.
 
+## Why the tiles line up
+
+Two tiles side by side have to agree on where the price and Shop link sit, and
+neither the badge nor the title is a fixed height. Two things hold that
+together:
+
+- **The badge band keeps its height whether or not there is a chip in it** —
+  36px, with the chip bottom-aligned inside. Hiding an empty badge without
+  reserving its space let the tile beside it ride up.
+- **The title cell absorbs the slack.** Tiles in a row are equal height because
+  they are cells of one row; the inner table fills its cell and the title row
+  takes whatever is left, which pins the price row to the bottom of both. A
+  reserved number of lines was tried first and only moved the breaking point:
+  a title one line longer than the reserve broke it again, and the sheet has
+  titles running to four lines.
+
+The tile cell carries `height:1px` purely so those percentage heights have
+something definite to resolve against; a table cell still grows to its content.
+The mobile rule sets it back to `auto`, because once a tile is a stacked block
+that 1px would be a real one.
+
+Outlook's rendering engine treats percentage heights on tables loosely. The
+badge band is an explicit pixel height and holds there; the title balancing is
+best-effort, and where it does not apply the layout falls back to flowing
+naturally rather than breaking.
+
 ## Blank cells
 
 Several slots here are genuinely optional: a category send might badge two of
