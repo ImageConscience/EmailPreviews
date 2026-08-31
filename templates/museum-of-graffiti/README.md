@@ -104,6 +104,15 @@ Favorite`, `MoG Exclusive`), and only on the four featured tiles. The four-up
 grid never carried one in two months of sends, and neither did the tee hero, so
 those slots were dropped rather than carried as permanently empty fields.
 
+## Section rules and dots
+
+The little accent dash beside a section label, and the round dot beside MEET
+THE ARTIST, are each a swatch inside a nested table rather than the row cell
+itself. A table cell cannot be shorter than its row, so a 3px cell sitting
+beside a 13px label stretched to the label's height and rendered as a block
+instead of a rule -- and the dot came out an oval. Nesting gives the swatch a
+row of its own to set the height of.
+
 ## Blank cells
 
 Several slots here are genuinely optional: a category send might badge two of

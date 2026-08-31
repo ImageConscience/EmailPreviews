@@ -1,6 +1,6 @@
 "use client";
 
-import type { EnvelopeColumns } from "@/lib/template";
+import type { EnvelopeColumns, EnvelopeSlots } from "@/lib/template";
 
 /**
  * Subject line, preview text and the send date and time, shown above the render.
@@ -11,6 +11,10 @@ import type { EnvelopeColumns } from "@/lib/template";
  * in the email body, which is why they sit outside the rendered frame instead
  * of being placeholders inside it -- and all four are campaign decisions that
  * get reviewed and approved with the copy, which is why they are here at all.
+ *
+ * All four always show, even when the sheet has no column for them. Every
+ * campaign has a subject and a moment it goes out whether or not whoever built
+ * the spreadsheet thought to add a column; typing here creates one on save.
  */
 
 /** yyyy-mm-dd, the only thing a date input will accept or give back. */
@@ -19,28 +23,36 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIME = /^\d{2}:\d{2}(:\d{2})?$/;
 
 export function EnvelopeFields({
-  columns,
+  slots,
+  known,
   values,
   baseline,
   width,
+  highlightMissing,
   onChange,
 }: {
-  columns: EnvelopeColumns;
+  /** The key each field reads and writes: the sheet's column, or the default. */
+  slots: EnvelopeSlots;
+  /** Which of them the sheet actually had, for the "will be added" note. */
+  known: EnvelopeColumns;
   values: Record<string, string>;
   baseline: Record<string, string>;
   /** Match the width of the frame below, so the two read as one object. */
   width: number | null;
+  /**
+   * When gaps are highlighted, the placeholder text describes what belongs in
+   * an empty field. With highlighting off the question is what this actually
+   * looks like, and grey hint text sitting where a subject line goes reads like
+   * a subject line -- so it goes away.
+   */
+  highlightMissing: boolean;
   onChange: (key: string, value: string) => void;
 }) {
-  if (!columns.subject && !columns.preheader && !columns.sendDate && !columns.sendTime) {
-    return null;
-  }
-
   const field = (
-    key: string | null,
+    key: string,
     label: string,
     className: string,
-    placeholder: string,
+    hint: string,
     /**
      * A native picker only when the cell is already in the format it emits.
      * A sheet that says "8/27/26" would come back from a date input empty, so
@@ -48,50 +60,55 @@ export function EnvelopeFields({
      */
     nativeType?: { type: "date" | "time"; accepts: RegExp },
   ) => {
-    const value = key ? (values[key] ?? "") : "";
-    const edited = key ? value !== (baseline[key] ?? "") : false;
+    const value = values[key] ?? "";
+    const edited = value !== (baseline[key] ?? "");
     const type =
       nativeType && (value === "" || nativeType.accepts.test(value)) ? nativeType.type : "text";
 
     return (
       <div className={`env-row ${className}`}>
         <span className="env-label">{label}</span>
-        {key ? (
-          <input
-            type={type}
-            value={value}
-            placeholder={placeholder}
-            onChange={(e) => onChange(key, e.target.value)}
-            title={edited ? "Edited — save to keep this" : undefined}
-            style={edited ? { borderColor: "var(--accent)" } : undefined}
-          />
-        ) : (
-          <span className="env-missing">No {label.toLowerCase()} column in this sheet</span>
-        )}
+        <input
+          type={type}
+          value={value}
+          placeholder={highlightMissing ? hint : ""}
+          onChange={(event) => onChange(key, event.target.value)}
+          title={edited ? "Edited — save to keep this" : undefined}
+          style={edited ? { borderColor: "var(--accent)" } : undefined}
+        />
       </div>
     );
   };
 
+  /** Fields the sheet has no column for yet, named once under the bar. */
+  const newColumns = (Object.keys(slots) as (keyof EnvelopeSlots)[])
+    .filter((slot) => !known[slot] && (values[slots[slot]] ?? "") !== "")
+    .map((slot) => slots[slot]);
+
   return (
     <div className="envelope" style={{ maxWidth: width ? `${width}px` : "100%" }}>
-      {field(columns.subject, "Subject", "subject", "Subject line")}
-      {field(columns.preheader, "Preview", "preheader", "Preview text shown beside the subject")}
-      {(columns.sendDate || columns.sendTime) && (
-        <div className="env-row env-schedule">
-          <span className="env-label">Send</span>
-          <div className="env-schedule-fields">
-            {columns.sendDate &&
-              field(columns.sendDate, "Date", "env-inline", "yyyy-mm-dd", {
-                type: "date",
-                accepts: ISO_DATE,
-              })}
-            {columns.sendTime &&
-              field(columns.sendTime, "Time", "env-inline", "hh:mm", {
-                type: "time",
-                accepts: ISO_TIME,
-              })}
-          </div>
+      {field(slots.subject, "Subject", "subject", "Subject line")}
+      {field(slots.preheader, "Preview", "preheader", "Preview text shown beside the subject")}
+      <div className="env-row env-schedule">
+        <span className="env-label">Send</span>
+        <div className="env-schedule-fields">
+          {field(slots.sendDate, "Date", "env-inline", "yyyy-mm-dd", {
+            type: "date",
+            accepts: ISO_DATE,
+          })}
+          {field(slots.sendTime, "Time", "env-inline", "hh:mm", {
+            type: "time",
+            accepts: ISO_TIME,
+          })}
         </div>
+      </div>
+      {newColumns.length > 0 && (
+        <p className="env-note">
+          Saving adds {newColumns.length === 1 ? "a new column" : "new columns"} to this sheet:{" "}
+          {newColumns.map((name) => (
+            <code key={name}>{name}</code>
+          ))}
+        </p>
       )}
     </div>
   );

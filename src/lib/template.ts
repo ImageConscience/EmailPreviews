@@ -280,11 +280,36 @@ export function findEnvelopeColumns(columns: string[]): EnvelopeColumns {
   };
 }
 
-/** Every column the bar above the render owns, in the order it shows them. */
+/**
+ * The header each envelope field writes to when the sheet has none.
+ *
+ * Every campaign has a subject, preview text and a moment it goes out, whether
+ * or not whoever built the spreadsheet thought to add a column for it. Editing
+ * one of these in the preview creates the column on save, the same way any
+ * other new field would.
+ */
+const ENVELOPE_DEFAULT_KEYS = {
+  subject: "subject",
+  preheader: "preheader",
+  sendDate: "send_date",
+  sendTime: "send_time",
+} as const;
+
+export type EnvelopeSlots = Record<keyof EnvelopeColumns, string>;
+
+/** The key each envelope field reads and writes: the sheet's, or the default. */
+export function envelopeSlots(columns: EnvelopeColumns): EnvelopeSlots {
+  return {
+    subject: columns.subject ?? ENVELOPE_DEFAULT_KEYS.subject,
+    preheader: columns.preheader ?? ENVELOPE_DEFAULT_KEYS.preheader,
+    sendDate: columns.sendDate ?? ENVELOPE_DEFAULT_KEYS.sendDate,
+    sendTime: columns.sendTime ?? ENVELOPE_DEFAULT_KEYS.sendTime,
+  };
+}
+
+/** Every key the bar above the render owns, whether or not the sheet has it. */
 export function envelopeColumnNames(columns: EnvelopeColumns): string[] {
-  return [columns.subject, columns.preheader, columns.sendDate, columns.sendTime].filter(
-    (column): column is string => Boolean(column),
-  );
+  return Object.values(envelopeSlots(columns));
 }
 
 /** Planning and labelling columns present in this sheet. */

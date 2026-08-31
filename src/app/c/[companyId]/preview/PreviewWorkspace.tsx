@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   envelopeColumnNames,
+  envelopeSlots,
   findEnvelopeColumns,
   findTemplateColumn,
   looksLikeImageUrl,
@@ -294,6 +295,8 @@ export function PreviewWorkspace({
     [sheet],
   );
   const envelopeKeys = useMemo(() => envelopeColumnNames(envelopeColumns), [envelopeColumns]);
+  /** The key each envelope field writes to: the sheet's column, or the default. */
+  const envelope = useMemo(() => envelopeSlots(envelopeColumns), [envelopeColumns]);
 
   const rowTemplate = useMemo<RowTemplateInfo>(() => {
     if (!templateColumn || !currentRow) {
@@ -974,10 +977,12 @@ export function PreviewWorkspace({
             >
               {currentRow && (
                 <EnvelopeFields
-                  columns={envelopeColumns}
+                  slots={envelope}
+                  known={envelopeColumns}
                   values={draft}
                   baseline={baseline}
                   width={null}
+                  highlightMissing={highlightMissing}
                   onChange={(key, value) =>
                     setDraft((previous) => ({ ...previous, [key]: value }))
                   }
