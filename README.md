@@ -75,8 +75,11 @@ yet is one checkbox away rather than lost.
 **Products.** A company that sells things can give its storefront domain under
 **Settings → Integrations**, and every published product is cached locally.
 A product tile in a template — `product_3_image`, `_title`, `_price`, `_url` —
-then fills from one click in the preview instead of four trips to a browser tab.
-Reading only; nothing is ever written to the store.
+is then shown in the editor as one product rather than four text boxes: its
+picture, its name, and a **Replace** button that refills all of them from the
+catalog in one click. The individual values fold away underneath for the parts
+a store cannot supply, like a hand-written badge. Reading only; nothing is ever
+written to the store.
 
 Shopify publishes `/products.json` on every storefront with no credential, so
 there is no API key to mint or store. It is paged, 250 at a time, and the sync

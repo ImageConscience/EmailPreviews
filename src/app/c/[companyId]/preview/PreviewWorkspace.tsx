@@ -341,24 +341,33 @@ export function PreviewWorkspace({
   );
 
   /**
-   * One "Product" button per tile, not per cell.
-   *
-   * A tile has four or five fields and the button does the same thing on all of
-   * them, so it hangs off a single one: the title, which is what a person reads
-   * to know which tile they are looking at, or the image when there is no
-   * title field.
+   * The editor in the order it is read: plain fields on their own, and each
+   * product tile as one block rather than four unrelated text boxes that happen
+   * to be named alike.
    */
-  const productAnchors = useMemo(() => {
-    const best = new Map<string, { key: string; rank: number }>();
+  const blocks = useMemo(() => {
+    const out: (
+      | { kind: "field"; field: Field }
+      | { kind: "product"; group: string; fields: Field[] }
+    )[] = [];
+    const tiles = new Map<string, { kind: "product"; group: string; fields: Field[] }>();
+
     for (const field of templateFields) {
       const group = productGroupOf(field.key);
-      if (!group) continue;
-      const part = normalizeKey(field.key).slice(group.length + 1);
-      const rank = part === "title" ? 0 : part === "image" ? 1 : 2;
-      const held = best.get(group);
-      if (!held || rank < held.rank) best.set(group, { key: field.key, rank });
+      if (!group) {
+        out.push({ kind: "field", field });
+        continue;
+      }
+      const held = tiles.get(group);
+      if (held) {
+        held.fields.push(field);
+      } else {
+        const tile = { kind: "product" as const, group, fields: [field] };
+        tiles.set(group, tile);
+        out.push(tile);
+      }
     }
-    return new Set([...best.values()].map((entry) => entry.key));
+    return out;
   }, [templateFields]);
 
   // Reset the draft whenever the selected row (or the field set) changes.
@@ -1088,19 +1097,35 @@ export function PreviewWorkspace({
                 </div>
               )}
 
-              {templateFields.map((field) => (
-                <FieldRow
-                  key={field.key}
-                  companyId={companyId}
-                  field={field}
-                  value={draft[field.key] ?? ""}
-                  changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
-                  onChange={(value) =>
-                    setDraft((previous) => ({ ...previous, [field.key]: value }))
-                  }
-                  onPickProduct={productAnchors.has(field.key) ? pickProduct : undefined}
-                />
-              ))}
+              {blocks.map((block) =>
+                block.kind === "field" ? (
+                  <FieldRow
+                    key={block.field.key}
+                    companyId={companyId}
+                    field={block.field}
+                    value={draft[block.field.key] ?? ""}
+                    changed={
+                      (draft[block.field.key] ?? "") !== (baseline[block.field.key] ?? "")
+                    }
+                    onChange={(value) =>
+                      setDraft((previous) => ({ ...previous, [block.field.key]: value }))
+                    }
+                  />
+                ) : (
+                  <ProductTile
+                    key={block.group}
+                    companyId={companyId}
+                    group={block.group}
+                    fields={block.fields}
+                    draft={draft}
+                    baseline={baseline}
+                    onChangeField={(key, value) =>
+                      setDraft((previous) => ({ ...previous, [key]: value }))
+                    }
+                    onPick={(product) => pickProduct(block.group, product)}
+                  />
+                ),
+              )}
 
               {/*
                 Which template is on screen. It lives folded away down here on
@@ -1293,18 +1318,14 @@ function FieldRow({
   value,
   changed,
   onChange,
-  onPickProduct,
 }: {
   companyId: string;
   field: Field;
   value: string;
   changed: boolean;
   onChange: (value: string) => void;
-  onPickProduct?: (group: string, product: ProductOption) => void;
 }) {
   const [picking, setPicking] = useState(false);
-  const [pickingProduct, setPickingProduct] = useState(false);
-  const productGroup = onPickProduct ? productGroupOf(field.key) : null;
   // Plenty of image CDNs serve extensionless URLs, so rather than guess from
   // the URL alone, every URL value is probed by actually loading it. A probe
   // that succeeds is an image and gets a thumbnail; one that fails only raises
@@ -1334,17 +1355,6 @@ function FieldRow({
         )}
         <div className="spacer" />
         {changed && <span className="badge badge-accent">edited</span>}
-        {productGroup && (
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost"
-            style={{ padding: "1px 6px", fontSize: 11 }}
-            onClick={() => setPickingProduct(true)}
-            title="Fill this whole tile from the product catalog"
-          >
-            Product
-          </button>
-        )}
         {isImageField(field, value) && (
           <button
             type="button"
@@ -1358,14 +1368,6 @@ function FieldRow({
         )}
       </div>
 
-      {pickingProduct && productGroup && (
-        <ProductPicker
-          companyId={companyId}
-          group={productGroup}
-          onPick={(product) => onPickProduct?.(productGroup, product)}
-          onClose={() => setPickingProduct(false)}
-        />
-      )}
 
       {picking && (
         <ImagePicker
@@ -1414,6 +1416,104 @@ function FieldRow({
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One product tile, presented as one thing.
+ *
+ * Four text boxes named product_3_image, _title, _price and _url are four
+ * unrelated fields to look at and one product to think about. This shows what
+ * is currently in the slot -- the picture and the name -- with one obvious way
+ * to swap it, and keeps the individual values underneath for the cases the
+ * catalog cannot cover: a hand-written badge, a description worth rewriting.
+ */
+function ProductTile({
+  companyId,
+  group,
+  fields,
+  draft,
+  baseline,
+  onChangeField,
+  onPick,
+}: {
+  companyId: string;
+  group: string;
+  fields: Field[];
+  draft: Record<string, string>;
+  baseline: Record<string, string>;
+  onChangeField: (key: string, value: string) => void;
+  onPick: (product: ProductOption) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const valueOf = (part: string) => {
+    const field = fields.find((f) => normalizeKey(f.key) === `${group}_${part}`);
+    return field ? (draft[field.key] ?? "") : "";
+  };
+  const title = valueOf("title");
+  const image = valueOf("image");
+  const price = valueOf("price");
+  const filled = fields.filter((field) => (draft[field.key] ?? "").trim()).length;
+  const changed = fields.some(
+    (field) => (draft[field.key] ?? "") !== (baseline[field.key] ?? ""),
+  );
+
+  return (
+    <div className={`tile${changed ? " is-changed" : ""}`}>
+      <div className="tile-head">
+        <span className="tile-thumb">
+          {image ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={image} alt="" />
+          ) : (
+            <span className="tile-empty">?</span>
+          )}
+        </span>
+        <span className="tile-text">
+          <span className="tile-name">{title || <em>Empty slot</em>}</span>
+          <span className="tile-sub">
+            {group.replace("_", " ")}
+            {price ? ` · ${price}` : ""}
+            {changed ? " · edited" : ""}
+          </span>
+        </span>
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          onClick={() => setPicking(true)}
+        >
+          {title ? "Replace" : "Choose product"}
+        </button>
+      </div>
+
+      <button type="button" className="tile-toggle" onClick={() => setOpen((was) => !was)}>
+        {open ? "▾" : "▸"} {fields.length} {fields.length === 1 ? "field" : "fields"}
+        {filled < fields.length ? ` · ${fields.length - filled} empty` : ""}
+      </button>
+
+      {open &&
+        fields.map((field) => (
+          <FieldRow
+            key={field.key}
+            companyId={companyId}
+            field={field}
+            value={draft[field.key] ?? ""}
+            changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
+            onChange={(value) => onChangeField(field.key, value)}
+          />
+        ))}
+
+      {picking && (
+        <ProductPicker
+          companyId={companyId}
+          group={group}
+          onPick={onPick}
+          onClose={() => setPicking(false)}
+        />
       )}
     </div>
   );
