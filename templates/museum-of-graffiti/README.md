@@ -92,6 +92,13 @@ lets one sheet feed all three templates.
 
 ## Badges
 
+The chip carries its own `line-height`, which is load-bearing rather than
+decorative. The cell around it is `line-height:0` so an empty badge leaves no
+gap at all; without a line-height of its own the chip's text inherited that
+zero, sat in a line box with no height, and the padding had nothing to wrap —
+the letters ran flush to the top and bottom of the colour. `mso-line-height-rule:exactly`
+is there so Outlook honours it too.
+
 Only the category template has badge chips (`Best-Seller`, `Top Pick`, `Local
 Favorite`, `MoG Exclusive`), and only on the four featured tiles. The four-up
 grid never carried one in two months of sends, and neither did the tee hero, so
