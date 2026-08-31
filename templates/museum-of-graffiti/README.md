@@ -123,4 +123,5 @@ Two things to watch before a real send:
 - **Product links point at `museumofgraffiti.myshopify.com`**, because that is
   what Klaviyo's catalog resolves to. They redirect, but the customer-facing
   domain is better in a send — a find-and-replace on the sheet fixes all of
-  them at once.
+  them at once. Refilling a tile from the product picker (Settings →
+  Integrations) also fixes it, since that writes `museumofgraffiti.com` URLs.

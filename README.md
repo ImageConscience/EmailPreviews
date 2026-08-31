@@ -72,6 +72,18 @@ overview filter on it, opening on today through thirty days out. Rows with no
 readable date are their own category — *No date* — so a draft without a slot
 yet is one checkbox away rather than lost.
 
+**Products.** A company that sells things can give its storefront domain under
+**Settings → Integrations**, and every published product is cached locally.
+A product tile in a template — `product_3_image`, `_title`, `_price`, `_url` —
+then fills from one click in the preview instead of four trips to a browser tab.
+Reading only; nothing is ever written to the store.
+
+Shopify publishes `/products.json` on every storefront with no credential, so
+there is no API key to mint or store. It is paged, 250 at a time, and the sync
+walks to the end. Klaviyo was the other candidate — the products are synced
+there — but its Catalog API only serves `$custom` catalogs and returns nothing
+for a store on the native Shopify integration.
+
 **Images.** Anyone with a login can upload images under **Images**, and each one
 gets a permanent public link to use in a campaign. The bytes live in the
 database rather than in the repository, because an image committed to git can

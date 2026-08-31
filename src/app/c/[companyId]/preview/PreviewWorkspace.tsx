@@ -28,6 +28,8 @@ import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
 import { EnvelopeFields } from "./EnvelopeFields";
 import { ImagePicker } from "./ImagePicker";
+import { ProductPicker } from "./ProductPicker";
+import type { ProductOption } from "@/actions/catalog";
 import type { ApprovalView } from "@/lib/approval";
 
 export interface TemplateSummary {
@@ -105,6 +107,34 @@ type DeviceId = (typeof DEVICES)[number]["id"];
 
 /** Filter value for rows whose template cell is empty or names nothing real. */
 const UNASSIGNED_ROWS = "__unassigned__";
+
+/**
+ * Fields named product_<n>_<part> are one tile, filled together.
+ *
+ * The convention comes from the templates themselves rather than being imposed
+ * here: a tile is an image, a title, a price and a link that all describe the
+ * same thing, so picking the thing should fill all four.
+ */
+const PRODUCT_FIELD = /^product[_ -]?(\d+)[_ -]?(image|title|price|url|link|badge|description)$/i;
+
+function productGroupOf(key: string): string | null {
+  const match = PRODUCT_FIELD.exec(normalizeKey(key));
+  return match ? `product_${match[1]}` : null;
+}
+
+/**
+ * The cells a picked product fills. Only parts the sheet actually has are
+ * touched -- a template with no price slot should not gain a stray column, and
+ * a description written by hand is not overwritten by the store's own blurb.
+ */
+function productFill(group: string, product: ProductOption): Record<string, string> {
+  return {
+    [`${group}_image`]: product.imageUrl ?? "",
+    [`${group}_title`]: product.title,
+    [`${group}_price`]: product.price ? `$${product.price}` : "",
+    [`${group}_url`]: product.url,
+  };
+}
 
 /* Inline so they inherit the button's colour and need no network request. */
 const EYE = (
@@ -310,6 +340,27 @@ export function PreviewWorkspace({
     [templateFields, otherFields],
   );
 
+  /**
+   * One "Product" button per tile, not per cell.
+   *
+   * A tile has four or five fields and the button does the same thing on all of
+   * them, so it hangs off a single one: the title, which is what a person reads
+   * to know which tile they are looking at, or the image when there is no
+   * title field.
+   */
+  const productAnchors = useMemo(() => {
+    const best = new Map<string, { key: string; rank: number }>();
+    for (const field of templateFields) {
+      const group = productGroupOf(field.key);
+      if (!group) continue;
+      const part = normalizeKey(field.key).slice(group.length + 1);
+      const rank = part === "title" ? 0 : part === "image" ? 1 : 2;
+      const held = best.get(group);
+      if (!held || rank < held.rank) best.set(group, { key: field.key, rank });
+    }
+    return new Set([...best.values()].map((entry) => entry.key));
+  }, [templateFields]);
+
   // Reset the draft whenever the selected row (or the field set) changes.
   useEffect(() => {
     if (!currentRow) {
@@ -374,6 +425,23 @@ export function PreviewWorkspace({
     },
     [currentRow, templateId],
   );
+
+  /**
+   * Write a picked product across its whole tile.
+   *
+   * Only keys the row already knows about are set, so picking a product cannot
+   * invent columns the sheet does not have.
+   */
+  const pickProduct = useCallback((group: string, product: ProductOption) => {
+    setDraft((previous) => {
+      const next = { ...previous };
+      for (const [key, value] of Object.entries(productFill(group, product))) {
+        const match = Object.keys(previous).find((k) => normalizeKey(k) === normalizeKey(key));
+        if (match) next[match] = value;
+      }
+      return next;
+    });
+  }, []);
 
   /**
    * Hide the row on screen, or bring it back. Hiding does not move you off it:
@@ -1030,6 +1098,7 @@ export function PreviewWorkspace({
                   onChange={(value) =>
                     setDraft((previous) => ({ ...previous, [field.key]: value }))
                   }
+                  onPickProduct={productAnchors.has(field.key) ? pickProduct : undefined}
                 />
               ))}
 
@@ -1221,14 +1290,18 @@ function FieldRow({
   value,
   changed,
   onChange,
+  onPickProduct,
 }: {
   companyId: string;
   field: Field;
   value: string;
   changed: boolean;
   onChange: (value: string) => void;
+  onPickProduct?: (group: string, product: ProductOption) => void;
 }) {
   const [picking, setPicking] = useState(false);
+  const [pickingProduct, setPickingProduct] = useState(false);
+  const productGroup = onPickProduct ? productGroupOf(field.key) : null;
   // Plenty of image CDNs serve extensionless URLs, so rather than guess from
   // the URL alone, every URL value is probed by actually loading it. A probe
   // that succeeds is an image and gets a thumbnail; one that fails only raises
@@ -1258,6 +1331,17 @@ function FieldRow({
         )}
         <div className="spacer" />
         {changed && <span className="badge badge-accent">edited</span>}
+        {productGroup && (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            style={{ padding: "1px 6px", fontSize: 11 }}
+            onClick={() => setPickingProduct(true)}
+            title="Fill this whole tile from the product catalog"
+          >
+            Product
+          </button>
+        )}
         {isImageField(field, value) && (
           <button
             type="button"
@@ -1270,6 +1354,15 @@ function FieldRow({
           </button>
         )}
       </div>
+
+      {pickingProduct && productGroup && (
+        <ProductPicker
+          companyId={companyId}
+          group={productGroup}
+          onPick={(product) => onPickProduct?.(productGroup, product)}
+          onClose={() => setPickingProduct(false)}
+        />
+      )}
 
       {picking && (
         <ImagePicker

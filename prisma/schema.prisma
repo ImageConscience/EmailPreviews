@@ -50,12 +50,48 @@ model Company {
   id        String   @id @default(cuid())
   name      String
   createdAt DateTime @default(now())
+  /// Storefront host for the product catalog, e.g. "museumofgraffiti.com".
+  /// Null for a company that sells nothing -- content-only, like a services firm.
+  shopDomain String?
+  /// When the product cache was last refreshed from that storefront.
+  catalogSyncedAt DateTime?
 
   memberships Membership[]
   templates   Template[]
   sheets      ContentSheet[]
   invites     Invite[]
   media       MediaAsset[]
+  products    CatalogProduct[]
+}
+
+/// One product from the company's storefront, cached so the picker is instant.
+///
+/// A cache rather than a live call: a preview that hit the storefront for every
+/// tile would be slow, would break when the store is briefly unreachable, and
+/// would rate-limit itself on a sheet with sixty rows. Refreshed on demand.
+model CatalogProduct {
+  id          String   @id @default(cuid())
+  companyId   String
+  /// Shopify's product id, stable across renames.
+  externalId  String
+  handle      String
+  title       String
+  vendor      String?
+  productType String?
+  url         String
+  imageUrl    String?
+  /// Formatted as the storefront gives it, e.g. "45.00". A string because it
+  /// goes straight into a cell and then into the email verbatim.
+  price       String?
+  available   Boolean  @default(true)
+  /// Comma-joined product tags, so the picker can search on them.
+  tags        String   @default("")
+  syncedAt    DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, externalId])
+  @@index([companyId, title])
 }
 
 /// Joins a login to a company. Roles: "owner" | "admin" | "member".

@@ -37,6 +37,7 @@ export function TopBar({ companyId, companyName, userName, role, otherCompanies 
     { href: `${base}/templates`, label: "Templates" },
     { href: `${base}/sheets`, label: "Content" },
     { href: `${base}/media`, label: "Images" },
+    { href: `${base}/integrations`, label: "Integrations" },
     { href: `${base}/members`, label: "Team" },
   ];
 
