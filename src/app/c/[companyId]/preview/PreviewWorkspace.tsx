@@ -25,6 +25,8 @@ import {
   rowSubLabel,
   type DateRange,
 } from "@/lib/campaign";
+import { flag, isOn, useViewState } from "@/lib/view-state";
+import { ShareLink } from "@/components/ShareLink";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
 import { EnvelopeFields } from "./EnvelopeFields";
@@ -165,21 +167,48 @@ export function PreviewWorkspace({
   currentUserId,
   templates,
   sheets,
-  initialTemplateId,
-  initialSheetId,
-  initialRowId,
 }: {
   companyId: string;
   currentUserId: string;
   templates: TemplateSummary[];
   sheets: SheetSummary[];
-  initialTemplateId?: string;
-  initialSheetId?: string;
-  initialRowId?: string;
 }) {
-  const [templateId, setTemplateId] = useState(initialTemplateId ?? templates[0]?.id ?? "");
-  const [sheetId, setSheetId] = useState(initialSheetId ?? sheets[0]?.id ?? "");
-  const [rowId, setRowId] = useState(initialRowId ?? "");
+  /**
+   * What is on screen and what is filtered, kept in the URL so a preview can be
+   * reloaded, navigated back to, and pasted to someone else -- "this row, in
+   * this template, September only, no hidden items" as a link.
+   */
+  const initialView = useMemo(() => {
+    const fallback = defaultRange();
+    // Defaults, not "whatever this page was opened with". Seeding them from the
+    // incoming URL made anything arriving that way count as a default and get
+    // stripped straight back out, so a shared link lost its row the moment the
+    // recipient touched anything. The hook reads the address itself.
+    return {
+      template: "",
+      sheet: "",
+      row: "",
+      filter: "",
+      q: "",
+      hidden: flag(false),
+      from: fallback.from,
+      to: fallback.to,
+      undated: flag(fallback.includeUndated),
+      device: "desktop",
+      gaps: flag(true),
+    };
+  }, []);
+  const { state: view, set: setView, ready: viewReady } = useViewState(
+    `preview:${companyId}`,
+    initialView,
+  );
+
+  const templateId = view.template || templates[0]?.id || "";
+  const setTemplateId = useCallback((id: string) => setView({ template: id }), [setView]);
+  const sheetId = view.sheet || sheets[0]?.id || "";
+  const setSheetId = useCallback((id: string) => setView({ sheet: id }), [setView]);
+  const rowId = view.row;
+  const setRowId = useCallback((id: string) => setView({ row: id }), [setView]);
 
   const [template, setTemplate] = useState<TemplatePayload | null>(null);
   const [sheet, setSheet] = useState<SheetPayload | null>(null);
@@ -191,19 +220,28 @@ export function PreviewWorkspace({
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
 
-  const [device, setDevice] = useState<DeviceId>("desktop");
-  const [highlightMissing, setHighlightMissing] = useState(true);
-  const [filter, setFilter] = useState("");
+  const device = (DEVICES.some((d) => d.id === view.device) ? view.device : "desktop") as DeviceId;
+  const setDevice = (next: DeviceId) => setView({ device: next });
+  const highlightMissing = isOn(view.gaps);
+  const setHighlightMissing = (next: boolean) => setView({ gaps: flag(next) });
+  const filter = view.q;
+  const setFilter = (next: string) => setView({ q: next });
   /** "" is every row; otherwise a template id, or UNASSIGNED_ROWS. */
-  const [templateFilter, setTemplateFilter] = useState("");
-  const [showHidden, setShowHidden] = useState(false);
-  const [range, setRange] = useState<DateRange>(() => defaultRange());
+  const templateFilter = view.filter;
+  const setTemplateFilter = (next: string) => setView({ filter: next });
+  const showHidden = isOn(view.hidden);
+  const setShowHidden = (next: boolean) => setView({ hidden: flag(next) });
+  const range: DateRange = useMemo(
+    () => ({ from: view.from, to: view.to, includeUndated: isOn(view.undated) }),
+    [view.from, view.to, view.undated],
+  );
+  const setRange = (next: DateRange) =>
+    setView({ from: next.from, to: next.to, undated: flag(next.includeUndated) });
   const [hiding, setHiding] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
 
-  const wantedRowId = useRef(initialRowId);
   /** Row whose default template has already been applied, so a manual pick sticks. */
   const templateAppliedFor = useRef<string | null>(null);
   const [showOtherFields, setShowOtherFields] = useState(false);
@@ -244,9 +282,6 @@ export function PreviewWorkspace({
       .then((data: SheetPayload) => {
         if (cancelled) return;
         setSheet(data);
-        const preferred = data.rows.find((r) => r.id === wantedRowId.current);
-        setRowId(preferred?.id ?? data.rows[0]?.id ?? "");
-        wantedRowId.current = undefined;
       })
       .catch((error: Error) => {
         if (!cancelled) setLoadError(error.message || "Could not load that sheet.");
@@ -263,6 +298,16 @@ export function PreviewWorkspace({
     () => sheet?.rows.find((row) => row.id === rowId) ?? null,
     [sheet, rowId],
   );
+
+  /**
+   * Settle on a row once the sheet and the URL have both arrived: whatever was
+   * asked for, or the first row when that is gone or nothing was asked.
+   */
+  useEffect(() => {
+    if (!sheet || !viewReady) return;
+    if (rowId && sheet.rows.some((row) => row.id === rowId)) return;
+    setRowId(sheet.rows[0]?.id ?? "");
+  }, [sheet, viewReady, rowId, setRowId]);
 
   /* ---------------- field mapping ---------------- */
 
@@ -766,8 +811,7 @@ export function PreviewWorkspace({
               if (!confirmDiscard()) return;
               // Another sheet has its own mix of templates; carrying the filter
               // over can land you on an empty list for no visible reason.
-              setTemplateFilter("");
-              setSheetId(e.target.value);
+              setView({ filter: "", sheet: e.target.value, row: "" });
             }}
           >
             {sheets.map((s) => (
@@ -805,7 +849,7 @@ export function PreviewWorkspace({
                 <input
                   type="date"
                   value={range.from}
-                  onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+                  onChange={(e) => setRange({ ...range, from: e.target.value })}
                 />
               </label>
               <label>
@@ -813,7 +857,7 @@ export function PreviewWorkspace({
                 <input
                   type="date"
                   value={range.to}
-                  onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+                  onChange={(e) => setRange({ ...range, to: e.target.value })}
                 />
               </label>
             </div>
@@ -821,7 +865,7 @@ export function PreviewWorkspace({
               <input
                 type="checkbox"
                 checked={range.includeUndated}
-                onChange={(e) => setRange((r) => ({ ...r, includeUndated: e.target.checked }))}
+                onChange={(e) => setRange({ ...range, includeUndated: e.target.checked })}
               />
               <span>No date</span>
             </label>
@@ -933,6 +977,7 @@ export function PreviewWorkspace({
           <button type="button" className="btn btn-sm" onClick={downloadHtml}>
             Download
           </button>
+          <ShareLink label="Share" />
 
           <ApprovalBar
             companyId={companyId}

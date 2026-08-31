@@ -11,6 +11,8 @@ import {
   todayIso,
   type DateRange,
 } from "@/lib/campaign";
+import { flag, isOn, useViewState } from "@/lib/view-state";
+import { ShareLink } from "@/components/ShareLink";
 
 export interface OverviewItem {
   rowId: string;
@@ -53,14 +55,43 @@ export function OverviewBoard({
   templates: { id: string; name: string }[];
   sheets: { id: string; name: string }[];
 }) {
-  const [view, setView] = useState<"list" | "calendar">("list");
-  const [search, setSearch] = useState("");
-  const [templateFilter, setTemplateFilter] = useState("");
-  const [sheetFilter, setSheetFilter] = useState("");
-  const [showHidden, setShowHidden] = useState(false);
-  const [range, setRange] = useState<DateRange>(() => defaultRange());
-  /** First of the month the calendar is showing. */
-  const [month, setMonth] = useState(() => todayIso().slice(0, 7));
+  // Everything here is in the URL, so a view can be reloaded, navigated back
+  // to, and pasted to someone else.
+  const initial = useMemo(() => {
+    const fallback = defaultRange();
+    return {
+      view: "list",
+      q: "",
+      template: "",
+      sheet: "",
+      hidden: flag(false),
+      from: fallback.from,
+      to: fallback.to,
+      undated: flag(fallback.includeUndated),
+      month: todayIso().slice(0, 7),
+    };
+  }, []);
+  const { state, set } = useViewState(`overview:${companyId}`, initial);
+
+  const view = state.view === "calendar" ? "calendar" : "list";
+  const setView = (next: "list" | "calendar") => set({ view: next });
+  const search = state.q;
+  const setSearch = (next: string) => set({ q: next });
+  const templateFilter = state.template;
+  const setTemplateFilter = (next: string) => set({ template: next });
+  const sheetFilter = state.sheet;
+  const setSheetFilter = (next: string) => set({ sheet: next });
+  const showHidden = isOn(state.hidden);
+  const setShowHidden = (next: boolean) => set({ hidden: flag(next) });
+  const month = state.month;
+  const setMonth = (next: string) => set({ month: next });
+
+  const range: DateRange = useMemo(
+    () => ({ from: state.from, to: state.to, includeUndated: isOn(state.undated) }),
+    [state.from, state.to, state.undated],
+  );
+  const setRange = (next: DateRange) =>
+    set({ from: next.from, to: next.to, undated: flag(next.includeUndated) });
 
   const hiddenCount = useMemo(() => items.filter((i) => i.hidden).length, [items]);
 
@@ -157,6 +188,8 @@ export function OverviewBoard({
         </div>
         <div className="spacer" />
         <div className="row" style={{ gap: 4 }}>
+          <ShareLink />
+          <span style={{ width: 6 }} />
           <button
             type="button"
             className={`btn btn-sm ${view === "list" ? "btn-primary" : ""}`}
@@ -219,7 +252,7 @@ export function OverviewBoard({
               <input
                 type="date"
                 value={range.from}
-                onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+                onChange={(e) => setRange({ ...range, from: e.target.value })}
               />
             </label>
             <label className="field" style={{ marginBottom: 0, flex: "0 1 150px" }}>
@@ -227,7 +260,7 @@ export function OverviewBoard({
               <input
                 type="date"
                 value={range.to}
-                onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+                onChange={(e) => setRange({ ...range, to: e.target.value })}
               />
             </label>
           </>
@@ -239,7 +272,7 @@ export function OverviewBoard({
               <input
                 type="checkbox"
                 checked={range.includeUndated}
-                onChange={(e) => setRange((r) => ({ ...r, includeUndated: e.target.checked }))}
+                onChange={(e) => setRange({ ...range, includeUndated: e.target.checked })}
               />
               <span>No date</span>
             </label>

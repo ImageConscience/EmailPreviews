@@ -7,13 +7,10 @@ export const dynamic = "force-dynamic";
 
 export default async function PreviewPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ companyId: string }>;
-  searchParams: Promise<{ template?: string; sheet?: string; row?: string }>;
 }) {
   const { companyId } = await params;
-  const { template, sheet, row } = await searchParams;
   const access = await guardCompany(companyId);
 
   const [templates, sheets] = await Promise.all([
@@ -39,9 +36,6 @@ export default async function PreviewPage({
         placeholderCount: parseStringArray(t.placeholders).length,
       }))}
       sheets={sheets.map((s) => ({ id: s.id, name: s.name, rowCount: s._count.rows }))}
-      initialTemplateId={template}
-      initialSheetId={sheet}
-      initialRowId={row}
     />
   );
 }

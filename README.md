@@ -31,6 +31,20 @@ holds), Templates, Content, Images and Team. A company's own URL lands on the
 Overview, because the first question is what is going out, not what the company
 is made of.
 
+**Shareable views.** Every filter, both tabs, lives in the address bar: which
+view, which month, the date range, the template filter, whether hidden items
+show, and in the preview the row, the template, the device and the gap
+highlighting. So a view survives a reload, and **Copy link** hands someone
+exactly what you are looking at — "September only, artist spotlights, nothing
+hidden" is a link rather than a paragraph of instructions. Only settings that
+differ from the defaults appear, so the URL stays readable, and a link can be
+written by hand: `…/overview?from=2026-09-01&to=2026-09-30&undated=0`.
+
+Arriving with a bare URL restores whatever you were last looking at, per
+company, and puts it back in the address bar so copying the link still shares
+the right thing. A link always wins over what was stored — what the sender sees
+is what the recipient gets.
+
 **Overview.** Everything the company has planned, as a list or a calendar. The
 list groups by send date and opens on the next thirty days; the calendar walks
 month by month. Either way, clicking an item opens it in the preview. This is
