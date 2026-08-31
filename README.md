@@ -61,6 +61,13 @@ than inside it. The sending platform sets all four, so they are not placeholders
 in the template, but each is a campaign decision that gets written and approved
 with everything else.
 
+All four always show, whether or not the sheet has a column for them: every
+campaign has a subject and a moment it goes out, even when whoever built the
+spreadsheet did not think to add one. Typing in a field the sheet lacks says so,
+and creates the column on save. The hint text inside an empty one disappears
+when gap highlighting is off, so grey placeholder text never reads as a real
+subject line.
+
 **Hiding.** The eye beside Approve sets a row aside — rejected outright, or not
 ready to show. Hidden rows drop out of the rail, the list and the calendar until
 **Show hidden** is ticked, and the app remembers who hid each one. Hiding is not
