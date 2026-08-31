@@ -167,3 +167,32 @@ Two things to watch before a real send:
   domain is better in a send — a find-and-replace on the sheet fixes all of
   them at once. Refilling a tile from the product picker (Settings →
   Integrations) also fixes it, since that writes `museumofgraffiti.com` URLs.
+
+## 04-tee-membership (39)
+
+The evergreen counterpart to `03`. Same series, different job: `03` announces
+one shirt, `04` sells the membership itself and runs whenever there is no drop
+to announce. Rebuilt from the 7 August send (Klaviyo template `V7pxXy`, whose
+own build notes call it *MASTHEAD · VARIANT C*).
+
+What differs from `03`:
+
+- **A black masthead replaces the accent strip and the priced hero.** Overline,
+  a two-line display title, an accent rule and a body paragraph, over a solid
+  CTA. `masthead_title` and `masthead_body` are rendered raw (`{{{ }}}`) so a
+  `<br>` can split "12 Writers." from "12 Months." — the only placeholders in
+  the set that take HTML.
+- **One price on the featured shirt, not the member/retail split.** The 20%
+  saving is argued in the masthead, so repeating it under the shirt sold the
+  same point twice.
+- **`more_label` is a placeholder.** `03` hard-codes *Previous Drops:*; here it
+  also has to read *More in the Library* or *Hats & Fleece*.
+- **The four grid tiles take badges**, as in `01`. Same 36px reserved band, so
+  an empty badge still holds its place and the tiles stay aligned.
+
+`accent_color` `masthead_overline` `masthead_title` `masthead_body`
+`hero_cta_url` `hero_cta_text` `product_1_{image,title,description,price,url}`
+`cta_url` `cta_text` `artist_name` `artist_image` `artist_bio` `more_label`
+`product_5…8_{image,title,price,url,badge}` `footer_cta_url` `footer_cta_text`.
+
+Name it `Tee Membership` when pasting it in.
