@@ -258,3 +258,37 @@ The panel now counts what it will actually fill rather than claiming the whole
 grid, says how many slots are keeping their own products, and offers to clear
 exactly those. Clearing hands the grid over; the block then follows both the
 collection and the order.
+
+## 05-category-spotlight-featured (51)
+
+Category Spotlight with the email opening on a product rather than on the
+category alone. Same series, same fixtures, same footer — only the shape of the
+top half differs, so a row can move between `01` and `05` without rewriting
+anything.
+
+What changed from `01`:
+
+- **The masthead carries a featured item.** Under the headline and intro, on the
+  same black ground: picture left, badge, title, description, price and a
+  *Shop This* button right. It is `product_1`, so `featured_collection` still
+  feeds slots 1–4 and no product is fetched into a slot nothing renders.
+- **The white pair is products 2 and 3**, since 1 has moved up into the
+  masthead.
+- **Product 4 is a wide block** — picture left, copy right, reversed out on
+  black — rather than half of a pair. It takes `product_4_description`, which
+  `01` has no use for.
+- **Slots 5–8 are unchanged**, so `grid_collection` behaves identically.
+
+Both two-column blocks are `.col` cells, so they stack on mobile, where 240px
+of picture beside 256px of copy would leave neither enough room.
+
+Name it `Category Spotlight Featured` when pasting it in.
+
+## Two blocks, one collection
+
+`featured_collection` fills slots 1–4 and `grid_collection` fills 5–8. Pointed
+at the same collection they would both start at the top and show the same
+products, so each block has a **Skip** box: set the second to skip what the
+first took — 4, usually — and the collection reads straight through the email.
+It is the fourth field of the cell (`handle | order | count | skip`) for anyone
+typing it rather than clicking.

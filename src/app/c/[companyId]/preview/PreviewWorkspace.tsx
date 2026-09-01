@@ -1343,24 +1343,57 @@ export function PreviewWorkspace({
                           </select>
 
                           {spec && (
-                            <select
-                              value={spec.order}
-                              style={{ marginTop: 6 }}
-                              onChange={(e) =>
-                                set(
-                                  formatCollectionSpec(
-                                    { ...spec, order: e.target.value as typeof spec.order },
-                                    block.slots.length,
-                                  ),
-                                )
-                              }
-                            >
-                              {COLLECTION_ORDERS.map((order) => (
-                                <option key={order} value={order}>
-                                  {ORDER_LABELS[order]}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                              <select
+                                value={spec.order}
+                                style={{ flex: 1 }}
+                                onChange={(e) =>
+                                  set(
+                                    formatCollectionSpec(
+                                      { ...spec, order: e.target.value as typeof spec.order },
+                                      block.slots.length,
+                                    ),
+                                  )
+                                }
+                              >
+                                {COLLECTION_ORDERS.map((order) => (
+                                  <option key={order} value={order}>
+                                    {ORDER_LABELS[order]}
+                                  </option>
+                                ))}
+                              </select>
+                              {/*
+                                Skip: two blocks drawing on one collection would
+                                otherwise both start at the top and show the same
+                                products. Set the second to skip what the first
+                                took and the collection reads straight through.
+                              */}
+                              <label
+                                className="hint"
+                                style={{ display: "flex", alignItems: "center", gap: 4, flex: "none" }}
+                                title="Skip this many products from the top before filling"
+                              >
+                                Skip
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={500}
+                                  value={spec.offset}
+                                  style={{ width: 62 }}
+                                  onChange={(e) =>
+                                    set(
+                                      formatCollectionSpec(
+                                        {
+                                          ...spec,
+                                          offset: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
+                                        },
+                                        block.slots.length,
+                                      ),
+                                    )
+                                  }
+                                />
+                              </label>
+                            </div>
                           )}
 
                           {spec && fill && (() => {

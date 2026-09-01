@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="x-apple-disable-message-reformatting">
+<title>Museum of Graffiti</title>
+<!--[if mso]>
+<xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+<![endif]-->
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700&family=Oswald:wght@500;600&family=Archivo:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0 !important; padding:0 !important; width:100% !important; }
+  table { border-collapse:collapse; }
+  img { border:0; outline:none; text-decoration:none; -ms-interpolation-mode:bicubic; }
+  /* A slot left empty in the sheet should leave nothing behind: no coloured
+     chip, and no gap where a paragraph would have been. */
+  .badge:empty { display:none !important; }
+  p:empty { display:none !important; margin:0 !important; }
+  @media only screen and (max-width:620px) {
+    /* These cells go full width and also carry padding -- without border-box
+       the padding is added on top and the cell overflows the table. */
+    td { box-sizing:border-box !important; }
+    .wrap { width:100% !important; }
+    .pad  { padding-left:22px !important; padding-right:22px !important; }
+    .h1   { font-size:32px !important; }
+    .h2   { font-size:23px !important; }
+    .col  { display:block !important; width:100% !important; height:auto !important; }
+    .gut  { display:none !important; }
+    .colgap { padding-bottom:26px !important; }
+    /* Stacked, the tiles are no longer side by side, so there is nothing left
+       to line up -- and holding a 249px band against a full-width column would
+       letterbox every picture. Let the image be itself again. */
+    .imgband { height:auto !important; }
+    .imgband img { max-height:none !important; width:100% !important; }
+    .wrapimg { float:none !important; display:block !important; width:100% !important; max-width:100% !important; padding:0 0 16px 0 !important; }
+  }
+</style>
+</head>
+<body style="margin:0; padding:0; background:#F5F5F7;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F5F5F7;">
+<tr><td align="center" style="padding:0;">
+
+<table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background:#FFFFFF;">
+
+  <!-- PERMANENT: brand bar. Same on every send. -->
+  <tr><td align="center" style="background:#00C2AB; padding:8px 32px;">
+    <a href="https://museumofgraffiti.com" style="text-decoration:none;"><img src="https://d3k81ch9hvuctc.cloudfront.net/company/WHZZ6D/images/3500c5c4-6518-490d-b1db-258c87ca6cef.png" alt="Museum of Graffiti" width="250" style="width:250px; max-width:100%; display:block; border:0;"></a>
+  </td></tr>
+
+
+  <!-- HERO: the category being spotlighted. -->
+  <tr><td class="pad" style="background:#000000; padding:34px 40px 36px;">
+    <p style="margin:0 0 6px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:12px; letter-spacing:2.4px; text-transform:uppercase; color:{{ accent_color }};">Spotlight on:</p>
+    <h1 class="h1" style="margin:0; font-family:'Barlow','Arial Black',Arial,sans-serif; font-weight:600; font-size:44px; line-height:0.96; letter-spacing:-0.9px; color:#ffffff;">{{ headline }}</h1>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 0;"><tr>
+      <td width="64" style="width:64px; background:{{ accent_color }}; font-size:0; line-height:4px; height:4px;">&nbsp;</td>
+    </tr></table>
+    <p style="margin:18px 0 0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-size:15px; line-height:1.55; color:#e4e6e8;">{{ intro }}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0;"><tr>
+      <td style="border:2px solid #ffffff;"><a href="{{ hero_cta_url }}" style="color:#fff; text-decoration:none; display:inline-block; padding:13px 26px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:13px; letter-spacing:1.2px; text-transform:uppercase;">{{ hero_cta_text }}</a></td>
+    </tr></table>
+  </td></tr>
+
+  <!-- The featured item, inside the masthead. This is what makes v2 different:
+       the email opens on one product rather than on the category alone. It is
+       product_1, so the featured collection block still feeds slots 1-4 and
+       nothing is left unrendered. -->
+  <tr><td class="pad" style="background:#000000; padding:0 40px 36px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #2a2a2a;">
+      <tr><td style="height:26px; font-size:0; line-height:26px;">&nbsp;</td></tr>
+      <tr>
+        <td class="col colgap" width="240" valign="top" style="width:240px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr><td class="imgband" height="240" align="center" style="height:240px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+              <a href="{{ product_1_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_1_image }}" alt="{{ product_1_title }}" width="240" style="width:auto; max-width:100%; max-height:240px; display:inline-block; border:0;"></a>
+            </td></tr>
+          </table>
+        </td>
+        <td class="gut" width="24" style="width:24px; font-size:0;">&nbsp;</td>
+        <td class="col" width="256" valign="top" style="width:256px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr><td height="24" style="height:24px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_1_badge }}</span></td></tr>
+            <tr><td style="padding:10px 0 0;"><a href="{{ product_1_url }}" style="color:#ffffff; text-decoration:none; display:block; font-family:'Barlow','Arial Black',Arial,sans-serif; font-weight:600; font-size:22px; line-height:1.1; letter-spacing:-0.3px;">{{ product_1_title }}</a></td></tr>
+            <tr><td><p style="margin:10px 0 0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-size:14px; line-height:1.55; color:#c8ccd0;">{{ product_1_description }}</p></td></tr>
+            <tr><td><p style="margin:12px 0 0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:20px; color:#ffffff;">{{ product_1_price }}</p></td></tr>
+            <tr><td style="padding:16px 0 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td style="background:#f35a48;"><a href="{{ product_1_url }}" style="color:#fff; text-decoration:none; display:inline-block; padding:13px 24px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:13px; letter-spacing:1.2px; text-transform:uppercase;">Shop This &gt;</a></td>
+              </tr></table>
+            </td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+  <!-- First pick pair, on white. -->
+  <tr><td class="pad" style="padding:34px 40px 4px;">
+    <p style="margin:0 0 10px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:12px; letter-spacing:1.8px; text-transform:uppercase; color:{{ accent_color }};">{{ section_1_label }}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;"><tr>
+      <td width="36" style="width:36px; background:{{ accent_color }}; font-size:0; line-height:4px; height:4px;">&nbsp;</td>
+    </tr></table>
+    <h2 class="h2" style="margin:0; font-family:'Barlow','Arial Black',Arial,sans-serif; font-weight:600; font-size:28px; line-height:1.02; letter-spacing:-0.5px; color:#1a1a1a;">{{ section_1_headline }}</h2>
+  </td></tr>
+  <tr><td style="height:18px; font-size:0; line-height:18px;">&nbsp;</td></tr><tr><td class="pad" style="padding:0 40px 34px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td class="col colgap" width="249" valign="top" style="width:249px; height:1px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_2_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_2_image }}" alt="{{ product_2_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
+        </td></tr>
+<tr><td height="36" style="height:36px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_2_badge }}</span></td></tr>
+        <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_2_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_2_title }}</a></td></tr>
+        <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td align="left"><a href="{{ product_2_url }}" style="color:#2e2e2e; text-decoration:none; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:14px;">{{ product_2_price }}</a></td>
+          <td align="right"><a href="{{ product_2_url }}" style="color:#f35a48; text-decoration:none; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:0.8px; text-transform:uppercase;">Shop &gt;</a></td>
+        </tr></table></td></tr>
+      </table>
+      </td>
+      <td class="gut" width="22" style="width:22px; font-size:0;">&nbsp;</td>
+      <td class="col" width="249" valign="top" style="width:249px; height:1px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_3_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_3_image }}" alt="{{ product_3_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
+        </td></tr>
+<tr><td height="36" style="height:36px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_3_badge }}</span></td></tr>
+        <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_3_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_3_title }}</a></td></tr>
+        <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td align="left"><a href="{{ product_3_url }}" style="color:#2e2e2e; text-decoration:none; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:14px;">{{ product_3_price }}</a></td>
+          <td align="right"><a href="{{ product_3_url }}" style="color:#f35a48; text-decoration:none; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:0.8px; text-transform:uppercase;">Shop &gt;</a></td>
+        </tr></table></td></tr>
+      </table>
+      </td>
+    </tr></table>
+  </td></tr>
+  <!-- Second pick pair, reversed out on black. -->
+  <tr><td class="pad" style="background:#000000; padding:30px 40px 10px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td width="24" style="width:24px; vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="24" style="width:24px;"><tr><td style="background:{{ accent_color }}; font-size:0; mso-line-height-rule:exactly; line-height:3px; height:3px;">&nbsp;</td></tr></table></td>
+      <td width="10" style="width:10px; font-size:0;">&nbsp;</td>
+      <td style="font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:13px; letter-spacing:1.6px; text-transform:uppercase; color:#ffffff;">{{ section_2_label }}</td>
+    </tr></table>
+    <h3 class="h2" style="margin:14px 0 0; font-family:'Barlow','Arial Black',Arial,sans-serif; font-weight:600; font-size:24px; line-height:1.02; letter-spacing:-0.5px; color:#ffffff;">{{ section_2_headline }}</h3>
+  </td></tr>  <!-- Product 4, laid out wide: picture on the left, the words on the right,
+       the whole block reversed out on black. The .col cells stack on mobile,
+       where a 240px image beside 256px of copy would leave neither enough
+       room. -->
+  <tr><td class="pad" style="background:#000000; padding:22px 40px 10px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#000000;">
+      <tr>
+        <td class="col colgap" width="240" valign="top" style="width:240px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr><td class="imgband" height="240" align="center" style="height:240px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+              <a href="{{ product_4_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_4_image }}" alt="{{ product_4_title }}" width="240" style="width:auto; max-width:100%; max-height:240px; display:inline-block; border:0;"></a>
+            </td></tr>
+          </table>
+        </td>
+        <td class="gut" width="24" style="width:24px; font-size:0;">&nbsp;</td>
+        <td class="col" width="256" valign="top" style="width:256px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr><td height="24" style="height:24px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_4_badge }}</span></td></tr>
+            <tr><td style="padding:10px 0 0;"><a href="{{ product_4_url }}" style="color:#ffffff; text-decoration:none; display:block; font-family:'Barlow','Arial Black',Arial,sans-serif; font-weight:600; font-size:22px; line-height:1.1; letter-spacing:-0.3px;">{{ product_4_title }}</a></td></tr>
+            <tr><td><p style="margin:10px 0 0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-size:14px; line-height:1.55; color:#c8ccd0;">{{ product_4_description }}</p></td></tr>
+            <tr><td><p style="margin:12px 0 0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:20px; color:#ffffff;">{{ product_4_price }}</p></td></tr>
+            <tr><td style="padding:16px 0 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td style="background:#f35a48;"><a href="{{ product_4_url }}" style="color:#fff; text-decoration:none; display:inline-block; padding:13px 24px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:13px; letter-spacing:1.2px; text-transform:uppercase;">Shop This &gt;</a></td>
+              </tr></table>
+            </td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+
+  <tr><td class="pad" align="center" style="background:#000000; padding:26px 40px 34px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+      <td style="background:#f35a48;"><a href="{{ mid_cta_url }}" style="color:#fff; text-decoration:none; display:inline-block; padding:12px 22px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:13px; letter-spacing:1px; text-transform:uppercase;">{{ mid_cta_text }}</a></td>
+    </tr></table>
+  </td></tr>
+  <!-- PERMANENT framing, per-campaign products: the four-up grid that closes
+       every send in this series. -->
+  <tr><td class="pad" style="padding:34px 40px 22px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td width="24" style="width:24px; vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="24" style="width:24px;"><tr><td style="background:{{ accent_color }}; font-size:0; mso-line-height-rule:exactly; line-height:3px; height:3px;">&nbsp;</td></tr></table></td>
+      <td width="10" style="width:10px; font-size:0;">&nbsp;</td>
+      <td style="font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:13px; letter-spacing:1.6px; text-transform:uppercase; color:#1a1a1a;">More To Like:</td>
+    </tr></table>
+  </td></tr>
+<tr><td class="pad" style="padding:0 40px 26px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td class="col colgap" width="249" valign="top" style="width:249px; height:1px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_5_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_5_image }}" alt="{{ product_5_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
+        </td></tr>
+<tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
+        <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_5_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_5_title }}</a></td></tr>
+        <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td align="left"><a href="{{ product_5_url }}" style="color:#2e2e2e; text-decoration:none; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:14px;">{{ product_5_price }}</a></td>
+          <td align="right"><a href="{{ product_5_url }}" style="color:#f35a48; text-decoration:none; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:0.8px; text-transform:uppercase;">Shop &gt;</a></td>
+        </tr></table></td></tr>
+      </table>
+      </td>
+      <td class="gut" width="22" style="width:22px; font-size:0;">&nbsp;</td>
+      <td class="col" width="249" valign="top" style="width:249px; height:1px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_6_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_6_image }}" alt="{{ product_6_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
+        </td></tr>
+<tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
+        <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_6_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_6_title }}</a></td></tr>
+        <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td align="left"><a href="{{ product_6_url }}" style="color:#2e2e2e; text-decoration:none; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:14px;">{{ product_6_price }}</a></td>
+          <td align="right"><a href="{{ product_6_url }}" style="color:#f35a48; text-decoration:none; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:0.8px; text-transform:uppercase;">Shop &gt;</a></td>
+        </tr></table></td></tr>
+      </table>
+      </td>
+    </tr></table>
+  </td></tr>
+<tr><td class="pad" style="padding:0 40px 34px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td class="col colgap" width="249" valign="top" style="width:249px; height:1px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_7_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_7_image }}" alt="{{ product_7_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
+        </td></tr>
+<tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
+        <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_7_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_7_title }}</a></td></tr>
+        <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td align="left"><a href="{{ product_7_url }}" style="color:#2e2e2e; text-decoration:none; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:14px;">{{ product_7_price }}</a></td>
+          <td align="right"><a href="{{ product_7_url }}" style="color:#f35a48; text-decoration:none; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:0.8px; text-transform:uppercase;">Shop &gt;</a></td>
+        </tr></table></td></tr>
+      </table>
+      </td>
+      <td class="gut" width="22" style="width:22px; font-size:0;">&nbsp;</td>
+      <td class="col" width="249" valign="top" style="width:249px; height:1px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_8_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_8_image }}" alt="{{ product_8_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
+        </td></tr>
+<tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
+        <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_8_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_8_title }}</a></td></tr>
+        <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td align="left"><a href="{{ product_8_url }}" style="color:#2e2e2e; text-decoration:none; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:14px;">{{ product_8_price }}</a></td>
+          <td align="right"><a href="{{ product_8_url }}" style="color:#f35a48; text-decoration:none; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:0.8px; text-transform:uppercase;">Shop &gt;</a></td>
+        </tr></table></td></tr>
+      </table>
+      </td>
+    </tr></table>
+  </td></tr>
+
+  <tr><td class="pad" align="center" style="padding:6px 40px 34px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+      <td style="background:#000000;"><a href="{{ footer_cta_url }}" style="color:#fff; text-decoration:none; display:inline-block; padding:18px 24px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:15px; letter-spacing:1.2px; text-transform:uppercase;">{{ footer_cta_text }}</a></td>
+    </tr></table>
+  </td></tr>
+  <!-- PERMANENT: footer. Address, hours, socials and the unsubscribe line are
+       the same on every send; only the sending platform's links change, once. -->
+  <tr><td class="pad" align="center" style="background:#000000; padding:28px 40px 32px;">
+    <a href="https://museumofgraffiti.com" style="text-decoration:none;"><img src="https://museumofgraffiti.com/cdn/shop/files/IMG_6644_250x_83385e3f-5df4-4759-acce-e14ad558e2ad.png" alt="Museum of Graffiti" height="30" style="height:30px; width:auto; display:block; margin:0 auto 12px; border:0;"></a>
+    <p style="margin:0 0 14px; font-family:'Archivo',Arial,Helvetica,sans-serif; font-size:12px; line-height:1.6; color:#8b8b8b;">
+      276 NW 26th Street, Miami, FL 33127 &middot; Wynwood&rsquo;s only art museum<br>
+      Mon, Wed, Thu 11am&ndash;6pm &middot; Fri&ndash;Sun 11am&ndash;7pm &middot; Closed Tuesdays
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 14px;"><tr>
+      <td style="padding:0 9px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:500; font-size:12px; letter-spacing:0.8px; text-transform:uppercase;"><a href="https://www.instagram.com/museumofgraffiti/" style="color:#fff; text-decoration:none;">Instagram</a></td>
+      <td style="padding:0 9px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:500; font-size:12px; letter-spacing:0.8px; text-transform:uppercase;"><a href="https://www.tiktok.com/@museumofgraffiti" style="color:#fff; text-decoration:none;">TikTok</a></td>
+      <td style="padding:0 9px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:500; font-size:12px; letter-spacing:0.8px; text-transform:uppercase;"><a href="https://museumofgraffiti.com/collections/the-gift-shop" style="color:#fff; text-decoration:none;">Shop All</a></td>
+    </tr></table>
+    <p style="margin:0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-size:11px; line-height:1.6; color:#616161;">
+      You subscribed at museumofgraffiti.com &middot;
+      <!-- Klaviyo injects the unsubscribe link. Set it once, here in the template. -->
+      <a href="#" style="color:#616161;">Unsubscribe</a>
+    </p>
+  </td></tr>
+
+</table>
+
+</td></tr>
+</table>
+
+</body>
+</html>
