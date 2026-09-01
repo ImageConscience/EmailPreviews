@@ -107,7 +107,12 @@ export function IntegrationsPanel({
           <div className="alert alert-ok">
             {result.total} {result.total === 1 ? "product" : "products"} in the catalog
             {result.added ? ` · ${result.added} new` : ""}
-            {result.removed ? ` · ${result.removed} removed` : ""}.
+            {result.removed ? ` · ${result.removed} removed` : ""}
+            {result.collections
+              ? ` · ${result.collections} ${result.collections === 1 ? "collection" : "collections"}`
+              : ""}
+            .
+            {result.collectionNote ? ` ${result.collectionNote}` : ""}
           </div>
         )}
 

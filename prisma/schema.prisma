@@ -23,14 +23,14 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  memberships   Membership[]
-  sessions      Session[]
-  revisions     RowRevision[]
-  sentInvites   Invite[]      @relation("InviteSender")
-  createdRows   SheetRow[]    @relation("RowCreator")
-  hiddenRows    SheetRow[]    @relation("RowHider")
-  approvals     Approval[]
-  uploads       MediaAsset[]  @relation("MediaUploader")
+  memberships Membership[]
+  sessions    Session[]
+  revisions   RowRevision[]
+  sentInvites Invite[]      @relation("InviteSender")
+  createdRows SheetRow[]    @relation("RowCreator")
+  hiddenRows  SheetRow[]    @relation("RowHider")
+  approvals   Approval[]
+  uploads     MediaAsset[]  @relation("MediaUploader")
 }
 
 model Session {
@@ -47,12 +47,12 @@ model Session {
 
 /// A Company is the tenant: one store of content, many collaborating users.
 model Company {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
+  id              String    @id @default(cuid())
+  name            String
+  createdAt       DateTime  @default(now())
   /// Storefront host for the product catalog, e.g. "museumofgraffiti.com".
   /// Null for a company that sells nothing -- content-only, like a services firm.
-  shopDomain String?
+  shopDomain      String?
   /// When the product cache was last refreshed from that storefront.
   catalogSyncedAt DateTime?
 
@@ -62,6 +62,7 @@ model Company {
   invites     Invite[]
   media       MediaAsset[]
   products    CatalogProduct[]
+  collections CatalogCollection[]
 }
 
 /// One product from the company's storefront, cached so the picker is instant.
@@ -69,6 +70,40 @@ model Company {
 /// A cache rather than a live call: a preview that hit the storefront for every
 /// tile would be slow, would break when the store is briefly unreachable, and
 /// would rate-limit itself on a sheet with sixty rows. Refreshed on demand.
+/// A storefront collection, so a row can name one and have the grid fill itself.
+model CatalogCollection {
+  id           String   @id @default(cuid())
+  companyId    String
+  /// Shopify's collection id.
+  externalId   String
+  handle       String
+  title        String
+  /// What the storefront reported, which can outrun what we actually stored.
+  productCount Int      @default(0)
+  syncedAt     DateTime @default(now())
+
+  company  Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products CatalogCollectionProduct[]
+
+  @@unique([companyId, handle])
+  @@index([companyId, title])
+}
+
+/// Membership, carrying the storefront's own ordering.
+model CatalogCollectionProduct {
+  id           String @id @default(cuid())
+  collectionId String
+  productId    String
+  /// Position in the collection's own sort order, which is what "manual" means.
+  position     Int
+
+  collection CatalogCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product    CatalogProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, productId])
+  @@index([collectionId, position])
+}
+
 model CatalogProduct {
   id          String   @id @default(cuid())
   companyId   String
@@ -88,7 +123,8 @@ model CatalogProduct {
   tags        String   @default("")
   syncedAt    DateTime @default(now())
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company     Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  collections CatalogCollectionProduct[]
 
   @@unique([companyId, externalId])
   @@index([companyId, title])
@@ -166,13 +202,13 @@ model ContentSheet {
 
 /// One record from a content sheet: the values for a single email.
 model SheetRow {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   sheetId     String
   position    Int
   /// JSON object mapping column header -> string value.
-  data        String   @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  data        String    @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   createdById String?
   /// Set when someone hides the row: rejected outright, or not ready to show.
   /// A timestamp rather than a flag so the rail can say when, and by whom.

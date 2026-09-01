@@ -61,15 +61,25 @@
     </tr></table>
   </td></tr>
 
-  <!-- THIS MONTH'S SHIRT. One price here, not the member/retail split: the
-       membership saving is argued in the masthead above. -->
+  <!-- THIS MONTH'S SHIRT. Carries the member/retail split, same as 03. The
+       masthead states the 20% saving as a claim; this is where it is shown as
+       two numbers, which is the part that actually sells the membership. -->
   <tr><td align="center" style="background:#f6f6f4; padding:26px 40px 0;">
     <a href="{{ product_1_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_1_image }}" alt="{{ product_1_title }}" width="440" style="width:80%; max-width:440px; display:block; border:0; margin:0 auto;"></a>
   </td></tr>
   <tr><td class="pad" align="center" style="background:#f6f6f4; padding:18px 40px 32px;">
     <h2 class="h1" style="margin:14px 0 0; font-family:'Barlow','Arial Black',Arial,sans-serif; font-weight:600; font-size:38px; line-height:1.0; letter-spacing:-0.7px; color:#1a1a1a;">{{ product_1_title }}</h2>
     <p style="margin:14px 0 0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-size:14px; line-height:1.55; color:#4a4a4a;">{{ product_1_description }}</p>
-    <p style="margin:16px 0 0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:24px; color:#1a1a1a;">{{ product_1_price }}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:20px auto 0;"><tr>
+      <td align="center" style="padding:0 14px;">
+        <p style="margin:0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:24px; color:#1a1a1a;">{{ member_price }}</p>
+        <p style="margin:2px 0 0; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:1.2px; text-transform:uppercase; color:#f35a48;">Members</p>
+      </td>
+      <td align="center" style="padding:0 14px;">
+        <p style="margin:0; font-family:'Archivo',Arial,Helvetica,sans-serif; font-weight:700; font-size:24px; color:#8a8a8a;"><s>{{ retail_price }}</s></p>
+        <p style="margin:2px 0 0; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#8a8a8a;">Retail</p>
+      </td>
+    </tr></table>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:22px auto 0;"><tr>
       <td style="background:#f35a48;"><a href="{{ product_1_url }}" style="color:#fff; text-decoration:none; display:inline-block; padding:17px 24px; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:15px; letter-spacing:1.2px; text-transform:uppercase;">{{ cta_text }}</a></td>
     </tr></table>

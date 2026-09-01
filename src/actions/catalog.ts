@@ -3,7 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { AuthError, requireCompanyAccess } from "@/lib/auth";
-import { StoreError, fetchAllProducts, normalizeShopDomain } from "@/lib/shopify";
+import {
+  StoreError,
+  fetchAllCollections,
+  fetchAllProducts,
+  fetchCollectionProducts,
+  normalizeShopDomain,
+} from "@/lib/shopify";
+import {
+  type CollectionSpec,
+  type FillProduct,
+  sortForOrder,
+} from "@/lib/collection-spec";
 import { parseRecord, parseStringArray } from "@/lib/json";
 import { rowLabel } from "@/lib/campaign";
 
@@ -14,6 +25,9 @@ export interface SyncResult {
   updated?: number;
   removed?: number;
   total?: number;
+  collections?: number;
+  /** Set when products synced but the collections feed is unavailable. */
+  collectionNote?: string;
 }
 
 /** Point a company at its storefront. Clearing the domain empties the cache. */
@@ -102,9 +116,13 @@ export async function syncCatalogAction(companyId: string): Promise<SyncResult> 
       }),
     ]);
 
+    const collectionResult = await syncCollections(companyId, company.shopDomain);
+
     revalidatePath(`/c/${companyId}/integrations`);
     return {
       ok: true,
+      collections: collectionResult.count,
+      collectionNote: collectionResult.note,
       added: products.filter((product) => !had.has(product.externalId)).length,
       updated: products.filter((product) => had.has(product.externalId)).length,
       removed: [...had].filter((id) => !now.has(id)).length,
@@ -321,4 +339,150 @@ export async function relinkProductsAction(
     if (error instanceof AuthError) return { ...empty, ok: false, error: error.message };
     return { ...empty, ok: false, error: "Could not check the sheets." };
   }
+}
+
+/**
+ * Collections, and which products sit in each.
+ *
+ * Deliberately not fatal: a theme can serve /products.json while having the
+ * collections feed switched off, and a product sync that already succeeded
+ * should not be reported as a failure because of it.
+ */
+async function syncCollections(
+  companyId: string,
+  domain: string,
+): Promise<{ count: number; note?: string }> {
+  let collections;
+  try {
+    collections = await fetchAllCollections(domain);
+  } catch {
+    return { count: 0, note: `${domain} did not return a collection list.` };
+  }
+  if (collections.length === 0) {
+    return { count: 0, note: `${domain} published no collections.` };
+  }
+
+  // Map Shopify ids to our rows once, so membership can be written by id.
+  const products = await prisma.catalogProduct.findMany({
+    where: { companyId },
+    select: { id: true, externalId: true },
+  });
+  const idOf = new Map(products.map((product) => [product.externalId, product.id]));
+
+  let stored = 0;
+  for (const collection of collections) {
+    let members;
+    try {
+      members = await fetchCollectionProducts(domain, collection.handle);
+    } catch {
+      continue;
+    }
+
+    const row = await prisma.catalogCollection.upsert({
+      where: { companyId_handle: { companyId, handle: collection.handle } },
+      create: { companyId, ...collection, syncedAt: new Date() },
+      update: { ...collection, syncedAt: new Date() },
+    });
+
+    // Membership is small and order-sensitive; replacing it wholesale is both
+    // simpler and correct when a product is removed or the order is changed.
+    await prisma.catalogCollectionProduct.deleteMany({ where: { collectionId: row.id } });
+    const links = members
+      .map((member, position) => ({ productId: idOf.get(member.externalId), position }))
+      .filter((link): link is { productId: string; position: number } => Boolean(link.productId))
+      .map((link) => ({ collectionId: row.id, ...link }));
+    if (links.length > 0) {
+      await prisma.catalogCollectionProduct.createMany({ data: links });
+    }
+    stored++;
+  }
+
+  await prisma.catalogCollection.deleteMany({
+    where: { companyId, handle: { notIn: collections.map((c) => c.handle) } },
+  });
+
+  return { count: stored };
+}
+
+export interface CollectionOption {
+  handle: string;
+  title: string;
+  count: number;
+}
+
+/** The collections a row can name, for the picker. */
+export async function listCollectionsAction(companyId: string): Promise<CollectionOption[]> {
+  await requireCompanyAccess(companyId);
+  const rows = await prisma.catalogCollection.findMany({
+    where: { companyId },
+    orderBy: { title: "asc" },
+    select: { handle: true, title: true, _count: { select: { products: true } } },
+  });
+  return rows.map((row) => ({
+    handle: row.handle,
+    title: row.title,
+    count: row._count.products,
+  }));
+}
+
+export interface ResolvedCollection {
+  handle: string;
+  title: string | null;
+  products: FillProduct[];
+  /** Total in the collection, so the UI can say "4 of 37". */
+  available: number;
+}
+
+/**
+ * The products a spec resolves to, already ordered and cut to the limit.
+ *
+ * Out-of-stock products are kept rather than dropped: the storefront feed is a
+ * cache that can be hours old, and silently swapping a tile because of a stale
+ * availability flag is worse than showing what the collection actually holds.
+ */
+export async function resolveCollectionAction(
+  companyId: string,
+  spec: CollectionSpec,
+): Promise<ResolvedCollection> {
+  await requireCompanyAccess(companyId);
+
+  const collection = await prisma.catalogCollection.findUnique({
+    where: { companyId_handle: { companyId, handle: spec.handle } },
+    select: {
+      title: true,
+      products: {
+        orderBy: { position: "asc" },
+        select: {
+          position: true,
+          product: {
+            select: { title: true, price: true, url: true, imageUrl: true, syncedAt: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!collection) {
+    return { handle: spec.handle, title: null, products: [], available: 0 };
+  }
+
+  const items = collection.products.map((link, index) => ({
+    title: link.product.title,
+    price: link.product.price,
+    url: link.product.url,
+    imageUrl: link.product.imageUrl,
+    position: link.position,
+    // The storefront feed gives no created date, but it returns products
+    // newest-first, so the collection's own order is the best proxy we have.
+    createdOrder: collection.products.length - index,
+  }));
+
+  const ordered = sortForOrder(items, spec.order).slice(spec.offset, spec.offset + spec.limit);
+
+  return {
+    handle: spec.handle,
+    title: collection.title,
+    available: collection.products.length,
+    products: ordered.map(({ title, price, url, imageUrl }) => ({ title, price, url, imageUrl })),
+  };
 }

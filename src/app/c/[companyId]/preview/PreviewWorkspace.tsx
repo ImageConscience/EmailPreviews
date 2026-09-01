@@ -32,7 +32,16 @@ import { ApprovalBar } from "./ApprovalBar";
 import { EnvelopeFields } from "./EnvelopeFields";
 import { ImagePicker } from "./ImagePicker";
 import { ProductPicker } from "./ProductPicker";
-import type { ProductOption } from "@/actions/catalog";
+import type { CollectionOption, ProductOption, ResolvedCollection } from "@/actions/catalog";
+import { listCollectionsAction, resolveCollectionAction } from "@/actions/catalog";
+import {
+  COLLECTION_BLOCKS,
+  COLLECTION_ORDERS,
+  ORDER_LABELS,
+  applyFill,
+  formatCollectionSpec,
+  parseCollectionSpec,
+} from "@/lib/collection-spec";
 import type { ApprovalView } from "@/lib/approval";
 
 export interface TemplateSummary {
@@ -216,6 +225,11 @@ export function PreviewWorkspace({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<Record<string, string>>({});
+  /** What each collection cell currently resolves to, keyed by its field. */
+  const [fills, setFills] = useState<Record<string, ResolvedCollection>>({});
+  const [collections, setCollections] = useState<CollectionOption[]>([]);
+  const [showCollections, setShowCollections] = useState(false);
+  const collectionsLoaded = useRef(false);
   const [baseline, setBaseline] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
@@ -538,15 +552,62 @@ export function PreviewWorkspace({
   );
 
   const dirty = useMemo(() => isDirty(draft, baseline), [draft, baseline]);
+  const activeFills = COLLECTION_BLOCKS.filter(
+    (block) => (fills[block.field]?.products.length ?? 0) > 0,
+  ).length;
 
   /* ---------------- rendering ---------------- */
+
+  // The collection cells, as they read right now. Kept as a string so the
+  // effect below re-runs when someone edits the cell, not on every keystroke
+  // elsewhere in the row.
+  const collectionCells = COLLECTION_BLOCKS.map(
+    (block) => `${block.field}=${draft[block.field] ?? ""}`,
+  ).join("\u0000");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const resolved: Record<string, ResolvedCollection> = {};
+      for (const block of COLLECTION_BLOCKS) {
+        const spec = parseCollectionSpec(draft[block.field] ?? "", block.slots.length);
+        if (!spec) continue;
+        try {
+          resolved[block.field] = await resolveCollectionAction(companyId, spec);
+        } catch {
+          // A collection that will not resolve leaves its slots as they are,
+          // which the coverage panel already reports as blanks.
+        }
+      }
+      if (!cancelled) setFills(resolved);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, collectionCells]);
+
+  /**
+   * The row as the template actually sees it: hand-entered cells, plus whatever
+   * the collection blocks fill in around them.
+   */
+  const values = useMemo(() => {
+    let next = draft;
+    for (const block of COLLECTION_BLOCKS) {
+      const fill = fills[block.field];
+      if (fill?.products.length) next = applyFill(next, block.slots, fill.products);
+    }
+    return next;
+  }, [draft, fills]);
 
   const result = useMemo(() => {
     if (!template) {
       return { html: "", placeholders: [], filled: [], blank: [], missing: [] };
     }
-    return renderTemplate(template.html, draft, { highlightMissing });
-  }, [template, draft, highlightMissing]);
+    return renderTemplate(template.html, values, { highlightMissing });
+  }, [template, values, highlightMissing]);
 
   const unusedColumnNames = useMemo(() => {
     if (!template || !sheet) return [];
@@ -1176,6 +1237,123 @@ export function PreviewWorkspace({
                   />
                 ),
               )}
+
+              {/*
+                Collection blocks. A cell names a collection and the product
+                slots fill themselves, so a four-up grid is one decision rather
+                than twenty. Folded for the same reason as the template picker:
+                most rows list their products outright.
+              */}
+              <div className="fld" style={{ paddingTop: 12, paddingBottom: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  style={{ width: "100%", justifyContent: "flex-start" }}
+                  onClick={() => {
+                    setShowCollections((open) => !open);
+                    if (!collectionsLoaded.current) {
+                      collectionsLoaded.current = true;
+                      listCollectionsAction(companyId).then(setCollections).catch(() => {});
+                    }
+                  }}
+                >
+                  {showCollections ? "▾" : "▸"} Collection blocks
+                  {activeFills > 0 ? ` (${activeFills})` : ""}
+                </button>
+
+                {showCollections && (
+                  <div style={{ marginTop: 8 }}>
+                    {collections.length === 0 && (
+                      <div className="hint">
+                        No collections cached. Sync the catalogue under Settings →
+                        Integrations; a storefront can also have its collections feed
+                        turned off.
+                      </div>
+                    )}
+
+                    {COLLECTION_BLOCKS.map((block) => {
+                      const raw = draft[block.field] ?? "";
+                      const spec = parseCollectionSpec(raw, block.slots.length);
+                      const fill = fills[block.field];
+                      const set = (next: string) =>
+                        setDraft((previous) => ({ ...previous, [block.field]: next }));
+
+                      return (
+                        <div key={block.field} style={{ marginBottom: 14 }}>
+                          <div className="hint" style={{ marginBottom: 4 }}>
+                            <code>{block.field}</code> — slots {block.slots[0]}–
+                            {block.slots[block.slots.length - 1]}
+                          </div>
+
+                          <select
+                            value={spec?.handle ?? ""}
+                            onChange={(e) =>
+                              set(
+                                e.target.value
+                                  ? formatCollectionSpec(
+                                      {
+                                        handle: e.target.value,
+                                        order: spec?.order ?? "manual",
+                                        limit: spec?.limit ?? block.slots.length,
+                                        offset: spec?.offset ?? 0,
+                                      },
+                                      block.slots.length,
+                                    )
+                                  : "",
+                              )
+                            }
+                          >
+                            <option value="">— none —</option>
+                            {collections.map((collection) => (
+                              <option key={collection.handle} value={collection.handle}>
+                                {collection.title} ({collection.count})
+                              </option>
+                            ))}
+                          </select>
+
+                          {spec && (
+                            <select
+                              value={spec.order}
+                              style={{ marginTop: 6 }}
+                              onChange={(e) =>
+                                set(
+                                  formatCollectionSpec(
+                                    { ...spec, order: e.target.value as typeof spec.order },
+                                    block.slots.length,
+                                  ),
+                                )
+                              }
+                            >
+                              {COLLECTION_ORDERS.map((order) => (
+                                <option key={order} value={order}>
+                                  {ORDER_LABELS[order]}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+
+                          {spec && fill && (
+                            <div className="hint" style={{ marginTop: 4 }}>
+                              {fill.products.length > 0
+                                ? `Filling ${fill.products.length} of ${fill.available}: ${fill.products
+                                    .map((product) => product.title)
+                                    .join(", ")}`
+                                : `“${spec.handle}” matched no cached products.`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <div className="hint">
+                      A slot you have filled in yourself is left alone, so you can pin
+                      one tile and let the collection fill the rest. The cell itself
+                      reads <code>handle | order | count | skip</code> if you would
+                      rather type it.
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/*
                 Which template is on screen. It lives folded away down here on

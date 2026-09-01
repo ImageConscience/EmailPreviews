@@ -160,3 +160,111 @@ export async function fetchAllProducts(domain: string): Promise<StoreProduct[]> 
 
   return products;
 }
+
+/* ---------------------------------------------------------------------------
+ * Collections
+ *
+ * `/collections.json` lists them, and `/collections/<handle>/products.json`
+ * gives each one's products *in the collection's own order* -- which is the
+ * whole point, since that order is the merchandising decision the store
+ * already made. Both are public, both page the same way as /products.json.
+ * ------------------------------------------------------------------------- */
+
+export interface StoreCollection {
+  externalId: string;
+  handle: string;
+  title: string;
+  productCount: number;
+}
+
+interface RawCollection {
+  id?: number | string;
+  handle?: string;
+  title?: string;
+  products_count?: number;
+}
+
+async function fetchJson(url: string, domain: string): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch {
+    throw new StoreError(`Could not reach ${domain}.`);
+  }
+  if (response.status === 404) return null;
+  if (!response.ok) throw new StoreError(`${domain} answered with HTTP ${response.status}.`);
+  if (!(response.headers.get("content-type") ?? "").includes("json")) {
+    throw new StoreError(`${domain} returned a web page rather than data — it may be password-protected.`);
+  }
+  return response.json();
+}
+
+/** Every published collection on the storefront. */
+export async function fetchAllCollections(domain: string): Promise<StoreCollection[]> {
+  const collections: StoreCollection[] = [];
+  const seen = new Set<string>();
+
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const body = (await fetchJson(
+      `https://${domain}/collections.json?limit=${PAGE_SIZE}&page=${page}`,
+      domain,
+    )) as { collections?: RawCollection[] } | null;
+
+    // Some themes disable the collections feed even though products.json works.
+    if (!body || !Array.isArray(body.collections)) break;
+    if (body.collections.length === 0) break;
+
+    for (const raw of body.collections) {
+      const id = raw.id == null ? "" : String(raw.id);
+      const handle = (raw.handle ?? "").trim();
+      if (!id || !handle || seen.has(id)) continue;
+      seen.add(id);
+      collections.push({
+        externalId: id,
+        handle,
+        title: (raw.title ?? handle).trim(),
+        productCount: typeof raw.products_count === "number" ? raw.products_count : 0,
+      });
+    }
+    if (body.collections.length < PAGE_SIZE) break;
+  }
+
+  return collections;
+}
+
+/**
+ * One collection's products, in the storefront's own order.
+ *
+ * The order matters more than it looks: it is what the store's merchandiser
+ * arranged, so preserving it is what lets "manual" mean anything downstream.
+ */
+export async function fetchCollectionProducts(
+  domain: string,
+  handle: string,
+): Promise<StoreProduct[]> {
+  const products: StoreProduct[] = [];
+  const seen = new Set<string>();
+
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const body = (await fetchJson(
+      `https://${domain}/collections/${encodeURIComponent(handle)}/products.json?limit=${PAGE_SIZE}&page=${page}`,
+      domain,
+    )) as { products?: RawProduct[] } | null;
+
+    if (!body || !Array.isArray(body.products) || body.products.length === 0) break;
+
+    for (const item of body.products) {
+      const product = toProduct(item, domain);
+      if (!product || seen.has(product.externalId)) continue;
+      seen.add(product.externalId);
+      products.push(product);
+    }
+    if (body.products.length < PAGE_SIZE) break;
+  }
+
+  return products;
+}
