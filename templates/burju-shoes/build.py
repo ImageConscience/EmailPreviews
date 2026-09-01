@@ -351,15 +351,19 @@ def template_a() -> str:
 # B -- Split Story
 # ---------------------------------------------------------------------------
 def template_b() -> str:
-    # The hex sits inside the cell as its own (invisible) content, which is what
-    # makes emptiness detectable: `:empty` cannot see an unset background, but it
-    # can see a cell with no text. font-size:0 keeps the value from printing.
+    # The hex is the cell's own text, and nothing wraps it. That is the whole
+    # trick: `:empty` cannot see an unset `background`, but it can see a cell
+    # with no content -- and "no content" means no child nodes at all, so a
+    # <span> around the value defeats it as surely as visible text would.
+    # font-size:0 and a transparent colour keep the hex from printing.
+    # The hairline rides on the swatch cells rather than the row that holds
+    # them, so it collapses with them instead of leaving a rule behind.
     # The design letters each shade, but those labels are its own placeholder
     # art, and the shades themselves come from the sheet -- white lettering
     # vanishes on a pale nude and black vanishes on the darkest. The band of
     # colour carries the range on its own.
     swatches = "".join(
-        f"""<td width="74" style="width:74px; padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="swatch" height="84" align="center" valign="bottom" style="height:84px; background:{{{{ swatch_{i} }}}}; mso-line-height-rule:exactly; line-height:0; padding-bottom:8px;"><span style="font-size:0; line-height:0; color:transparent;">{{{{ swatch_{i} }}}}</span></td></tr></table></td>"""
+        f"""<td width="74" style="width:74px; padding:0; font-size:0; line-height:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="swatch" height="84" style="height:84px; background:{{{{ swatch_{i} }}}}; border-top:1px solid {CLOUD}; font-size:0; mso-line-height-rule:exactly; line-height:0; color:transparent;">{{{{ swatch_{i} }}}}</td></tr></table></td>"""
         for i in range(1, 9))
     points = "".join(f"""
           <tr><td style="padding:{'0' if i == 1 else '24px'} 0 0;">
@@ -377,7 +381,7 @@ def template_b() -> str:
         f"""
   <!-- Optional shade row. Omitted by leaving the cells empty -- the .swatch
        rule collapses an empty block rather than printing eight black squares. -->
-  <tr><td style="background:{PAPER}; padding:0; border-top:1px solid {CLOUD};">
+  <tr><td style="background:{PAPER}; padding:0; font-size:0; line-height:0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{swatches}</tr></table>
   </td></tr>
 
@@ -602,6 +606,22 @@ CHROME = [
     (LOGO, 2, "logo (masthead + footer)"),
 ]
 
+# Classes whose whole job is to disappear when their field is blank. `:empty`
+# means no child nodes at all, so wrapping the value in anything -- even a
+# <span> that prints nothing -- silently stops the collapse working. That is
+# not visible in the markup and only shows up as a row that will not go away,
+# so it is checked here rather than left to be noticed in a preview.
+COLLAPSING = ("swatch", "badge")
+
+
+def collapse_faults(html: str) -> list[str]:
+    faults = []
+    for cls in COLLAPSING:
+        for tag, inner in re.findall(rf'<(\w+)[^>]*class="{cls}"[^>]*>(.*?)</\1>', html, re.S):
+            if "<" in inner:
+                faults.append(f".{cls} wraps its value, so :empty can never match")
+    return faults
+
 if __name__ == "__main__":
     failed = False
     for filename, (name, fn) in TEMPLATES.items():
@@ -620,5 +640,8 @@ if __name__ == "__main__":
             if got != want:
                 failed = True
                 checks.append(f"{label} {got}/{want} MISSING")
+        for fault in dict.fromkeys(collapse_faults(html)):
+            failed = True
+            checks.append(fault)
         print(f"{filename:28} {name:18} {len(ph):3} placeholders   {' · '.join(checks)}")
     raise SystemExit(1 if failed else 0)
