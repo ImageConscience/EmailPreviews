@@ -180,8 +180,25 @@ function toProduct(raw: RawProduct, domain: string): StoreProduct | null {
   };
 }
 
-async function fetchPage(domain: string, page: number): Promise<RawProduct[]> {
-  const url = `https://${domain}/products.json?limit=${PAGE_SIZE}&page=${page}`;
+/**
+ * The routes a storefront may serve its products on, in order of preference.
+ *
+ * `/products.json` is the documented one, but it is also the one a theme or an
+ * app is most likely to have intercepted -- and on a large Plus store it is the
+ * one that times out first. `/collections/all/products.json` returns the same
+ * shape from a different route and often answers when the root one will not.
+ */
+const FEED_ROUTES = ["/products.json", "/collections/all/products.json"] as const;
+
+/** Page sizes to try. A store that fails on 250 will often answer on 50. */
+const PAGE_SIZES = [PAGE_SIZE, 50] as const;
+
+interface Attempt {
+  url: string;
+  status: number | "unreachable" | "not-json";
+}
+
+async function tryFeed(url: string): Promise<{ products: RawProduct[] } | Attempt> {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -190,46 +207,92 @@ async function fetchPage(domain: string, page: number): Promise<RawProduct[]> {
       cache: "no-store",
     });
   } catch {
-    throw new StoreError(
-      `Could not reach ${domain}. Check the domain, and that the store is online.`,
-    );
+    return { url, status: "unreachable" };
   }
 
-  if (response.status === 404) {
-    throw new StoreError(
-      `${domain} has no public product feed. The storefront may be password-protected, or /products.json disabled.`,
-    );
-  }
-  if (!response.ok) {
-    throw new StoreError(`${domain} answered with HTTP ${response.status}.`);
-  }
+  if (!response.ok) return { url, status: response.status };
 
   // A password-protected store answers 200 with an HTML login page, so the
   // content type is the thing that actually tells you it did not work.
-  const type = response.headers.get("content-type") ?? "";
-  if (!type.includes("json")) {
-    throw new StoreError(
-      `${domain} returned a web page rather than product data — it is probably password-protected.`,
-    );
+  if (!(response.headers.get("content-type") ?? "").includes("json")) {
+    return { url, status: "not-json" };
   }
 
-  const body = (await response.json()) as { products?: RawProduct[] };
-  if (!Array.isArray(body.products)) {
-    throw new StoreError(`${domain} returned something unexpected instead of a product list.`);
+  try {
+    const body = (await response.json()) as { products?: RawProduct[] };
+    if (!Array.isArray(body.products)) return { url, status: "not-json" };
+    return { products: body.products };
+  } catch {
+    return { url, status: "not-json" };
   }
-  return body.products;
+}
+
+function describe(attempts: Attempt[], domain: string): string {
+  const worst = attempts[0];
+  const tried = attempts.map((a) => `${a.url.replace(`https://${domain}`, "")} → ${a.status}`).join(", ");
+
+  if (attempts.every((a) => a.status === 404)) {
+    return `${domain} has no public product feed. The storefront may be password-protected, or the product feed disabled. Tried: ${tried}.`;
+  }
+  if (attempts.some((a) => a.status === "not-json")) {
+    return `${domain} returned a web page rather than product data — it is probably password-protected. Tried: ${tried}.`;
+  }
+  if (typeof worst.status === "number" && worst.status >= 500) {
+    return `${domain} answered with HTTP ${worst.status} on every product feed route. That is the storefront erroring rather than a wrong domain — a theme or app may be intercepting the feed, or it may be turned off for this store. Tried: ${tried}.`;
+  }
+  if (attempts.every((a) => a.status === "unreachable")) {
+    return `Could not reach ${domain}. Check the domain, and that the store is online.`;
+  }
+  return `${domain} did not return product data. Tried: ${tried}.`;
+}
+
+/**
+ * One page of products, trying each route and page size before giving up.
+ *
+ * A single 500 is not proof the feed is gone: large stores time out, apps
+ * intercept the route, and one of the two routes frequently works when the
+ * other does not. Reporting which combinations were tried is what turns "HTTP
+ * 500" into something someone can act on.
+ */
+async function fetchPage(
+  domain: string,
+  page: number,
+  route = 0,
+  size = 0,
+): Promise<{ products: RawProduct[]; route: number; size: number }> {
+  const attempts: Attempt[] = [];
+
+  for (let r = route; r < FEED_ROUTES.length; r++) {
+    for (let s = r === route ? size : 0; s < PAGE_SIZES.length; s++) {
+      const url = `https://${domain}${FEED_ROUTES[r]}?limit=${PAGE_SIZES[s]}&page=${page}`;
+      const result = await tryFeed(url);
+      if ("products" in result) return { products: result.products, route: r, size: s };
+      attempts.push(result);
+      // A 404 on one route says nothing about the other, but there is no point
+      // asking the same route again with a different page size.
+      if (result.status === 404) break;
+    }
+  }
+
+  throw new StoreError(describe(attempts, domain));
 }
 
 /** Every published product on the storefront, walking the pages to the end. */
 export async function fetchAllProducts(domain: string): Promise<StoreProduct[]> {
   const products: StoreProduct[] = [];
   const seen = new Set<string>();
+  // Whichever route and page size answered first keeps answering, so the
+  // fallbacks are paid for once rather than on every page.
+  let route = 0;
+  let size = 0;
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const raw = await fetchPage(domain, page);
-    if (raw.length === 0) break;
+    const result = await fetchPage(domain, page, route, size);
+    route = result.route;
+    size = result.size;
+    if (result.products.length === 0) break;
 
-    for (const item of raw) {
+    for (const item of result.products) {
       const product = toProduct(item, domain);
       // Some stores keep serving the last page forever rather than an empty
       // one; a repeat id means we have already been here.
@@ -237,7 +300,7 @@ export async function fetchAllProducts(domain: string): Promise<StoreProduct[]> 
       seen.add(product.externalId);
       products.push(product);
     }
-    if (raw.length < PAGE_SIZE) break;
+    if (result.products.length < PAGE_SIZES[size]) break;
   }
 
   return products;
