@@ -6,7 +6,7 @@ Six templates covering every September send, built from the Burju design system.
 | --- | --- | --- | --- |
 | `01-hero-editorial.html` | `Hero Editorial` | 31 | single-style spotlights, hero launches |
 | `02-split-story.html` | `Split Story` | 41 | guides, Truly Nude™, fit and inclusivity |
-| `03-ranked-list.html` | `Ranked List` | 38 | top fives, best sellers, month-end roundups |
+| `03-ranked-list.html` | `Ranked List` | 33 | top fives, best sellers, month-end roundups |
 | `04-palette-block.html` | `Palette Block` | 43 | any multi-colour drop |
 | `05-campaign-chapter.html` | `Campaign Chapter` | 27 | Back To…, themed weekly editorial |
 | `06-category-lookbook.html` | `Category Lookbook` | 44 | boots, thigh highs, two-or-three-style categories |
@@ -97,9 +97,12 @@ Writing a field out in full still overrides the packed cell.
 ## The optional swatch row
 
 Template B's swatch row omits itself when the send has no colour range. The
-hex sits inside the cell as its own invisible content (`font-size:0`), which
-is what makes `:empty` able to see it — an unset `background` is not something
-a selector can match, but a cell with no text is.
+hex is the cell's own text, with `font-size:0` and a transparent colour keeping
+it from printing. That is what makes `:empty` able to see it — an unset
+`background` is not something a selector can match, but a cell with no content
+is. "No content" means **no child nodes at all**, so wrapping the value in
+anything, even a `<span>` that prints nothing, silently stops the collapse
+working. `build.py` fails if a collapsing class gains a child element.
 
 The design letters each shade, but those labels are its own placeholder art and
 the shades come from the sheet: white lettering vanishes on a pale nude and
