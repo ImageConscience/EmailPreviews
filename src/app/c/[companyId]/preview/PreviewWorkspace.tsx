@@ -42,6 +42,8 @@ import {
   applyFill,
   displayPrice,
   formatCollectionSpec,
+  occupiedSlots,
+  slotKeys,
   summarize,
   parseCollectionSpec,
 } from "@/lib/collection-spec";
@@ -1361,15 +1363,66 @@ export function PreviewWorkspace({
                             </select>
                           )}
 
-                          {spec && fill && (
-                            <div className="hint" style={{ marginTop: 4 }}>
-                              {fill.products.length > 0
-                                ? `Filling ${fill.products.length} of ${fill.available}: ${fill.products
-                                    .map((product) => product.title)
-                                    .join(", ")}`
-                                : `“${spec.handle}” matched no cached products.`}
-                            </div>
-                          )}
+                          {spec && fill && (() => {
+                            // A slot with its own products keeps them, so the
+                            // panel has to count what it will actually fill --
+                            // claiming four while filling none was the bug.
+                            const taken = occupiedSlots(draft, block.slots);
+                            const free = block.slots.length - taken.length;
+                            const willFill = Math.min(fill.products.length, free);
+                            const clearTaken = () => {
+                              setDraft((previous) => {
+                                const next = { ...previous };
+                                for (const slot of taken) {
+                                  for (const key of slotKeys(slot)) {
+                                    const match = Object.keys(next).find(
+                                      (k) => normalizeKey(k) === key,
+                                    );
+                                    if (match) next[match] = "";
+                                  }
+                                }
+                                return next;
+                              });
+                            };
+
+                            if (fill.products.length === 0) {
+                              return (
+                                <div className="hint" style={{ marginTop: 4 }}>
+                                  “{spec.handle}” matched no cached products.
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="hint" style={{ marginTop: 4 }}>
+                                {willFill > 0 && (
+                                  <>
+                                    Filling {willFill} of {fill.available}:{" "}
+                                    {fill.products
+                                      .slice(0, willFill)
+                                      .map((product) => product.title)
+                                      .join(", ")}
+                                    .{" "}
+                                  </>
+                                )}
+                                {taken.length > 0 && (
+                                  <span style={{ color: "var(--warn)" }}>
+                                    {taken.length === block.slots.length
+                                      ? "Every slot already has its own product, so the collection is not being used."
+                                      : `${taken.length} ${taken.length === 1 ? "slot keeps its" : "slots keep their"} own product.`}{" "}
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-ghost"
+                                      style={{ padding: "1px 6px" }}
+                                      onClick={clearTaken}
+                                    >
+                                      Clear {taken.length}
+                                    </button>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}

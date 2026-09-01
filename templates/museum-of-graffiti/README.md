@@ -246,3 +246,15 @@ a paragraph beside a photo; Klaviyo's own template cut at the same number.
 The cap applies only to text arriving from the catalogue. A description typed
 into the cell is left exactly as written, however long — someone who wrote it
 meant it.
+
+## A collection never overwrites a filled slot
+
+The rule that lets you pin one tile and let a collection fill the rest is also
+the one that makes a collection look broken: a slot with its own product keeps
+it, so pointing a block at a different collection — or changing its sort order —
+changes nothing in the slots that are already occupied.
+
+The panel now counts what it will actually fill rather than claiming the whole
+grid, says how many slots are keeping their own products, and offers to clear
+exactly those. Clearing hands the grid over; the block then follows both the
+collection and the order.

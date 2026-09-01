@@ -203,6 +203,23 @@ export interface FillProduct {
   description?: string | null;
 }
 
+/** The cells belonging to one product slot, as they appear in a row. */
+export function slotKeys(slot: number): string[] {
+  return ["title", "price", "url", "image", "description", "badge"].map(
+    (part) => `product_${slot}_${part}`,
+  );
+}
+
+/**
+ * Slots holding something of their own, and so not available to a collection.
+ *
+ * Worth naming rather than leaving implicit: a filled slot silently beating the
+ * collection is exactly the behaviour that reads as "the block is broken".
+ */
+export function occupiedSlots(values: Record<string, string>, slots: number[]): number[] {
+  return slots.filter((slot) => slotKeys(slot).some((key) => (values[key] ?? "").trim() !== ""));
+}
+
 /**
  * Write a collection's products into product_N_* keys.
  *
