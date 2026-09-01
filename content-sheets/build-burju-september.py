@@ -102,7 +102,7 @@ def prod(row: dict, n: int, key: str, note: str = "", badge: str = "") -> None:
 SLOTS = {
     "Hero Editorial": 3,
     "Split Story": 4,
-    "Ranked List": 5,
+    "Ranked List": 6,   # the sixth row hides itself when unused
     "Palette Block": 6,
     "Campaign Chapter": 5,
     "Category Lookbook": 9,   # two tiles, the full-bleed break, then six rail
@@ -336,30 +336,33 @@ ROWS.append(send(
               ("sierralynn_blk", "The suede sole version outsells the street sole two to one."),
               ("shabina_black", "The only pair on this list with no zip. That is the whole appeal."),
               ("jezabel", "Net upper, lace-up front. The pair people buy after their first class."),
-              ("xiomara_black", "Consistently top five, never number one. A quiet workhorse.")],
+              ("xiomara_black", "Consistently top five, never number one. A quiet workhorse."),
+              ("tempest", "Rounds out the list every autumn without fail.")],
 ))
 ROWS.append(send(
     template="Ranked List", send_date="2026-09-26", campaign="Statement Stilettos",
     subject="Six stilettos worth the walk to the car",
     preheader="A stiletto is a commitment. These six earn it.",
     eyebrow="The Ranking", headline_1="Worth the Walk", headline_2="to the Car.",
-    subhead="Five stilettos, ranked by how long you last in them",
+    subhead="Six stilettos, ranked by how long you last in them",
     cta_text="Shop Stilettos", cta_url=C + "4-5-inch-heels",
     products=[("adira_burg", "The classic pump in the season's colour. Nothing to explain."),
               ("starlette_burg", "Peep toe on a stiletto heel — rarer than it should be."),
               ("skylar_burg", "Strappy enough to hold, plain enough to wear twice a week."),
               ("adira_black", "The one you own before you own any of the others."),
-              ("rene_burg", "Open toe, ankle strap, and a heel that does not wobble.")],
+              ("rene_burg", "Open toe, ankle strap, and a heel that does not wobble."),
+              ("sybil_black", "The lowest price on this list and the highest repeat rate.")],
 ))
 ROWS.append(send(
     template="Ranked List", send_date="2026-09-29", campaign="Fall Roundup",
     subject="Everything September taught us",
-    preheader="The month in five pairs.",
-    eyebrow="Month End", headline_1="September,", headline_2="In Five Pairs.",
+    preheader="The month in six pairs.",
+    eyebrow="Month End", headline_1="September,", headline_2="In Six Pairs.",
     subhead="What moved, and what it says about the season",
     cta_text="Shop the Month", cta_url=C + "fall-faves",
     products=[("marley_burg", "Burgundy outsold black for the first time in four years."),
               ("koda_nude6", "Truly Nude shade six was the single fastest mover of the month."),
+              ("sierra_black", "Never off the list. Included here for completeness."),
               ("jett_burg", "The new-arrival that behaved like an established style."),
               ("shabina_tan", "Proof that the dark tan lycra should have launched sooner."),
               ("devilla_2", "Size-inclusive thigh highs, and the month's biggest surprise.")],

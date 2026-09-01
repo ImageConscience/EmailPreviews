@@ -23,6 +23,19 @@
  */
 export const DERIVED_FIELDS = ["member_price", "retail_price"];
 
+/**
+ * Fields the app works out for a single product slot.
+ *
+ * `member_price` is a figure worth seeing, so it joins the derived group in the
+ * editor. `hidden` is not a value at all -- it is a switch the template reads --
+ * so it is suppressed entirely rather than offered as a box to type into.
+ */
+export function derivedSlotField(key: string): "show" | "suppress" | null {
+  const match = /^product[_ -]?\d+[_ -]?(member[_ -]?price|hidden)$/i.exec(key.trim());
+  if (!match) return null;
+  return /hidden/i.test(match[1]) ? "suppress" : "show";
+}
+
 /** Museum of Graffiti's membership saving, and a sane default elsewhere. */
 const DEFAULT_DISCOUNT = 0.2;
 
@@ -148,9 +161,37 @@ function empty(values: Record<string, string>, key: string): boolean {
  * - `retail_price`, from the featured product when the row does not say
  * - `member_price`, from whichever retail figure applies
  */
+/**
+ * Whether a product slot has anything in it worth drawing.
+ *
+ * Title, image and url only. The derived fields below add a member price to any
+ * slot that has a price, so asking "is this slot used" after that would start
+ * answering yes to slots this function had already called empty.
+ */
+function slotUsed(values: Record<string, string>, slot: number): boolean {
+  return ["title", "image", "url"].some(
+    (part) => (values[`product_${slot}_${part}`] ?? "").trim() !== "",
+  );
+}
+
 export function deriveValues(values: Record<string, string>): Record<string, string> {
   const next = { ...values };
   const discount = parseDiscount(next.member_discount);
+
+  // A row of markup a template can switch off.
+  //
+  // CSS cannot do this one. `:empty` collapses the swatches and the badges
+  // because the value is the whole content of the element that has to go, but a
+  // ranked row has to take its numeral, its crop and its rules with it, and no
+  // selector reaches up from an empty field to the row containing it. So the
+  // decision is made here, where the values are, and arrives as a style the
+  // template drops into the row's own tag.
+  //
+  // Written before anything else is derived, and never overwritten: a slot left
+  // deliberately blank is a row that should not be there.
+  for (let slot = 1; slot <= 8; slot++) {
+    next[`product_${slot}_hidden`] = slotUsed(values, slot) ? "" : "display:none;";
+  }
 
   // Packed cells first, so anything derived from them sees the unpacked values.
   for (const packed of PACKED) {

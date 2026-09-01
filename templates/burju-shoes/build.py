@@ -413,13 +413,16 @@ def template_b() -> str:
 # C -- The Ranked List
 # ---------------------------------------------------------------------------
 def template_c() -> str:
-    # Five rows, as the design has it -- "The Five That Never Leave". A sixth
-    # was here on the theory that an unused row would collapse; it does not.
-    # An empty slot renders its numeral and an empty crop, so the count is
-    # fixed rather than a maximum, and a send with fewer than five ranked
-    # products needs a different template, not a shorter list.
+    # Six rows, of which the design's five are the common case. The sixth is a
+    # real extra rather than dead markup: an unused row carries `display:none`
+    # from `product_N_hidden`, so it leaves nothing behind -- no numeral, no
+    # empty crop, not even its rule. The switch is inline rather than a class
+    # in the <style> block because Outlook honours the one and not the other.
+    #
+    # The rule sits on the row's own top edge, so a hidden row takes its
+    # separator with it and the rows that remain stay evenly divided.
     rows = "".join(f"""
-  <tr><td class="pad" style="background:{PAPER}; padding:26px 40px;{'' if n == 1 else f' border-top:1px solid {CLOUD};'}">
+  <tr style="{{{{ product_{n}_hidden }}}}"><td class="pad" style="background:{PAPER}; padding:26px 40px;{'' if n == 1 else f' border-top:1px solid {CLOUD};'}">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
       <td class="numcol" width="64" valign="middle" style="width:64px; font-family:{DISPLAY}; font-weight:700; font-size:52px; mso-line-height-rule:exactly; line-height:42px; color:{BLUSH};">0{n}</td>
       <td width="110" valign="middle" style="width:110px;">
@@ -434,7 +437,7 @@ def template_c() -> str:
         <p style="margin:8px 0 0; font-family:{BODY}; font-weight:500; font-size:12px; mso-line-height-rule:exactly; line-height:17px; color:{INK};">{{{{ product_{n}_price }}}}</p>
       </td>
     </tr></table>
-  </td></tr>""" for n in range(1, 6))
+  </td></tr>""" for n in range(1, 7))
 
     return (
         head("The Ranked List") + promo() + masthead() +

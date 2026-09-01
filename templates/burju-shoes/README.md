@@ -6,7 +6,7 @@ Six templates covering every September send, built from the Burju design system.
 | --- | --- | --- | --- |
 | `01-hero-editorial.html` | `Hero Editorial` | 31 | single-style spotlights, hero launches |
 | `02-split-story.html` | `Split Story` | 41 | guides, Truly Nude™, fit and inclusivity |
-| `03-ranked-list.html` | `Ranked List` | 33 | top fives, best sellers, month-end roundups |
+| `03-ranked-list.html` | `Ranked List` | 44 | top fives, best sellers, month-end roundups |
 | `04-palette-block.html` | `Palette Block` | 43 | any multi-colour drop |
 | `05-campaign-chapter.html` | `Campaign Chapter` | 27 | Back To…, themed weekly editorial |
 | `06-category-lookbook.html` | `Category Lookbook` | 44 | boots, thigh highs, two-or-three-style categories |
@@ -57,7 +57,7 @@ Each template renders a **fixed** number of them, not a maximum:
 | --- | --- |
 | A Hero Editorial | 3 |
 | B Split Story | 4 |
-| C Ranked List | 5 |
+| C Ranked List | 5, or 6 — the sixth row hides itself |
 | D Palette Block | 6, two per colour band |
 | E Campaign Chapter | 5, plus the burgundy count tile |
 | F Category Lookbook | 2 tiles + the break + 6 rail |
@@ -68,9 +68,25 @@ such a row, because that silence is how a six-item ranking reached a template
 headlined "The Five That Never Leave", and how three chapter sends each carried
 a sixth product that never rendered.
 
-A row that supplies fewer is worse: an empty slot still draws its numeral and
-an empty crop. Nothing collapses a product row, so the counts above are the
-counts to fill.
+A row that supplies fewer leaves an empty tile in every template but C, whose
+ranked rows switch themselves off — see below. Elsewhere the counts above are
+the counts to fill.
+
+## A ranked row that removes itself
+
+C takes five or six. An unused row takes everything with it: its numeral, its
+crop, its rule, its padding.
+
+CSS cannot do this one. `:empty` collapses the swatches and the badges because
+the value is the whole content of the element that has to go, but a ranked row
+has to take markup with it that no field controls, and no selector reaches up
+from an empty field to the row containing it. So the decision is made in
+`deriveValues`, where the values are, and arrives as `product_N_hidden` — a
+style the row drops into its own tag. Inline, because Outlook honours an inline
+`display:none` and is unreliable with a class in the `<style>` block.
+
+`product_N_hidden` is never a column and never a box in the editor. It is a
+switch, not a value.
 
 `product_N_note` does different work per template — a colourway in A, the
 one-line reason in C, a descriptor in F — which is what lets one column serve

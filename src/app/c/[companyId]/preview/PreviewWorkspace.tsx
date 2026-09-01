@@ -34,7 +34,7 @@ import { ImagePicker } from "./ImagePicker";
 import { ProductPicker } from "./ProductPicker";
 import type { CollectionOption, ProductOption, ResolvedCollection } from "@/actions/catalog";
 import { listCollectionsAction, resolveCollectionAction } from "@/actions/catalog";
-import { DERIVED_FIELDS, deriveValues } from "@/lib/derived";
+import { DERIVED_FIELDS, derivedSlotField, deriveValues } from "@/lib/derived";
 import {
   COLLECTION_BLOCKS,
   COLLECTION_ORDERS,
@@ -423,7 +423,11 @@ export function PreviewWorkspace({
     let derivedBlock: { kind: "derived"; fields: Field[] } | null = null;
 
     for (const field of templateFields) {
-      if (DERIVED_FIELDS.includes(normalizeKey(field.key))) {
+      // A slot's own derived fields: the member price is worth showing, the
+      // row switch is not something anyone should be typing into.
+      const slotDerived = derivedSlotField(normalizeKey(field.key));
+      if (slotDerived === "suppress") continue;
+      if (slotDerived === "show" || DERIVED_FIELDS.includes(normalizeKey(field.key))) {
         if (derivedBlock) derivedBlock.fields.push(field);
         else {
           derivedBlock = { kind: "derived", fields: [field] };
