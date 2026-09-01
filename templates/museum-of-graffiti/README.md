@@ -268,14 +268,17 @@ anything.
 
 What changed from `01`:
 
-- **The masthead carries a featured item.** Under the headline and intro, on the
-  same black ground: picture left, badge, title, description, price and a
-  *Shop This* button right. It is `product_1`, so `featured_collection` still
-  feeds slots 1–4 and no product is fetched into a slot nothing renders.
+- **A featured item sits directly under the masthead, on white.** Picture left,
+  badge, title, description, price and a *Shop This* button right. The black
+  hero states the category; this states the one product the email is built
+  around, and the change of ground is what separates the two. It is
+  `product_1`, so `featured_collection` still feeds slots 1–4 and no product is
+  fetched into a slot nothing renders.
 - **The white pair is products 2 and 3**, since 1 has moved up into the
   masthead.
 - **Product 4 is a wide block** — picture left, copy right, reversed out on
-  black — rather than half of a pair. It takes `product_4_description`, which
+  black — rather than half of a pair. It is the mirror of the featured item
+  above, inverted, which is what gives the email its second beat. It takes `product_4_description`, which
   `01` has no use for.
 - **Slots 5–8 are unchanged**, so `grid_collection` behaves identically.
 
