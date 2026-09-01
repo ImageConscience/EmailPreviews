@@ -134,6 +134,18 @@ something definite to resolve against; a table cell still grows to its content.
 The mobile rule sets it back to `auto`, because once a tile is a stacked block
 that 1px would be a real one.
 
+### The image band
+
+Tiles in a row are equal height and their prices already lined up, but the
+titles did not: a shorter product photo pulled its title up behind it, so two
+tiles side by side started their text at different heights. Measured at 200px
+apart on a portrait shot beside a landscape one.
+
+Each tile image now sits in a fixed 249px band and is centred in it, so the
+title always starts in the same place whatever shape the photo is. The mobile
+rule releases the band -- stacked tiles have nothing left to line up against,
+and holding 249px across a full-width column would letterbox every picture.
+
 Outlook's rendering engine treats percentage heights on tables loosely. The
 badge band is an explicit pixel height and holds there; the title balancing is
 best-effort, and where it does not apply the layout falls back to flowing

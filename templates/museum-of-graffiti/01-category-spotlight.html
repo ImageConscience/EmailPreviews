@@ -29,6 +29,11 @@
     .col  { display:block !important; width:100% !important; height:auto !important; }
     .gut  { display:none !important; }
     .colgap { padding-bottom:26px !important; }
+    /* Stacked, the tiles are no longer side by side, so there is nothing left
+       to line up -- and holding a 249px band against a full-width column would
+       letterbox every picture. Let the image be itself again. */
+    .imgband { height:auto !important; }
+    .imgband img { max-height:none !important; width:100% !important; }
     .wrapimg { float:none !important; display:block !important; width:100% !important; max-width:100% !important; padding:0 0 16px 0 !important; }
   }
 </style>
@@ -72,8 +77,8 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
       <td class="col colgap" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_1_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_1_image }}" alt="{{ product_1_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_1_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_1_image }}" alt="{{ product_1_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td height="36" style="height:36px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_1_badge }}</span></td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_1_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_1_title }}</a></td></tr>
@@ -86,8 +91,8 @@
       <td class="gut" width="22" style="width:22px; font-size:0;">&nbsp;</td>
       <td class="col" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_2_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_2_image }}" alt="{{ product_2_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_2_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_2_image }}" alt="{{ product_2_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td height="36" style="height:36px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_2_badge }}</span></td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_2_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_2_title }}</a></td></tr>
@@ -113,8 +118,8 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
       <td class="col colgap" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_3_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_3_image }}" alt="{{ product_3_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_3_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_3_image }}" alt="{{ product_3_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td height="36" style="height:36px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_3_badge }}</span></td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_3_url }}" style="color:#ffffff; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_3_title }}</a></td></tr>
@@ -127,8 +132,8 @@
       <td class="gut" width="22" style="width:22px; font-size:0;">&nbsp;</td>
       <td class="col" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_4_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_4_image }}" alt="{{ product_4_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_4_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_4_image }}" alt="{{ product_4_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td height="36" style="height:36px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{{ accent_color }}; color:#1a1a1a; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1px; text-transform:uppercase; padding:5px 10px;">{{ product_4_badge }}</span></td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_4_url }}" style="color:#ffffff; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_4_title }}</a></td></tr>
@@ -159,8 +164,8 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
       <td class="col colgap" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_5_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_5_image }}" alt="{{ product_5_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_5_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_5_image }}" alt="{{ product_5_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_5_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_5_title }}</a></td></tr>
@@ -173,8 +178,8 @@
       <td class="gut" width="22" style="width:22px; font-size:0;">&nbsp;</td>
       <td class="col" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_6_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_6_image }}" alt="{{ product_6_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_6_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_6_image }}" alt="{{ product_6_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_6_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_6_title }}</a></td></tr>
@@ -190,8 +195,8 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
       <td class="col colgap" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_7_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_7_image }}" alt="{{ product_7_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_7_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_7_image }}" alt="{{ product_7_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_7_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_7_title }}</a></td></tr>
@@ -204,8 +209,8 @@
       <td class="gut" width="22" style="width:22px; font-size:0;">&nbsp;</td>
       <td class="col" width="249" valign="top" style="width:249px; height:1px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td style="background:#f6f6f4; font-size:0; line-height:0;">
-          <a href="{{ product_8_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_8_image }}" alt="{{ product_8_title }}" width="249" style="width:100%; max-width:100%; display:block; border:0;"></a>
+        <tr><td class="imgband" height="249" align="center" style="height:249px; background:#f6f6f4; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{ product_8_url }}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{ product_8_image }}" alt="{{ product_8_title }}" width="249" style="width:auto; max-width:100%; max-height:249px; display:inline-block; border:0;"></a>
         </td></tr>
 <tr><td style="height:12px; font-size:0; line-height:12px;">&nbsp;</td></tr>
         <tr><td style="height:100%; padding:8px 0 6px; vertical-align:top;"><a href="{{ product_8_url }}" style="color:#1a1a1a; text-decoration:none; display:block; font-family:'Oswald','Arial Narrow',Arial,sans-serif; font-weight:600; font-size:14px; line-height:1.15; letter-spacing:0.3px; text-transform:uppercase;">{{ product_8_title }}</a></td></tr>
