@@ -81,6 +81,52 @@ export function memberPrice(retail: string, discount = DEFAULT_DISCOUNT): string
   return `${money.prefix}${body}.00`;
 }
 
+/**
+ * Cells that hold a small list rather than one value.
+ *
+ * A colour range is eight swatches and a palette send is three colour bands,
+ * which as separate columns is twenty spreadsheet headings for two ideas -- on
+ * a sheet that has to carry six templates at once, that is most of the width
+ * for the least of the content. Packing each into one cell keeps the sheet
+ * readable; unpacking here keeps the templates flat, the same trade the
+ * collection blocks make.
+ */
+interface PackedField {
+  /** The cell someone fills in. */
+  cell: string;
+  /** What it expands into: `${prefix}${n}${suffix}` for a list, or named parts. */
+  expand: (value: string) => Record<string, string>;
+}
+
+/** "a, b, c" -> swatch_1, swatch_2, swatch_3. */
+function splitList(value: string, prefix: string, max: number): Record<string, string> {
+  const parts = value.split(",").map((part) => part.trim());
+  const out: Record<string, string> = {};
+  for (let i = 0; i < max; i++) out[`${prefix}${i + 1}`] = parts[i] ?? "";
+  return out;
+}
+
+/** "Name | Count | Note | #hex" -> the four band fields. */
+function splitBand(value: string, n: number): Record<string, string> {
+  const [name = "", count = "", note = "", color = ""] = value.split("|").map((p) => p.trim());
+  return {
+    [`band_${n}_name`]: name,
+    [`band_${n}_count`]: count,
+    [`band_${n}_note`]: note,
+    [`band_${n}_color`]: color,
+  };
+}
+
+const PACKED: PackedField[] = [
+  { cell: "swatches", expand: (v) => splitList(v, "swatch_", 8) },
+  { cell: "band_1", expand: (v) => splitBand(v, 1) },
+  { cell: "band_2", expand: (v) => splitBand(v, 2) },
+  { cell: "band_3", expand: (v) => splitBand(v, 3) },
+];
+
+/** The cells a sheet can carry instead of the fields they expand into. */
+export const PACKED_FIELDS = PACKED.map((p) => p.cell);
+
 /** Blank, or whitespace only. */
 function empty(values: Record<string, string>, key: string): boolean {
   return (values[key] ?? "").trim() === "";
@@ -96,6 +142,18 @@ function empty(values: Record<string, string>, key: string): boolean {
 export function deriveValues(values: Record<string, string>): Record<string, string> {
   const next = { ...values };
   const discount = parseDiscount(next.member_discount);
+
+  // Packed cells first, so anything derived from them sees the unpacked values.
+  for (const packed of PACKED) {
+    const raw = (next[packed.cell] ?? "").trim();
+    if (!raw) continue;
+    for (const [key, value] of Object.entries(packed.expand(raw))) {
+      // A field written out in full still wins over the packed cell. Short
+      // lists set the remainder to "" rather than leaving it unset, so an
+      // unused swatch reads as a blank slot rather than an unmatched field.
+      if (empty(next, key)) next[key] = value;
+    }
+  }
 
   for (let slot = 1; slot <= 8; slot++) {
     const price = (next[`product_${slot}_price`] ?? "").trim();

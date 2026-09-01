@@ -299,8 +299,13 @@ def template_a() -> str:
 # B -- Split Story
 # ---------------------------------------------------------------------------
 def template_b() -> str:
+    # The hex sits inside the cell as its own (invisible) content, which is what
+    # makes emptiness detectable: `:empty` cannot see an unset background, but it
+    # can see a cell with no text. font-size:0 keeps the value from printing.
+    # The 30px stands above the swatches rather than on the row, so a send with
+    # no colour range collapses the gap along with the swatches.
     swatches = "".join(
-        f"""<td width="65" style="width:65px; padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="swatch" height="46" style="height:46px; background:{{{{ swatch_{i} }}}}; font-size:0; line-height:0;">&nbsp;</td></tr></table></td>"""
+        f"""<td width="65" style="width:65px; padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="swatch" height="46" style="height:46px; background:{{{{ swatch_{i} }}}}; font-size:0; mso-line-height-rule:exactly; line-height:0; color:transparent;">{{{{ swatch_{i} }}}}</td></tr></table></td>"""
         for i in range(1, 9))
     points = "".join(f"""
           <tr><td style="padding:{'0' if i == 1 else '20px'} 0 0;">
@@ -318,8 +323,8 @@ def template_b() -> str:
         f"""
   <!-- Optional swatch row. Omitted by leaving the cells empty -- the .swatch
        rule collapses an empty block rather than printing a black square. -->
-  <tr><td style="background:{PAPER}; padding:30px 0 0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{swatches}</tr></table>
+  <tr><td style="background:{PAPER}; padding:0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;"><tr>{swatches}</tr></table>
   </td></tr>
 
   <!-- The split: picture one side, three numbered points the other. -->
