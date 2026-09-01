@@ -167,6 +167,34 @@ export function displayPrice(price: string | null | undefined): string {
   return /^[0-9]/.test(text) ? `$${text}` : text;
 }
 
+/**
+ * How much product copy a tile will take before it stops being a tile.
+ *
+ * Shopify descriptions run to whole spec sheets, and a featured slot is a
+ * paragraph beside a photo. Klaviyo's own template cut at the same 300.
+ */
+export const DESCRIPTION_LIMIT = 300;
+
+/**
+ * Trim to the limit at a word boundary, with an ellipsis.
+ *
+ * Only ever applied to text coming out of the catalogue. A description typed
+ * into the cell is left exactly as written -- someone who wrote 400 words of
+ * copy meant them, and silently cutting it would be the app overruling the
+ * person using it.
+ */
+export function summarize(text: string, limit = DESCRIPTION_LIMIT): string {
+  const clean = (text ?? "").trim();
+  if (clean.length <= limit) return clean;
+
+  const cut = clean.slice(0, limit);
+  const lastSpace = cut.lastIndexOf(" ");
+  // A limit that lands mid-word backs up to the last space, unless that would
+  // throw away most of the text (a single very long token).
+  const body = lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return `${body.replace(/[\s,;:.\u2014\u2013-]+$/, "")}\u2026`;
+}
+
 export interface FillProduct {
   title: string;
   price: string | null;
@@ -210,7 +238,7 @@ export function applyFill(
     next[keys.price] = displayPrice(product.price);
     next[keys.url] = product.url;
     next[keys.image] = product.imageUrl ?? "";
-    next[keys.description] = product.description ?? "";
+    next[keys.description] = summarize(product.description ?? "");
   }
 
   return next;

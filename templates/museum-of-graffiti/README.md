@@ -219,3 +219,18 @@ where the saving differs from the default.
 
 The derivation runs after the collection blocks fill their slots, so a tile
 taken from the catalogue prices itself.
+
+## Descriptions come from the shop
+
+`product_N_description` is filled from the product's own copy — Shopify's
+`body_html`, "Body (html)" in the admin — flattened to plain text, since the
+templates render descriptions through the escaping placeholder and markup would
+print as tags.
+
+Catalogue copy is capped at 300 characters, cut at a word boundary with an
+ellipsis. Shopify descriptions run to whole spec sheets and a featured slot is
+a paragraph beside a photo; Klaviyo's own template cut at the same number.
+
+The cap applies only to text arriving from the catalogue. A description typed
+into the cell is left exactly as written, however long — someone who wrote it
+meant it.

@@ -42,6 +42,7 @@ import {
   applyFill,
   displayPrice,
   formatCollectionSpec,
+  summarize,
   parseCollectionSpec,
 } from "@/lib/collection-spec";
 import type { ApprovalView } from "@/lib/approval";
@@ -147,7 +148,7 @@ function productFill(group: string, product: ProductOption): Record<string, stri
     [`${group}_title`]: product.title,
     [`${group}_price`]: displayPrice(product.price),
     [`${group}_url`]: product.url,
-    [`${group}_description`]: product.description ?? "",
+    [`${group}_description`]: summarize(product.description ?? ""),
   };
 }
 
