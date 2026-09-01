@@ -1808,9 +1808,8 @@ function ProductTile({
   // A slot with no cells of its own, standing on what a collection block put
   // there. Worth saying out loud: the tile would otherwise read "Empty slot"
   // while the preview beside it shows a product.
-  const fromCollection =
-    fields.every((field) => (draft[field.key] ?? "").trim() === "") &&
-    Boolean(shownOf("title"));
+  const hasOwnValues = fields.some((field) => (draft[field.key] ?? "").trim() !== "");
+  const fromCollection = !hasOwnValues && Boolean(shownOf("title"));
 
   const title = shownOf("title");
   const image = shownOf("image");
@@ -1840,13 +1839,34 @@ function ProductTile({
             {changed ? " · edited" : ""}
           </span>
         </span>
-        <button
-          type="button"
-          className="btn btn-sm btn-primary"
-          onClick={() => setPicking(true)}
-        >
-          {fromCollection ? "Pin one" : title ? "Replace" : "Choose product"}
-        </button>
+        <span className="tile-actions">
+          {hasOwnValues && (
+            /*
+             * Emptying a slot is a real action, not just a tidy-up: a collection
+             * block only fills slots that are empty, so a tile someone filled
+             * earlier is what stops the collection reaching it. Without this the
+             * only way back was clearing four or five boxes by hand.
+             */
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              title="Empty this slot — a collection block can then fill it"
+              onClick={() => {
+                for (const field of fields) onChangeField(field.key, "");
+                setOpen(false);
+              }}
+            >
+              Clear
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            onClick={() => setPicking(true)}
+          >
+            {fromCollection ? "Pin one" : title ? "Replace" : "Choose product"}
+          </button>
+        </span>
       </div>
 
       <button type="button" className="tile-toggle" onClick={() => setOpen((was) => !was)}>

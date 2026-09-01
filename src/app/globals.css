@@ -744,6 +744,8 @@ input:focus, select:focus, textarea:focus {
 .tile.is-changed { box-shadow: inset 3px 0 0 var(--accent); }
 
 .tile-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+/* Clear sits beside Replace, kept together so the pair reads as one control. */
+.tile-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
 .tile-thumb {
   flex: 0 0 44px;
   width: 44px;
