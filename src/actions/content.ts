@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { AuthError, requireCompanyAccess } from "@/lib/auth";
 import { extractPlaceholders } from "@/lib/template";
 import { parseSheetFile } from "@/lib/sheet";
+import { takeHiddenFlags } from "@/lib/sheet-export";
 import { parseRecord, parseStringArray } from "@/lib/json";
 
 export interface FormState {
@@ -127,7 +128,10 @@ export async function uploadSheetAction(
 
     const worksheet = (formData.get("worksheet") as string | null)?.trim() || undefined;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = await parseSheetFile(file.name, buffer, worksheet);
+    // A file this app exported carries the hidden flags in a reserved column.
+    // Take them off before anything else looks at the sheet, so the flag never
+    // becomes a column of its own or a field a template can see.
+    const parsed = takeHiddenFlags(await parseSheetFile(file.name, buffer, worksheet));
 
     if (parsed.columns.length === 0) {
       return { error: "That file has no header row, so there are no fields to map." };
@@ -151,6 +155,12 @@ export async function uploadSheetAction(
             position: index,
             data: JSON.stringify(data),
             createdById: access.user.id,
+            // A row that was hidden when it was exported stays hidden. The
+            // importer is recorded as having hidden it, since re-importing the
+            // flag is the act that hides it here.
+            ...(parsed.hidden[index]
+              ? { hiddenAt: new Date(), hiddenById: access.user.id }
+              : {}),
           })),
         },
       },

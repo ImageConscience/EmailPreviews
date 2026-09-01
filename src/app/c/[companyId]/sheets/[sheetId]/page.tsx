@@ -47,6 +47,22 @@ export default async function SheetPage({
           </p>
         </div>
         <div className="spacer" />
+        {/* Plain links rather than buttons: these are downloads, and a link is
+            the one control a browser already knows how to save a file from. */}
+        <a
+          href={`/api/c/${companyId}/sheets/${sheet.id}/export?format=xlsx`}
+          className="btn"
+          title="Every row and column, as a workbook that uploads straight back"
+        >
+          Export .xlsx
+        </a>
+        <a
+          href={`/api/c/${companyId}/sheets/${sheet.id}/export?format=csv`}
+          className="btn"
+          title="Every row and column, as CSV"
+        >
+          Export .csv
+        </a>
         <Link href={`/c/${companyId}/preview?sheet=${sheet.id}`} className="btn btn-primary">
           Open in preview
         </Link>
