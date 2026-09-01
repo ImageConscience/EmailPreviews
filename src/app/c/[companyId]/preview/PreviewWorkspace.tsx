@@ -34,6 +34,7 @@ import { ImagePicker } from "./ImagePicker";
 import { ProductPicker } from "./ProductPicker";
 import type { CollectionOption, ProductOption, ResolvedCollection } from "@/actions/catalog";
 import { listCollectionsAction, resolveCollectionAction } from "@/actions/catalog";
+import { deriveValues } from "@/lib/derived";
 import {
   COLLECTION_BLOCKS,
   COLLECTION_ORDERS,
@@ -599,7 +600,8 @@ export function PreviewWorkspace({
       const fill = fills[block.field];
       if (fill?.products.length) next = applyFill(next, block.slots, fill.products);
     }
-    return next;
+    // After the fills, so a tile taken from the catalogue prices itself.
+    return deriveValues(next);
   }, [draft, fills]);
 
   const result = useMemo(() => {
@@ -1218,6 +1220,7 @@ export function PreviewWorkspace({
                     changed={
                       (draft[block.field.key] ?? "") !== (baseline[block.field.key] ?? "")
                     }
+                    derived={values[block.field.key]}
                     onChange={(value) =>
                       setDraft((previous) => ({ ...previous, [block.field.key]: value }))
                     }
@@ -1444,6 +1447,7 @@ export function PreviewWorkspace({
                         field={field}
                         value={draft[field.key] ?? ""}
                         changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
+                        derived={values[field.key]}
                         onChange={(value) =>
                           setDraft((previous) => ({ ...previous, [field.key]: value }))
                         }
@@ -1546,14 +1550,18 @@ function FieldRow({
   value,
   changed,
   onChange,
+  derived,
 }: {
   companyId: string;
   field: Field;
   value: string;
   changed: boolean;
   onChange: (value: string) => void;
+  /** What the preview is using while this cell is empty, if anything. */
+  derived?: string;
 }) {
   const [picking, setPicking] = useState(false);
+  const showDerived = Boolean(derived) && value.trim() === "";
   // Plenty of image CDNs serve extensionless URLs, so rather than guess from
   // the URL alone, every URL value is probed by actually loading it. A probe
   // that succeeds is an image and gets a thumbnail; one that fails only raises
@@ -1611,6 +1619,13 @@ function FieldRow({
         onChange={(e) => onChange(e.target.value)}
         spellCheck={!looksLikeUrl(value)}
       />
+
+      {showDerived && (
+        <div className="hint">
+          Empty, so the preview is using <strong>{derived}</strong>, worked out from the
+          product. Type a value to override it.
+        </div>
+      )}
 
       {isUrl && (
         <>

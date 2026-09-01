@@ -198,3 +198,24 @@ What differs from `03`:
 `product_5…8_{image,title,price,url,badge}` `footer_cta_url` `footer_cta_text`.
 
 Name it `Tee Membership` when pasting it in.
+
+## Prices are worked out, not typed
+
+`retail_price` and `member_price` are placeholders in both tee templates, but
+neither has to be filled in. When they are blank the app derives them:
+
+- **`retail_price`** takes the featured product's own price, so it is whatever
+  the shop says the shirt costs.
+- **`member_price`** is retail less the membership discount — 20% by default —
+  rounded to whole dollars and rendered with a trailing `.00`. $45.00 becomes
+  $36.00, and $49.99 becomes $40.00 rather than $39.99, because a membership
+  price ending in .99 reads as a markdown rather than a benefit.
+- **`product_N_member_price`** is available for every slot, on the same rule.
+
+Anything typed into the cell wins, so a shirt sold at a price no formula would
+produce still works, and the sends already in the sheet are untouched. A row
+can also carry `member_discount` (`20%`, `20` and `0.2` are all read the same)
+where the saving differs from the default.
+
+The derivation runs after the collection blocks fill their slots, so a tile
+taken from the catalogue prices itself.
