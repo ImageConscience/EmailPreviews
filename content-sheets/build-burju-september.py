@@ -76,8 +76,9 @@ COLUMNS = (
      "hero_image", "detail_image", "detail_title", "detail_body",
      "section_label", "section_count",
      "point_1_title", "point_1_body", "point_2_title", "point_2_body", "point_3_title", "point_3_body",
-     "swatches", "band_1", "band_2", "band_3"]
-    + [f"product_{n}_{f}" for n in range(1, 10) for f in ("image", "title", "price", "url", "note")]
+     "swatches", "band_1", "band_2", "band_3",
+     "break_image", "break_title", "break_note", "break_url"]
+    + [f"product_{n}_{f}" for n in range(1, 9) for f in ("image", "title", "price", "url", "note")]
     + ["product_1_badge", "product_2_badge"]
 )
 
@@ -99,6 +100,21 @@ def send(**kw) -> dict:
     row["send_time"] = "10:00"
     row["promo_line"] = SHIP
     products = kw.pop("products", [])
+    # The lookbook argues two styles side by side, then breaks full-bleed to a
+    # third before the colourway rail. That third is a campaign frame rather
+    # than a tile, so it comes out of the product list and into its own fields.
+    if kw.get("template") == "Category Lookbook" and len(products) > 2:
+        key = products[2]
+        note = key[1] if isinstance(key, tuple) and len(key) > 1 else ""
+        title, price, handle, img = CAT[key[0] if isinstance(key, tuple) else key]
+        row["break_image"] = CDN + img
+        row["break_title"] = title
+        # The caption sits on one line beside a 22px title, so it takes a
+        # descriptor and a price -- not the sentence a rail tile would carry.
+        short = note.split(".")[0].split(",")[0].strip()
+        row["break_note"] = f"{short} \u00b7 ${price}" if 0 < len(short) <= 34 else f"${price}"
+        row["break_url"] = P + handle
+        products = products[:2] + products[3:]
     row.update(kw)
     for n, spec in enumerate(products, 1):
         prod(row, n, *spec) if isinstance(spec, tuple) else prod(row, n, spec)

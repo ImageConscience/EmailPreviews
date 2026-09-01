@@ -3,15 +3,19 @@
 Build the six Burju Shoes email templates.
 
 They are generated rather than hand-written because the chrome is the point:
-the promo bar, wordmark, nav, footer and the two button styles are identical in
-every send, and the brief is explicit that only the middle stack changes. Six
+the promo bar, logo, nav, footer and the two button styles are identical in
+every send, and the design is explicit that only the middle stack changes. Six
 hand-maintained copies of that frame would drift within a month. Here the frame
 exists once and each template is only its own middle.
 
-Design tokens are lifted from the Burju design system: ink #111111 on paper
-#faf9f6, burgundy #590529 as the accent, Playfair Display for headlines and DM
-Sans for everything else. Red (#c8102e) is deliberately absent -- it is reserved
-for sale sends, and September has none.
+Every value below is lifted from the Burju design document rather than chosen
+here -- the colours, the tracking, the paddings, the two-line headline breaks.
+Where email cannot do what the design does (flex, grid, overlays, `gap`), the
+translation is a table with the same measurements, not a redesign.
+
+One deliberate departure: the design is a canvas at 640px because that is a
+comfortable width to look at side by side. Email sends at 600px, so the inner
+paddings hold and the tile widths are recomputed for the narrower container.
 """
 
 import re
@@ -19,17 +23,33 @@ from pathlib import Path
 
 OUT = Path(__file__).parent
 
+# --- palette ---------------------------------------------------------------
+# Burgundy is the accent and appears in the promo bar, the solid button, the
+# footer rule and the eyebrows. Red (#c8102e) is deliberately absent -- the
+# design reserves it for sale sends, and September has none.
 INK        = "#111111"
 PAPER      = "#faf9f6"
 WHITE      = "#ffffff"
-MIST       = "#f2f1ee"
-CLOUD      = "#e6e6e6"
+BURGUNDY   = "#590529"
+BLUSH      = "#e9d5de"   # light burgundy: footer ground, subheads, C numerals
+WINE       = "#8a2a52"   # the lighter burgundy, for accents that sit on ink
+MIST       = "#f2f1ee"   # image placeholder ground
+CLOUD      = "#e6e6e6"   # hairline
+HAIRLINE   = "#d8d5ce"   # the card's own border
 SMOKE      = "#7a7a7a"
 GRAPHITE   = "#4a4a4a"
-BURGUNDY   = "#590529"
+SLATE      = "#2a2a2a"   # body copy in the wide centred paragraphs
+MUTED      = "#b5b5b5"   # secondary text reversed out on ink
 
 DISPLAY = "'Playfair Display',Didot,'Bodoni 72',Georgia,serif"
 BODY    = "'DM Sans','Helvetica Neue',Helvetica,Arial,sans-serif"
+
+# The logo, hosted rather than bundled: the design carries a WebP asset, which
+# Outlook cannot render. This is Burju's own black wordmark, already in the
+# Klaviyo library and therefore reachable from a sent email. Height is set and
+# width left automatic, exactly as the design does, so the wordmark keeps its
+# own proportions whatever file ends up behind the URL.
+LOGO = "https://d3k81ch9hvuctc.cloudfront.net/company/HAJSMj/images/acd60ae3-534b-445a-8b06-beca7d64315f.png"
 
 W       = 600          # container
 PAD     = 40           # side padding
@@ -44,13 +64,13 @@ def head(title: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="x-apple-disable-message-reformatting">
-<title>Burju Shoes</title>
+<title>Burju Shoes &mdash; {title}</title>
 <!--[if mso]>
 <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
 <![endif]-->
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body {{ margin:0; padding:0; background:{PAPER}; -webkit-text-size-adjust:100%; }}
+  body {{ margin:0; padding:0; background:#e9e7e2; -webkit-text-size-adjust:100%; }}
   table {{ border-collapse:collapse; }}
   img {{ border:0; outline:none; text-decoration:none; -ms-interpolation-mode:bicubic; }}
   a {{ text-decoration:none; }}
@@ -64,8 +84,8 @@ def head(title: str) -> str:
     td {{ box-sizing:border-box !important; }}
     .wrap {{ width:100% !important; }}
     .pad  {{ padding-left:22px !important; padding-right:22px !important; }}
-    .dsp  {{ font-size:34px !important; }}
-    .dsp-sm {{ font-size:26px !important; }}
+    .dsp  {{ font-size:34px !important; line-height:34px !important; }}
+    .dsp-sm {{ font-size:24px !important; line-height:28px !important; }}
     .col  {{ display:block !important; width:100% !important; height:auto !important; }}
     .gut  {{ display:none !important; }}
     .colgap {{ padding-bottom:24px !important; }}
@@ -74,24 +94,30 @@ def head(title: str) -> str:
     .imgband {{ height:auto !important; }}
     .imgband img {{ max-height:none !important; width:100% !important; }}
     .numcol {{ width:52px !important; }}
+    /* The colour panel in D is a fixed 180px beside its products; stacked it
+       becomes a full-width header for the row it introduces. */
+    .bandcol {{ width:100% !important; display:block !important; }}
   }}
 </style>
 </head>
-<body style="margin:0; padding:0; background:{PAPER};">
+<body style="margin:0; padding:0; background:#e9e7e2;">
 <div style="display:none; font-size:0; line-height:0; max-height:0; overflow:hidden;">{{{{ preheader }}}}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{PAPER};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#e9e7e2;">
 <tr><td align="center" style="padding:0;">
-<table role="presentation" class="wrap" width="{W}" cellpadding="0" cellspacing="0" border="0" style="width:{W}px; max-width:{W}px; background:{PAPER};">
+<table role="presentation" class="wrap" width="{W}" cellpadding="0" cellspacing="0" border="0" style="width:{W}px; max-width:{W}px; background:{PAPER}; border:1px solid {HAIRLINE};">
 """
 
 
-def promo(bg: str = INK) -> str:
-    """The announcement bar. Ink on every send; burgundy only for a launch."""
+def promo() -> str:
+    """The announcement bar: burgundy on every send, without exception.
+
+    Template D differs only in what it says -- a campaign line rather than the
+    shipping line -- which is a value in the sheet, not a variant here.
+    """
     return f"""
-  <!-- PERMANENT: promo bar. Ink on every send; template D uses burgundy, which
-       the brief reserves for launch moments. -->
-  <tr><td class="pad" align="center" style="background:{bg}; padding:9px 40px;">
-    <p style="margin:0; font-family:{BODY}; font-weight:500; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.5px; text-transform:uppercase; color:{WHITE};">{{{{ promo_line }}}}</p>
+  <!-- PERMANENT: burgundy announcement bar. Identical on every send. -->
+  <tr><td align="center" style="background:{BURGUNDY}; padding:11px 16px;">
+    <p style="margin:0; font-family:{BODY}; font-weight:500; font-size:10px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:2.2px; text-transform:uppercase; color:{WHITE};">{{{{ promo_line }}}}</p>
   </td></tr>
 """
 
@@ -99,127 +125,142 @@ def promo(bg: str = INK) -> str:
 NAV_ITEMS = [("New", "new-arrivals"), ("Heels", "heels"), ("Boots", "boots"),
              ("Truly Nude&trade;", "truly-nude"), ("Sale", "sale")]
 
+FOOTER_ITEMS = [("New Arrivals", "new-arrivals"), ("Truly Nude&trade;", "truly-nude"),
+                ("Wide Fit", "wide-fit"), ("Bridal", "bridal")]
+
+
+def _links(items: list[tuple[str, str]], color: str, gap: int) -> str:
+    """A centred row of tracked caps links, with a spacer cell between each."""
+    cells = []
+    for i, (label, handle) in enumerate(items):
+        div = f'<td width="{gap}" style="width:{gap}px; font-size:0; line-height:0;">&nbsp;</td>' if i else ""
+        cells.append(f"""{div}<td align="center" style="font-family:{BODY}; font-weight:500; font-size:10px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:1.6px; text-transform:uppercase;"><a href="https://burjushoes.com/collections/{handle}" style="color:{color}; text-decoration:none;">{label}</a></td>""")
+    return "".join(cells)
+
 
 def masthead() -> str:
-    cells = []
-    for i, (label, handle) in enumerate(NAV_ITEMS):
-        gap = '<td width="18" style="width:18px; font-size:0;">&nbsp;</td>' if i else ""
-        cells.append(f"""{gap}<td style="font-family:{BODY}; font-weight:500; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.4px; text-transform:uppercase;"><a href="https://burjushoes.com/collections/{handle}" style="color:{INK}; text-decoration:none;">{label}</a></td>""")
-    nav = "".join(cells)
+    """White band: the logo, then the nav, then a hairline. One block, because
+    the design draws one border under the pair rather than under each."""
     return f"""
-  <!-- PERMANENT: wordmark and nav. Identical on every send. -->
-  <tr><td class="pad" align="center" style="background:{PAPER}; padding:26px 40px 18px;">
-    <a href="https://burjushoes.com" style="color:{INK}; text-decoration:none; font-family:{DISPLAY}; font-weight:400; font-size:30px; mso-line-height-rule:exactly; line-height:34px; letter-spacing:6px; text-transform:uppercase;">Burju</a>
-  </td></tr>
-  <tr><td class="pad" align="center" style="background:{PAPER}; padding:0 40px 20px; border-bottom:1px solid {CLOUD};">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>{nav}</tr></table>
-  </td></tr>
-"""
-
-
-def button_solid(url: str, text: str) -> str:
-    """Solid ink. Used on paper."""
-    return f"""<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td style="background:{INK};"><a href="{url}" style="color:{WHITE}; text-decoration:none; display:inline-block; padding:15px 30px; font-family:{BODY}; font-weight:700; font-size:12px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.6px; text-transform:uppercase;">{text}</a></td>
-    </tr></table>"""
-
-
-def button_outline(url: str, text: str) -> str:
-    """Outlined white. Used on the ink band."""
-    return f"""<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td style="border:1px solid {WHITE};"><a href="{url}" style="color:{WHITE}; text-decoration:none; display:inline-block; padding:14px 29px; font-family:{BODY}; font-weight:700; font-size:12px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.6px; text-transform:uppercase;">{text}</a></td>
-    </tr></table>"""
-
-
-def eyebrow(color: str = SMOKE) -> str:
-    return f"""<p style="margin:0 0 12px; font-family:{BODY}; font-weight:500; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:2.2px; text-transform:uppercase; color:{color};">{{{{ eyebrow }}}}</p>"""
-
-
-def headline(color: str, size: int = 44) -> str:
-    """Two lines, so a break can be placed deliberately rather than by wrapping."""
-    return f"""<h1 class="dsp" style="margin:0; font-family:{DISPLAY}; font-weight:400; font-size:{size}px; mso-line-height-rule:exactly; line-height:{int(size * 1.08)}px; letter-spacing:-0.5px; color:{color};">{{{{ headline_1 }}}}<br>{{{{ headline_2 }}}}</h1>"""
-
-
-def subhead(color: str) -> str:
-    """The dash-framed subhead. The dashes are fixtures of the design."""
-    return f"""<p style="margin:16px 0 0; font-family:{BODY}; font-weight:400; font-size:13px; mso-line-height-rule:exactly; line-height:18px; letter-spacing:1.4px; text-transform:uppercase; color:{color};">&ndash;&nbsp;{{{{ subhead }}}}&nbsp;&ndash;</p>"""
-
-
-def body_copy(field: str, color: str = GRAPHITE) -> str:
-    return f"""<p style="margin:18px 0 0; font-family:{BODY}; font-weight:400; font-size:15px; mso-line-height-rule:exactly; line-height:25px; color:{color};">{{{{ {field} }}}}</p>"""
-
-
-def image_band(field_img: str, field_alt: str, field_url: str, height: int, bg: str = MIST) -> str:
-    """Full-bleed hero. A fixed band so a tall shot cannot push the copy down."""
-    return f"""
-  <tr><td class="imgband" height="{height}" align="center" style="height:{height}px; background:{bg}; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
-    <a href="{{{{ {field_url} }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ {field_img} }}}}" alt="{{{{ {field_alt} }}}}" width="{W}" style="width:100%; max-width:100%; max-height:{height}px; display:block; border:0;"></a>
-  </td></tr>
-"""
-
-
-def section_head() -> str:
-    """Label on the left, count on the right, hairline under."""
-    return f"""
-  <tr><td class="pad" style="background:{PAPER}; padding:34px 40px 14px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td align="left" style="font-family:{BODY}; font-weight:500; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:2.2px; text-transform:uppercase; color:{INK};">{{{{ section_label }}}}</td>
-      <td align="right" style="font-family:{BODY}; font-weight:400; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.6px; text-transform:uppercase; color:{SMOKE};">{{{{ section_count }}}}</td>
-    </tr></table>
-  </td></tr>
-  <tr><td class="pad" style="background:{PAPER}; padding:0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid {CLOUD}; font-size:0; line-height:0;">&nbsp;</td></tr></table></td></tr>
-"""
-
-
-def tile(n: int, width: int, show_price: bool = True, show_note: bool = True,
-         band: int | None = None, on_ink: bool = False) -> str:
-    """One product cell: picture, name, optional note, optional price."""
-    band = band if band is not None else width
-    fg = WHITE if on_ink else INK
-    sub = "#b5b5b5" if on_ink else SMOKE
-    note = f"""
-        <tr><td style="padding:4px 0 0;"><p style="margin:0; font-family:{BODY}; font-weight:400; font-size:12px; mso-line-height-rule:exactly; line-height:18px; color:{sub};">{{{{ product_{n}_note }}}}</p></td></tr>""" if show_note else ""
-    price = f"""
-        <tr><td style="padding:6px 0 0;"><p style="margin:0; font-family:{BODY}; font-weight:700; font-size:13px; mso-line-height-rule:exactly; line-height:18px; color:{fg};">{{{{ product_{n}_price }}}}</p></td></tr>""" if show_price else ""
-    return f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td class="imgband" height="{band}" align="center" style="height:{band}px; background:{MIST}; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
-          <a href="{{{{ product_{n}_url }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ product_{n}_image }}}}" alt="{{{{ product_{n}_title }}}}" width="{width}" style="width:auto; max-width:100%; max-height:{band}px; display:inline-block; border:0;"></a>
-        </td></tr>
-        <tr><td style="height:100%; padding:12px 0 0; vertical-align:top;"><a href="{{{{ product_{n}_url }}}}" style="color:{fg}; text-decoration:none; display:block; font-family:{BODY}; font-weight:500; font-size:13px; mso-line-height-rule:exactly; line-height:19px; letter-spacing:0.2px;">{{{{ product_{n}_title }}}}</a></td></tr>{note}{price}
-      </table>"""
-
-
-def row(slots: list[int], width: int, gutter: int, **kw) -> str:
-    """A row of equal tiles. `height:1px` lets the inner percentage heights
-    resolve; a table cell still grows to its content."""
-    cells = []
-    for i, n in enumerate(slots):
-        gap = f'<td class="gut" width="{gutter}" style="width:{gutter}px; font-size:0;">&nbsp;</td>' if i else ""
-        cls = "col colgap" if i < len(slots) - 1 else "col"
-        cells.append(f"""{gap}<td class="{cls}" width="{width}" valign="top" style="width:{width}px; height:1px;">{tile(n, width, **kw)}</td>""")
-    return f"""
-  <tr><td class="pad" style="background:{PAPER}; padding:22px 40px 0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{"".join(cells)}</tr></table>
+  <!-- PERMANENT: logo and nav on white. Identical on every send. -->
+  <tr><td align="center" style="background:{WHITE}; padding:22px 16px 16px; border-bottom:1px solid {CLOUD};">
+    <a href="https://burjushoes.com" style="text-decoration:none;"><img src="{LOGO}" alt="Burju" height="26" style="height:26px; width:auto; display:block; margin:0 auto; border:0;"></a>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:16px auto 0;"><tr>{_links(NAV_ITEMS, INK, 22)}</tr></table>
   </td></tr>
 """
 
 
 def footer() -> str:
-    links = []
-    for i, (label, handle) in enumerate([("New Arrivals", "new-arrivals"), ("Truly Nude&trade;", "truly-nude"),
-                                         ("Wide Fit", "wide-fit"), ("Bridal", "bridal")]):
-        gap = '<td width="16" style="width:16px; font-size:0;">&nbsp;</td>' if i else ""
-        links.append(f"""{gap}<td style="font-family:{BODY}; font-weight:500; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.4px; text-transform:uppercase;"><a href="https://burjushoes.com/collections/{handle}" style="color:{WHITE}; text-decoration:none;">{label}</a></td>""")
+    """Light burgundy, a burgundy rule above it, the logo and four links.
+
+    Nothing else -- no address block, no repeated shipping line, no unsubscribe
+    sentence. Klaviyo appends its own compliance footer beneath this one, and
+    the design leaves that space for it.
+    """
     return f"""
-  <!-- PERMANENT: footer. The unsubscribe href is a placeholder because Klaviyo
-       injects the real one -- set it once per template, not once per send. -->
-  <tr><td class="pad" align="center" style="background:{INK}; padding:36px 40px 34px;">
-    <a href="https://burjushoes.com" style="color:{WHITE}; text-decoration:none; font-family:{DISPLAY}; font-weight:400; font-size:22px; mso-line-height-rule:exactly; line-height:26px; letter-spacing:5px; text-transform:uppercase;">Burju</a>
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:20px auto 0;"><tr>{"".join(links)}</tr></table>
-    <p style="margin:22px 0 0; font-family:{BODY}; font-weight:400; font-size:11px; mso-line-height-rule:exactly; line-height:18px; color:#8a8a8a;">Free shipping on all orders over $150 &middot; US &amp; Worldwide</p>
-    <p style="margin:8px 0 0; font-family:{BODY}; font-weight:400; font-size:11px; mso-line-height-rule:exactly; line-height:18px; color:#8a8a8a;">You subscribed at burjushoes.com &middot; <a href="#" style="color:#8a8a8a; text-decoration:underline;">Unsubscribe</a></p>
+  <!-- PERMANENT: footer. Klaviyo appends the compliance block below this. -->
+  <tr><td align="center" style="background:{BLUSH}; padding:34px 36px; border-top:2px solid {BURGUNDY};">
+    <a href="https://burjushoes.com" style="text-decoration:none;"><img src="{LOGO}" alt="Burju" height="22" style="height:22px; width:auto; display:block; margin:0 auto; border:0;"></a>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:20px auto 0;"><tr>{_links(FOOTER_ITEMS, BURGUNDY, 20)}</tr></table>
   </td></tr>
 """
+
+
+def button_solid(url: str, text: str) -> str:
+    """Solid burgundy. The only button that appears on paper."""
+    return f"""<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+      <td align="center" style="background:{BURGUNDY};"><a href="{url}" style="color:{WHITE}; text-decoration:none; display:inline-block; padding:15px 38px; font-family:{BODY}; font-weight:600; font-size:11px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:2.4px; text-transform:uppercase;">{text}</a></td>
+    </tr></table>"""
+
+
+def button_outline(url: str, text: str) -> str:
+    """Outlined white. The only button that appears on the ink band."""
+    return f"""<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+      <td align="center" style="border:2px solid {WHITE};"><a href="{url}" style="color:{WHITE}; text-decoration:none; display:inline-block; padding:13px 33px; font-family:{BODY}; font-weight:600; font-size:11px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:2.4px; text-transform:uppercase;">{text}</a></td>
+    </tr></table>"""
+
+
+def eyebrow(color: str = BURGUNDY, gap: str = "0 0 16px") -> str:
+    """Tracked caps above a headline. Burgundy on paper, wine on ink."""
+    return f"""<p style="margin:{gap}; font-family:{BODY}; font-weight:500; font-size:10px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:2.4px; text-transform:uppercase; color:{color};">{{{{ eyebrow }}}}</p>"""
+
+
+def headline(color: str, size: int) -> str:
+    """Playfair caps, set tight. Two fields so the break is placed rather than
+    left to wrapping -- every headline in the design breaks deliberately."""
+    return f"""<h1 class="dsp" style="margin:0; font-family:{DISPLAY}; font-weight:700; font-size:{size}px; mso-line-height-rule:exactly; line-height:{round(size * 0.98)}px; letter-spacing:-{max(1, round(size * 0.02))}px; text-transform:uppercase; color:{color};">{{{{ headline_1 }}}}<br>{{{{ headline_2 }}}}</h1>"""
+
+
+def subhead(color: str = BLUSH) -> str:
+    """The dash-framed subhead: italic, tracked, uppercase. The dashes are
+    fixtures of the design, not something a send supplies."""
+    return f"""<p style="margin:18px 0 0; font-family:{BODY}; font-weight:500; font-style:italic; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:2px; text-transform:uppercase; color:{color};">&ndash;&nbsp;{{{{ subhead }}}}&nbsp;&ndash;</p>"""
+
+
+def image_band(field_img: str, field_alt: str, field_url: str,
+               border_bottom: bool = False) -> str:
+    """Full-bleed hero: the width of the email, at whatever ratio the picture is.
+
+    No band, no letterboxing and no ground colour behind it. A fixed height is
+    the right call for a product tile, where four of them have to line up, but a
+    hero has nothing to line up against -- constraining it either crops the
+    frame or floats it in a grey box, and these are meant to be cinematic. The
+    height simply follows the file.
+    """
+    edge = f" border-bottom:1px solid {CLOUD};" if border_bottom else ""
+    return f"""
+  <tr><td align="center" style="padding:0; font-size:0; line-height:0;{edge}">
+    <a href="{{{{ {field_url} }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ {field_img} }}}}" alt="{{{{ {field_alt} }}}}" width="{W}" style="width:100%; max-width:100%; height:auto; display:block; border:0;"></a>
+  </td></tr>
+"""
+
+
+def section_head(count_field: str = "section_count", pad: str = "34px 40px 18px") -> str:
+    """Label left, count right. No rule beneath it -- the tiles below carry
+    their own edges, and a second line here reads as a divider that isn't one."""
+    return f"""
+  <tr><td class="pad" style="background:{PAPER}; padding:{pad};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td align="left" style="font-family:{BODY}; font-weight:500; font-size:10px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:2.2px; text-transform:uppercase; color:{INK};">{{{{ section_label }}}}</td>
+      <td align="right" style="font-family:{BODY}; font-weight:400; font-size:11px; mso-line-height-rule:exactly; line-height:15px; color:{SMOKE};">{{{{ {count_field} }}}}</td>
+    </tr></table>
+  </td></tr>
+"""
+
+
+def tile(n: int, width: int, band: int, show_price: bool = True,
+         show_note: bool = True, fg: str = INK, sub: str = SMOKE,
+         ground: str = MIST, edge: str = CLOUD) -> str:
+    """One product cell: picture in a fixed band, name, optional note, price."""
+    note = f"""
+        <tr><td style="padding:2px 0 0;"><p style="margin:0; font-family:{BODY}; font-weight:400; font-size:11px; mso-line-height-rule:exactly; line-height:16px; color:{sub};">{{{{ product_{n}_note }}}}</p></td></tr>""" if show_note else ""
+    price = f"""
+        <tr><td style="padding:2px 0 0;"><p style="margin:0; font-family:{BODY}; font-weight:500; font-size:12px; mso-line-height-rule:exactly; line-height:17px; color:{fg};">{{{{ product_{n}_price }}}}</p></td></tr>""" if show_price else ""
+    return f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="{band}" align="center" style="height:{band}px; background:{ground}; border:1px solid {edge}; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{{{ product_{n}_url }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ product_{n}_image }}}}" alt="{{{{ product_{n}_title }}}}" width="{width}" style="width:auto; max-width:100%; max-height:{band}px; display:inline-block; border:0;"></a>
+        </td></tr>
+        <tr><td style="height:100%; padding:9px 0 0; vertical-align:top;"><a href="{{{{ product_{n}_url }}}}" style="color:{fg}; text-decoration:none; display:block; font-family:{BODY}; font-weight:500; font-size:12px; mso-line-height-rule:exactly; line-height:17px;">{{{{ product_{n}_title }}}}</a></td></tr>{note}{price}
+      </table>"""
+
+
+def row(slots: list[int], width: int, gutter: int, pad: str = "0 40px 0", **kw) -> str:
+    """A row of equal tiles. `height:1px` lets the inner percentage heights
+    resolve; a table cell still grows to its content."""
+    cells = []
+    for i, n in enumerate(slots):
+        gap = f'<td class="gut" width="{gutter}" style="width:{gutter}px; font-size:0; line-height:0;">&nbsp;</td>' if i else ""
+        cls = "col colgap" if i < len(slots) - 1 else "col"
+        cells.append(f"""{gap}<td class="{cls}" width="{width}" valign="top" style="width:{width}px; height:1px;">{tile(n, width, **kw)}</td>""")
+    return f"""
+  <tr><td class="pad" style="background:{PAPER}; padding:{pad};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{"".join(cells)}</tr></table>
+  </td></tr>
+"""
+
+
+def spacer(h: int, bg: str = PAPER) -> str:
+    return f"""  <tr><td style="background:{bg}; height:{h}px; font-size:0; mso-line-height-rule:exactly; line-height:{h}px;">&nbsp;</td></tr>\n"""
 
 
 TAIL = """
@@ -231,28 +272,48 @@ TAIL = """
 """
 
 
-def ink_band(size: int = 44, with_eyebrow: bool = True, with_subhead: bool = True,
-             with_cta: bool = True, bg: str = INK) -> str:
-    """Headline reversed out on ink, with the outlined button."""
-    parts = [eyebrow("#b5b5b5") if with_eyebrow else "", headline(WHITE, size)]
+def ink_band(size: int, eyebrow_color: str | None = None, with_subhead: bool = True,
+             with_cta: bool = True, pad: str = "46px 40px") -> str:
+    """Headline reversed out on ink, centred, with the outlined button.
+
+    The eyebrow is optional because only C opens with one -- A, D and E go
+    straight to the headline.
+    """
+    parts = []
+    if eyebrow_color:
+        parts.append(eyebrow(eyebrow_color, "0 0 16px"))
+    parts.append(headline(WHITE, size))
     if with_subhead:
-        parts.append(subhead("#b5b5b5"))
+        parts.append(subhead())
     if with_cta:
-        parts.append(f"""<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;"><tr><td>{button_outline("{{ cta_url }}", "{{ cta_text }}")}</td></tr></table>""")
+        parts.append(f"""<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:26px auto 0;"><tr><td align="center">{button_outline("{{ cta_url }}", "{{ cta_text }}")}</td></tr></table>""")
     return f"""
-  <tr><td class="pad" align="left" style="background:{bg}; padding:44px 40px 46px;">
+  <tr><td class="pad" align="center" style="background:{INK}; padding:{pad}; text-align:center;">
     {"".join(parts)}
   </td></tr>
 """
 
 
-def paper_head(size: int = 44) -> str:
-    """Headline on paper -- template B and F open this way."""
+def paper_head(size: int, pad: str = "46px 40px 34px") -> str:
+    """Headline on paper, centred -- templates B and F open this way. The intro
+    is held narrower than the column, as the design does, so it reads as a
+    stand-first rather than a full-width paragraph."""
     return f"""
-  <tr><td class="pad" align="left" style="background:{PAPER}; padding:38px 40px 0;">
-    {eyebrow(SMOKE)}
+  <tr><td class="pad" align="center" style="background:{PAPER}; padding:{pad}; text-align:center;">
+    {eyebrow(BURGUNDY, "0 0 14px")}
     {headline(INK, size)}
-    {body_copy("intro")}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:14px auto 0;"><tr><td align="center" style="max-width:430px;">
+      <p style="margin:0; font-family:{BODY}; font-weight:400; font-size:14px; mso-line-height-rule:exactly; line-height:25px; color:{GRAPHITE};">{{{{ intro }}}}</p>
+    </td></tr></table>
+  </td></tr>
+"""
+
+
+def centred_copy(field: str, pad: str) -> str:
+    """The one wide paragraph a template is allowed. 15px on 27, near-black."""
+    return f"""
+  <tr><td class="pad" align="center" style="background:{PAPER}; padding:{pad}; text-align:center;">
+    <p style="margin:0; font-family:{BODY}; font-weight:400; font-size:15px; mso-line-height-rule:exactly; line-height:27px; color:{SLATE};">{{{{ {field} }}}}</p>
   </td></tr>
 """
 
@@ -262,36 +323,27 @@ def paper_head(size: int = 44) -> str:
 # ---------------------------------------------------------------------------
 def template_a() -> str:
     return (
-        head("Hero Editorial") + promo() + masthead() + ink_band() +
-        image_band("hero_image", "headline_1", "cta_url", 400) +
-        f"""
-  <tr><td class="pad" style="background:{PAPER}; padding:32px 40px 0;">
-    {body_copy("intro")}
-  </td></tr>
-""" +
-        section_head() +
-        row([1, 2, 3], 160, 20) +
+        head("Hero Editorial") + promo() + masthead() +
+        ink_band(52) +
+        image_band("hero_image", "headline_1", "cta_url") +
+        centred_copy("intro", "40px 56px 32px") +
+        section_head(pad="0 40px 18px") +
+        row([1, 2, 3], 160, 16, band=200, pad="0 40px 40px") +
         f"""
   <!-- The detail split: a crop of the construction beside the note that
        explains it. This is what makes A editorial rather than a product grid. -->
-  <tr><td class="pad" style="background:{PAPER}; padding:38px 40px 0;">
+  <tr><td style="background:{PAPER}; padding:0; border-top:1px solid {CLOUD};">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td class="col colgap" width="240" valign="top" style="width:240px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-          <tr><td class="imgband" height="240" align="center" style="height:240px; background:{MIST}; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
-            <img src="{{{{ detail_image }}}}" alt="{{{{ detail_title }}}}" width="240" style="width:auto; max-width:100%; max-height:240px; display:inline-block; border:0;">
-          </td></tr>
-        </table>
+      <td class="col" width="300" valign="middle" style="width:300px; padding:0; font-size:0; line-height:0; border-right:1px solid {CLOUD};">
+        <img src="{{{{ detail_image }}}}" alt="{{{{ detail_title }}}}" width="300" style="width:100%; max-width:100%; height:auto; display:block; border:0;">
       </td>
-      <td class="gut" width="24" style="width:24px; font-size:0;">&nbsp;</td>
-      <td class="col" width="256" valign="top" style="width:256px;">
-        <h2 class="dsp-sm" style="margin:0; font-family:{DISPLAY}; font-weight:400; font-size:26px; mso-line-height-rule:exactly; line-height:32px; color:{INK};">{{{{ detail_title }}}}</h2>
-        <p style="margin:14px 0 0; font-family:{BODY}; font-weight:400; font-size:14px; mso-line-height-rule:exactly; line-height:23px; color:{GRAPHITE};">{{{{ detail_body }}}}</p>
-        <p style="margin:18px 0 0; font-family:{BODY}; font-weight:700; font-size:12px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.4px; text-transform:uppercase;"><a href="{{{{ secondary_url }}}}" style="color:{INK}; text-decoration:underline;">{{{{ secondary_text }}}}</a></p>
+      <td class="col" width="238" valign="middle" style="width:238px; padding:30px;">
+        <p style="margin:0 0 12px; font-family:{BODY}; font-weight:500; font-size:10px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:2.4px; text-transform:uppercase; color:{BURGUNDY};">{{{{ detail_title }}}}</p>
+        <p style="margin:0; font-family:{BODY}; font-weight:400; font-size:13px; mso-line-height-rule:exactly; line-height:22px; color:{GRAPHITE};">{{{{ detail_body }}}}</p>
+        <p style="margin:16px 0 0; font-family:{BODY}; font-weight:600; font-size:11px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:1.6px; text-transform:uppercase;"><a href="{{{{ secondary_url }}}}" style="color:{INK}; text-decoration:none; border-bottom:1px solid {INK}; padding-bottom:3px;">{{{{ secondary_text }}}}</a></p>
       </td>
     </tr></table>
   </td></tr>
-  <tr><td style="height:38px; font-size:0; line-height:38px;">&nbsp;</td></tr>
 """ + footer() + TAIL)
 
 
@@ -302,53 +354,52 @@ def template_b() -> str:
     # The hex sits inside the cell as its own (invisible) content, which is what
     # makes emptiness detectable: `:empty` cannot see an unset background, but it
     # can see a cell with no text. font-size:0 keeps the value from printing.
-    # The 30px stands above the swatches rather than on the row, so a send with
-    # no colour range collapses the gap along with the swatches.
+    # The design letters each shade, but those labels are its own placeholder
+    # art, and the shades themselves come from the sheet -- white lettering
+    # vanishes on a pale nude and black vanishes on the darkest. The band of
+    # colour carries the range on its own.
     swatches = "".join(
-        f"""<td width="65" style="width:65px; padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="swatch" height="46" style="height:46px; background:{{{{ swatch_{i} }}}}; font-size:0; mso-line-height-rule:exactly; line-height:0; color:transparent;">{{{{ swatch_{i} }}}}</td></tr></table></td>"""
+        f"""<td width="74" style="width:74px; padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="swatch" height="84" align="center" valign="bottom" style="height:84px; background:{{{{ swatch_{i} }}}}; mso-line-height-rule:exactly; line-height:0; padding-bottom:8px;"><span style="font-size:0; line-height:0; color:transparent;">{{{{ swatch_{i} }}}}</span></td></tr></table></td>"""
         for i in range(1, 9))
     points = "".join(f"""
-          <tr><td style="padding:{'0' if i == 1 else '20px'} 0 0;">
+          <tr><td style="padding:{'0' if i == 1 else '24px'} 0 0;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-              <td class="numcol" width="40" valign="top" style="width:40px; font-family:{DISPLAY}; font-weight:400; font-size:26px; mso-line-height-rule:exactly; line-height:28px; color:{BURGUNDY};">0{i}</td>
+              <td class="numcol" width="36" valign="top" style="width:36px; font-family:{DISPLAY}; font-weight:700; font-size:22px; mso-line-height-rule:exactly; line-height:22px; color:{WINE};">0{i}</td>
               <td valign="top">
-                <p style="margin:0; font-family:{BODY}; font-weight:700; font-size:14px; mso-line-height-rule:exactly; line-height:20px; color:{INK};">{{{{ point_{i}_title }}}}</p>
-                <p style="margin:5px 0 0; font-family:{BODY}; font-weight:400; font-size:13px; mso-line-height-rule:exactly; line-height:21px; color:{GRAPHITE};">{{{{ point_{i}_body }}}}</p>
+                <p style="margin:0 0 5px; font-family:{BODY}; font-weight:600; font-size:12px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.2px; text-transform:uppercase; color:{WHITE};">{{{{ point_{i}_title }}}}</p>
+                <p style="margin:0; font-family:{BODY}; font-weight:400; font-size:12px; mso-line-height-rule:exactly; line-height:19px; color:{MUTED};">{{{{ point_{i}_body }}}}</p>
               </td>
             </tr></table>
           </td></tr>""" for i in (1, 2, 3))
 
     return (
-        head("Split Story") + promo() + masthead() + paper_head() +
+        head("Split Story") + promo() + masthead() + paper_head(46) +
         f"""
-  <!-- Optional swatch row. Omitted by leaving the cells empty -- the .swatch
-       rule collapses an empty block rather than printing a black square. -->
-  <tr><td style="background:{PAPER}; padding:0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;"><tr>{swatches}</tr></table>
+  <!-- Optional shade row. Omitted by leaving the cells empty -- the .swatch
+       rule collapses an empty block rather than printing eight black squares. -->
+  <tr><td style="background:{PAPER}; padding:0; border-top:1px solid {CLOUD};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{swatches}</tr></table>
   </td></tr>
 
-  <!-- The split: picture one side, three numbered points the other. -->
-  <tr><td class="pad" style="background:{PAPER}; padding:34px 40px 0;">
+  <!-- The split: picture one side, three numbered points on ink the other. -->
+  <tr><td style="background:{PAPER}; padding:0; border-top:1px solid {CLOUD}; border-bottom:1px solid {CLOUD};">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td class="col colgap" width="232" valign="top" style="width:232px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-          <tr><td class="imgband" height="300" align="center" style="height:300px; background:{MIST}; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
-            <img src="{{{{ hero_image }}}}" alt="{{{{ headline_1 }}}}" width="232" style="width:auto; max-width:100%; max-height:300px; display:inline-block; border:0;">
-          </td></tr>
-        </table>
+      <!-- Half-width hero, still a hero: it fills its column at its own ratio
+           rather than sitting inside a 340px letterbox. -->
+      <td class="col" width="320" valign="top" style="width:320px; padding:0; font-size:0; line-height:0; border-right:1px solid {CLOUD};">
+        <img src="{{{{ hero_image }}}}" alt="{{{{ headline_1 }}}}" width="320" style="width:100%; max-width:100%; height:auto; display:block; border:0;">
       </td>
-      <td class="gut" width="24" style="width:24px; font-size:0;">&nbsp;</td>
-      <td class="col" width="264" valign="top" style="width:264px;">
+      <td class="col" width="218" valign="middle" style="width:218px; background:{INK}; padding:34px 30px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{points}
         </table>
       </td>
     </tr></table>
   </td></tr>
 """ +
-        section_head() +
-        row([1, 2, 3, 4], 118, 16, show_note=False) +
+        section_head(pad="38px 40px 20px") +
+        row([1, 2, 3, 4], 118, 16, band=150, show_note=False) +
         f"""
-  <tr><td class="pad" align="center" style="background:{PAPER}; padding:36px 40px 40px;">
+  <tr><td class="pad" align="center" style="background:{PAPER}; padding:34px 40px 44px;">
     {button_solid("{{ cta_url }}", "{{ cta_text }}")}
   </td></tr>
 """ + footer() + TAIL)
@@ -358,27 +409,32 @@ def template_b() -> str:
 # C -- The Ranked List
 # ---------------------------------------------------------------------------
 def template_c() -> str:
+    # Six rows rather than the design's five: the rhythm is the same, and a send
+    # that only ranks five leaves the sixth row's cells empty and loses it.
     rows = "".join(f"""
-  <tr><td class="pad" style="background:{PAPER}; padding:{'26px' if n == 1 else '22px'} 40px 22px; border-top:1px solid {CLOUD};">
+  <tr><td class="pad" style="background:{PAPER}; padding:26px 40px;{'' if n == 1 else f' border-top:1px solid {CLOUD};'}">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td class="numcol" width="64" valign="top" style="width:64px; font-family:{DISPLAY}; font-weight:400; font-size:40px; mso-line-height-rule:exactly; line-height:42px; color:{BURGUNDY};">0{n}</td>
-      <td width="110" valign="top" style="width:110px;">
-        <a href="{{{{ product_{n}_url }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ product_{n}_image }}}}" alt="{{{{ product_{n}_title }}}}" width="110" style="width:110px; max-width:100%; display:block; border:0; background:{MIST};"></a>
+      <td class="numcol" width="64" valign="middle" style="width:64px; font-family:{DISPLAY}; font-weight:700; font-size:52px; mso-line-height-rule:exactly; line-height:42px; color:{BLUSH};">0{n}</td>
+      <td width="110" valign="middle" style="width:110px;">
+        <table role="presentation" width="110" cellpadding="0" cellspacing="0" border="0" style="width:110px;"><tr><td class="imgband" height="110" align="center" style="height:110px; width:110px; background:{MIST}; border:1px solid {CLOUD}; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{{{ product_{n}_url }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ product_{n}_image }}}}" alt="{{{{ product_{n}_title }}}}" width="108" style="width:auto; max-width:108px; max-height:108px; display:inline-block; border:0;"></a>
+        </td></tr></table>
       </td>
-      <td width="16" style="width:16px; font-size:0;">&nbsp;</td>
-      <td valign="top">
-        <a href="{{{{ product_{n}_url }}}}" style="color:{INK}; text-decoration:none; display:block; font-family:{BODY}; font-weight:700; font-size:15px; mso-line-height-rule:exactly; line-height:21px;">{{{{ product_{n}_title }}}}</a>
-        <p style="margin:6px 0 0; font-family:{BODY}; font-weight:400; font-size:13px; mso-line-height-rule:exactly; line-height:20px; color:{GRAPHITE};">{{{{ product_{n}_note }}}}</p>
-        <p style="margin:8px 0 0; font-family:{BODY}; font-weight:700; font-size:13px; mso-line-height-rule:exactly; line-height:18px; color:{INK};">{{{{ product_{n}_price }}}}</p>
+      <td width="22" style="width:22px; font-size:0; line-height:0;">&nbsp;</td>
+      <td valign="middle">
+        <a href="{{{{ product_{n}_url }}}}" style="color:{INK}; text-decoration:none; display:block; font-family:{BODY}; font-weight:600; font-size:15px; mso-line-height-rule:exactly; line-height:21px;">{{{{ product_{n}_title }}}}</a>
+        <p style="margin:6px 0 0; font-family:{BODY}; font-weight:400; font-size:12px; mso-line-height-rule:exactly; line-height:20px; color:{SMOKE};">{{{{ product_{n}_note }}}}</p>
+        <p style="margin:8px 0 0; font-family:{BODY}; font-weight:500; font-size:12px; mso-line-height-rule:exactly; line-height:17px; color:{INK};">{{{{ product_{n}_price }}}}</p>
       </td>
     </tr></table>
   </td></tr>""" for n in range(1, 7))
 
     return (
         head("The Ranked List") + promo() + masthead() +
-        ink_band(with_cta=False) + rows +
+        ink_band(50, eyebrow_color=WINE, with_cta=False, pad="50px 40px 46px") +
+        spacer(8) + rows +
         f"""
-  <tr><td class="pad" align="center" style="background:{PAPER}; padding:34px 40px 40px; border-top:1px solid {CLOUD};">
+  <tr><td class="pad" align="center" style="background:{PAPER}; padding:12px 40px 44px;">
     {button_solid("{{ cta_url }}", "{{ cta_text }}")}
   </td></tr>
 """ + footer() + TAIL)
@@ -390,28 +446,35 @@ def template_c() -> str:
 def template_d() -> str:
     bands = ""
     for b, (a_slot, b_slot) in enumerate([(1, 2), (3, 4), (5, 6)], start=1):
+        edge = f" border-top:1px solid {CLOUD};" if b == 1 else ""
         bands += f"""
-  <!-- Colour band {b}. The field names itself and carries its own pair. -->
-  <tr><td class="pad" style="background:{{{{ band_{b}_color }}}}; padding:30px 40px 12px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td align="left" style="font-family:{DISPLAY}; font-weight:400; font-size:26px; mso-line-height-rule:exactly; line-height:32px; color:{WHITE};">{{{{ band_{b}_name }}}}</td>
-      <td align="right" style="font-family:{BODY}; font-weight:500; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.8px; text-transform:uppercase; color:#e0d5da;">{{{{ band_{b}_count }}}}</td>
-    </tr></table>
-    <p style="margin:10px 0 0; font-family:{BODY}; font-weight:400; font-size:13px; mso-line-height-rule:exactly; line-height:21px; color:#e0d5da;">{{{{ band_{b}_note }}}}</p>
-  </td></tr>
-  <tr><td class="pad" style="background:{{{{ band_{b}_color }}}}; padding:18px 40px 32px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td class="col colgap" width="248" valign="top" style="width:248px; height:1px;">{tile(a_slot, 248, on_ink=True)}</td>
-      <td class="gut" width="24" style="width:24px; font-size:0;">&nbsp;</td>
-      <td class="col" width="248" valign="top" style="width:248px; height:1px;">{tile(b_slot, 248, on_ink=True)}</td>
+  <!-- Colour band {b}. The colour field names itself and carries its own pair.
+       The tint behind the products is the fifth part of the same band cell. -->
+  <tr><td style="background:{PAPER}; padding:0;{edge} border-bottom:1px solid {CLOUD};">
+    <!-- Fixed layout, or the colour name decides the column width and a band
+         called Teal gives its products more room than one called Burgundy. -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;"><tr>
+      <td class="bandcol" width="136" valign="middle" style="width:136px; background:{{{{ band_{b}_color }}}}; padding:26px 22px;">
+        <p style="margin:0; font-family:{DISPLAY}; font-weight:700; font-size:26px; mso-line-height-rule:exactly; line-height:26px; text-transform:uppercase; color:{WHITE};">{{{{ band_{b}_name }}}}</p>
+        <p style="margin:10px 0 0; font-family:{BODY}; font-weight:500; font-size:10px; mso-line-height-rule:exactly; line-height:15px; letter-spacing:1.6px; text-transform:uppercase; color:{BLUSH};">{{{{ band_{b}_count }}}}</p>
+        <p style="margin:12px 0 0; font-family:{BODY}; font-weight:400; font-size:11px; mso-line-height-rule:exactly; line-height:18px; color:{BLUSH};">{{{{ band_{b}_note }}}}</p>
+      </td>
+      <td class="bandcol" width="374" valign="top" style="width:374px; background:{{{{ band_{b}_tint }}}}; padding:22px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td class="col colgap" width="179" valign="top" style="width:179px; height:1px;">{tile(a_slot, 179, band=180, show_price=False, show_note=False, ground=WHITE)}</td>
+          <td class="gut" width="16" style="width:16px; font-size:0; line-height:0;">&nbsp;</td>
+          <td class="col" width="179" valign="top" style="width:179px; height:1px;">{tile(b_slot, 179, band=180, show_price=False, show_note=False, ground=WHITE)}</td>
+        </tr></table>
+      </td>
     </tr></table>
   </td></tr>
 """
     return (
-        head("Palette Block") + promo(BURGUNDY) + masthead() + ink_band() +
-        image_band("hero_image", "headline_1", "cta_url", 360) + bands +
+        head("Palette Block") + promo() + masthead() +
+        ink_band(48, pad="48px 40px") +
+        image_band("hero_image", "headline_1", "cta_url") + bands +
         f"""
-  <tr><td class="pad" align="center" style="background:{PAPER}; padding:36px 40px 40px;">
+  <tr><td class="pad" align="center" style="background:{PAPER}; padding:36px 40px 44px;">
     {button_solid("{{ secondary_url }}", "{{ secondary_text }}")}
   </td></tr>
 """ + footer() + TAIL)
@@ -421,83 +484,101 @@ def template_d() -> str:
 # E -- Campaign Chapter
 # ---------------------------------------------------------------------------
 def template_e() -> str:
+    # Five products and a burgundy count tile in the sixth position. The tile
+    # closes the grid rather than a sixth pair, which is what stops the chapter
+    # reading as a category page.
+    count_tile = f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
+        <tr><td class="imgband" height="170" align="center" valign="middle" style="height:170px; background:{BURGUNDY}; text-align:center; padding:16px;">
+          <p style="margin:0; font-family:{DISPLAY}; font-weight:700; font-size:30px; mso-line-height-rule:exactly; line-height:30px; color:{WHITE};">{{{{ section_count }}}}</p>
+          <p style="margin:8px 0 0; font-family:{BODY}; font-weight:600; font-size:9px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1.6px; text-transform:uppercase; color:{BLUSH};">Styles<br>In the Edit</p>
+        </td></tr>
+      </table>"""
+
+    def grid(slots: list[int], last: str | None = None) -> str:
+        entries = [tile(n, 160, band=170, show_price=False, show_note=False) for n in slots]
+        if last:
+            entries.append(last)
+        cells = []
+        for i, cell in enumerate(entries):
+            gap = '<td class="gut" width="16" style="width:16px; font-size:0; line-height:0;">&nbsp;</td>' if i else ""
+            cls = "col colgap" if i < len(entries) - 1 else "col"
+            cells.append(f"""{gap}<td class="{cls}" width="160" valign="top" style="width:160px; height:1px;">{cell}</td>""")
+        return f"""
+  <tr><td class="pad" style="background:{PAPER}; padding:0 40px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{"".join(cells)}</tr></table>
+  </td></tr>
+"""
+
     return (
-        head("Campaign Chapter") + promo() + masthead() + ink_band() +
-        image_band("hero_image", "headline_1", "cta_url", 300) +
-        f"""
-  <tr><td class="pad" style="background:{PAPER}; padding:32px 40px 0;">
-    {body_copy("intro")}
-  </td></tr>
-""" +
-        section_head() +
-        row([1, 2, 3], 160, 20, show_note=False) +
-        row([4, 5, 6], 160, 20, show_note=False) +
-        f"""
-  <!-- The count tile closes the grid: a burgundy square that states how many
-       styles are in the edit, rather than a seventh product. -->
-  <tr><td class="pad" align="center" style="background:{PAPER}; padding:34px 40px 40px;">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
-      <td align="center" style="background:{BURGUNDY}; padding:24px 40px;">
-        <p style="margin:0; font-family:{DISPLAY}; font-weight:400; font-size:38px; mso-line-height-rule:exactly; line-height:42px; color:{WHITE};">{{{{ section_count }}}}</p>
-        <p style="margin:4px 0 14px; font-family:{BODY}; font-weight:500; font-size:11px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:2.2px; text-transform:uppercase; color:#e0d5da;">Styles</p>
-        {button_outline("{{ secondary_url }}", "{{ secondary_text }}")}
-      </td>
-    </tr></table>
-  </td></tr>
-""" + footer() + TAIL)
+        head("Campaign Chapter") + promo() + masthead() +
+        ink_band(54, pad="52px 40px 46px") +
+        image_band("hero_image", "headline_1", "cta_url", border_bottom=True) +
+        centred_copy("intro", "38px 46px 32px") +
+        # The design puts a price where the other templates put a count -- the
+        # edit is one price point, so that is the number worth stating here.
+        section_head(count_field="product_1_price", pad="0 40px 18px") +
+        grid([1, 2, 3]) + spacer(16) + grid([4, 5], last=count_tile) +
+        spacer(40) + footer() + TAIL)
 
 
 # ---------------------------------------------------------------------------
 # F -- Category Lookbook
 # ---------------------------------------------------------------------------
 def template_f() -> str:
-    def big_tile(n: int) -> str:
+    def big_tile(n: int, flag: str) -> str:
         return f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%;">
-        <tr><td height="30" style="height:30px; font-size:0; line-height:0; vertical-align:bottom;"><span class="badge" style="display:inline-block; margin:0; background:{BURGUNDY}; color:{WHITE}; font-family:{BODY}; font-weight:700; font-size:10px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1.4px; text-transform:uppercase; padding:5px 10px;">{{{{ product_{n}_badge }}}}</span></td></tr>
-        <tr><td class="imgband" height="248" align="center" style="height:248px; background:{MIST}; font-size:0; line-height:0; text-align:center; vertical-align:middle; padding-top:10px;">
-          <a href="{{{{ product_{n}_url }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ product_{n}_image }}}}" alt="{{{{ product_{n}_title }}}}" width="248" style="width:auto; max-width:100%; max-height:248px; display:inline-block; border:0;"></a>
+        <tr><td class="imgband" height="280" align="center" style="height:280px; background:{MIST}; border:1px solid {CLOUD}; font-size:0; line-height:0; text-align:center; vertical-align:middle;">
+          <a href="{{{{ product_{n}_url }}}}" style="display:block; font-size:0; line-height:0; text-decoration:none;"><img src="{{{{ product_{n}_image }}}}" alt="{{{{ product_{n}_title }}}}" width="250" style="width:auto; max-width:100%; max-height:280px; display:inline-block; border:0;"></a>
         </td></tr>
-        <tr><td style="padding:14px 0 0;"><a href="{{{{ product_{n}_url }}}}" style="color:{INK}; text-decoration:none; display:block; font-family:{DISPLAY}; font-weight:400; font-size:22px; mso-line-height-rule:exactly; line-height:27px;">{{{{ product_{n}_title }}}}</a></td></tr>
-        <tr><td style="height:100%; padding:8px 0 0; vertical-align:top;"><p style="margin:0; font-family:{BODY}; font-weight:400; font-size:13px; mso-line-height-rule:exactly; line-height:21px; color:{GRAPHITE};">{{{{ product_{n}_note }}}}</p></td></tr>
-        <tr><td style="padding:10px 0 0;"><p style="margin:0; font-family:{BODY}; font-weight:700; font-size:13px; mso-line-height-rule:exactly; line-height:18px; color:{INK};">{{{{ product_{n}_price }}}}</p></td></tr>
+        <tr><td style="padding:16px 0 0;"><p class="badge" style="margin:0; font-family:{BODY}; font-weight:600; font-size:9px; mso-line-height-rule:exactly; line-height:14px; letter-spacing:1.8px; text-transform:uppercase; color:{flag};">{{{{ product_{n}_badge }}}}</p></td></tr>
+        <tr><td style="padding:6px 0 0;"><a href="{{{{ product_{n}_url }}}}" style="color:{INK}; text-decoration:none; display:block; font-family:{BODY}; font-weight:600; font-size:17px; mso-line-height-rule:exactly; line-height:23px;">{{{{ product_{n}_title }}}}</a></td></tr>
+        <tr><td style="height:100%; padding:6px 0 0; vertical-align:top;"><p style="margin:0; font-family:{BODY}; font-weight:400; font-size:12px; mso-line-height-rule:exactly; line-height:20px; color:{SMOKE};">{{{{ product_{n}_note }}}}</p></td></tr>
+        <tr><td style="padding:10px 0 0;"><p style="margin:0; font-family:{BODY}; font-weight:500; font-size:13px; mso-line-height-rule:exactly; line-height:18px; color:{INK};">{{{{ product_{n}_price }}}}</p></td></tr>
       </table>"""
 
     rail = ""
-    for start in (4, 7):
+    for start in (3, 6):
         cells = []
         for i, n in enumerate(range(start, start + 3)):
-            gap = '<td class="gut" width="16" style="width:16px; font-size:0;">&nbsp;</td>' if i else ""
+            gap = '<td class="gut" width="14" style="width:14px; font-size:0; line-height:0;">&nbsp;</td>' if i else ""
             cls = "col colgap" if i < 2 else "col"
-            cells.append(f"""{gap}<td class="{cls}" width="162" valign="top" style="width:162px; height:1px;">{tile(n, 162, show_price=False)}</td>""")
+            cells.append(f"""{gap}<td class="{cls}" width="164" valign="top" style="width:164px; height:1px;">{tile(n, 164, band=120, show_price=False, show_note=False)}</td>""")
         rail += f"""
-  <tr><td class="pad" style="background:{PAPER}; padding:22px 40px 0;">
+  <tr><td class="pad" style="background:{PAPER}; padding:{'0' if start == 3 else '14px'} 40px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{"".join(cells)}</tr></table>
   </td></tr>
 """
 
     return (
-        head("Category Lookbook") + promo() + masthead() + paper_head(40) +
+        head("Category Lookbook") + promo() + masthead() + paper_head(46) +
         f"""
-  <!-- Two tiles argue side by side. The flag label is what separates them. -->
-  <tr><td class="pad" style="background:{PAPER}; padding:32px 40px 0;">
+  <!-- Two tiles argue side by side. The flag label is what separates them:
+       burgundy on the one being argued for, grey on the one it is against. -->
+  <tr><td style="background:{CLOUD}; padding:0; border-top:1px solid {CLOUD}; border-bottom:1px solid {CLOUD};">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td class="col colgap" width="248" valign="top" style="width:248px; height:1px;">{big_tile(1)}</td>
-      <td class="gut" width="24" style="width:24px; font-size:0;">&nbsp;</td>
-      <td class="col" width="248" valign="top" style="width:248px; height:1px;">{big_tile(2)}</td>
+      <td class="col" width="251" valign="top" style="width:251px; background:{PAPER}; padding:24px;">{big_tile(1, BURGUNDY)}</td>
+      <td class="gut" width="1" style="width:1px; font-size:0; line-height:0; background:{CLOUD};">&nbsp;</td>
+      <td class="col" width="250" valign="top" style="width:250px; background:{PAPER}; padding:24px;">{big_tile(2, MUTED)}</td>
     </tr></table>
   </td></tr>
-  <tr><td style="height:36px; font-size:0; line-height:36px;">&nbsp;</td></tr>
 """ +
-        image_band("product_3_image", "product_3_title", "product_3_url", 340) +
+        image_band("break_image", "break_title", "break_url") +
         f"""
-  <tr><td class="pad" align="center" style="background:{INK}; padding:22px 40px 26px;">
-    <p style="margin:0; font-family:{DISPLAY}; font-weight:400; font-size:24px; mso-line-height-rule:exactly; line-height:30px; color:{WHITE};">{{{{ product_3_title }}}}</p>
-    <p style="margin:8px 0 0; font-family:{BODY}; font-weight:400; font-size:13px; mso-line-height-rule:exactly; line-height:20px; letter-spacing:0.4px; color:#b5b5b5;">{{{{ product_3_note }}}}</p>
+  <!-- The design floats this caption over the foot of the image. Email cannot
+       overlay reliably, so it sits directly beneath at the same weight.
+       The break is its own picture rather than a product slot: nine tiles do
+       not fit in eight, and a full-bleed campaign frame is not a catalogue
+       tile anyway -- it wants its own crop and its own line of copy. -->
+  <tr><td style="background:{INK}; padding:20px 28px; border-bottom:1px solid {CLOUD};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td align="left" valign="middle" style="font-family:{DISPLAY}; font-weight:700; font-size:22px; mso-line-height-rule:exactly; line-height:28px; text-transform:uppercase; color:{WHITE};">{{{{ break_title }}}}</td>
+      <td align="right" valign="middle" style="font-family:{BODY}; font-weight:500; font-size:10px; mso-line-height-rule:exactly; line-height:16px; letter-spacing:1.8px; text-transform:uppercase; color:{MUTED};">{{{{ break_note }}}}</td>
+    </tr></table>
   </td></tr>
 """ +
-        section_head() + rail +
+        section_head(pad="34px 40px 18px") + rail +
         f"""
-  <tr><td class="pad" align="center" style="background:{PAPER}; padding:36px 40px 40px;">
+  <tr><td class="pad" align="center" style="background:{PAPER}; padding:32px 40px 40px;">
     {button_solid("{{ cta_url }}", "{{ cta_text }}")}
   </td></tr>
 """ + footer() + TAIL)
@@ -512,7 +593,17 @@ TEMPLATES = {
     "06-category-lookbook.html": ("Category Lookbook", template_f),
 }
 
+# The chrome is the part that must not drift, so it is asserted rather than
+# trusted: every file has to carry the burgundy bar, the blush footer with its
+# burgundy rule, and the logo twice.
+CHROME = [
+    (f"background:{BURGUNDY}; padding:11px 16px", 1, "burgundy announcement bar"),
+    (f"background:{BLUSH}; padding:34px 36px; border-top:2px solid {BURGUNDY}", 1, "blush footer"),
+    (LOGO, 2, "logo (masthead + footer)"),
+]
+
 if __name__ == "__main__":
+    failed = False
     for filename, (name, fn) in TEMPLATES.items():
         html = fn()
         (OUT / filename).write_text(html, encoding="utf-8")
@@ -521,5 +612,13 @@ if __name__ == "__main__":
         for tag in ("table", "tr", "td"):
             o = len(re.findall(rf"<{tag}\b", html))
             c = len(re.findall(rf"</{tag}>", html))
+            if o != c:
+                failed = True
             checks.append(f"{tag} {o}/{c}" + ("" if o == c else " MISMATCH"))
+        for token, want, label in CHROME:
+            got = html.count(token)
+            if got != want:
+                failed = True
+                checks.append(f"{label} {got}/{want} MISSING")
         print(f"{filename:28} {name:18} {len(ph):3} placeholders   {' · '.join(checks)}")
+    raise SystemExit(1 if failed else 0)

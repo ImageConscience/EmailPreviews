@@ -106,14 +106,23 @@ function splitList(value: string, prefix: string, max: number): Record<string, s
   return out;
 }
 
-/** "Name | Count | Note | #hex" -> the four band fields. */
+/**
+ * "Name | Count | Note | #hex | #tint" -> the five band fields.
+ *
+ * The tint is the pale wash the band's products sit on, a few steps up from
+ * the colour panel beside them. It is last because most bands look right
+ * without one: left off, the products sit on paper.
+ */
 function splitBand(value: string, n: number): Record<string, string> {
-  const [name = "", count = "", note = "", color = ""] = value.split("|").map((p) => p.trim());
+  const [name = "", count = "", note = "", color = "", tint = ""] = value
+    .split("|")
+    .map((p) => p.trim());
   return {
     [`band_${n}_name`]: name,
     [`band_${n}_count`]: count,
     [`band_${n}_note`]: note,
     [`band_${n}_color`]: color,
+    [`band_${n}_tint`]: tint || "#faf9f6",
   };
 }
 
