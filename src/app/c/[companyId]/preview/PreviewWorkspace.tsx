@@ -1258,6 +1258,7 @@ export function PreviewWorkspace({
                     fields={block.fields}
                     draft={draft}
                     baseline={baseline}
+                    values={values}
                     onChangeField={(key, value) =>
                       setDraft((previous) => ({ ...previous, [key]: value }))
                     }
@@ -1778,6 +1779,7 @@ function ProductTile({
   fields,
   draft,
   baseline,
+  values,
   onChangeField,
   onPick,
 }: {
@@ -1786,19 +1788,33 @@ function ProductTile({
   fields: Field[];
   draft: Record<string, string>;
   baseline: Record<string, string>;
+  /** The row after the collection fill, so a filled slot does not read empty. */
+  values: Record<string, string>;
   onChangeField: (key: string, value: string) => void;
   onPick: (product: ProductOption) => void;
 }) {
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const valueOf = (part: string) => {
-    const field = fields.find((f) => normalizeKey(f.key) === `${group}_${part}`);
-    return field ? (draft[field.key] ?? "") : "";
+  const keyFor = (part: string) =>
+    fields.find((f) => normalizeKey(f.key) === `${group}_${part}`)?.key ?? null;
+  /** What the email will show: the cell if there is one, else the fill. */
+  const shownOf = (part: string) => {
+    const key = keyFor(part);
+    if (!key) return "";
+    return (draft[key] ?? "").trim() || (values[key] ?? "");
   };
-  const title = valueOf("title");
-  const image = valueOf("image");
-  const price = valueOf("price");
+
+  // A slot with no cells of its own, standing on what a collection block put
+  // there. Worth saying out loud: the tile would otherwise read "Empty slot"
+  // while the preview beside it shows a product.
+  const fromCollection =
+    fields.every((field) => (draft[field.key] ?? "").trim() === "") &&
+    Boolean(shownOf("title"));
+
+  const title = shownOf("title");
+  const image = shownOf("image");
+  const price = shownOf("price");
   const filled = fields.filter((field) => (draft[field.key] ?? "").trim()).length;
   const changed = fields.some(
     (field) => (draft[field.key] ?? "") !== (baseline[field.key] ?? ""),
@@ -1820,6 +1836,7 @@ function ProductTile({
           <span className="tile-sub">
             {group.replace("_", " ")}
             {price ? ` · ${price}` : ""}
+            {fromCollection ? " · from collection" : ""}
             {changed ? " · edited" : ""}
           </span>
         </span>
@@ -1828,13 +1845,17 @@ function ProductTile({
           className="btn btn-sm btn-primary"
           onClick={() => setPicking(true)}
         >
-          {title ? "Replace" : "Choose product"}
+          {fromCollection ? "Pin one" : title ? "Replace" : "Choose product"}
         </button>
       </div>
 
       <button type="button" className="tile-toggle" onClick={() => setOpen((was) => !was)}>
         {open ? "▾" : "▸"} {fields.length} {fields.length === 1 ? "field" : "fields"}
-        {filled < fields.length ? ` · ${fields.length - filled} empty` : ""}
+        {fromCollection
+          ? " · empty, filled by the collection"
+          : filled < fields.length
+            ? ` · ${fields.length - filled} empty`
+            : ""}
       </button>
 
       {open &&
@@ -1845,6 +1866,7 @@ function ProductTile({
             field={field}
             value={draft[field.key] ?? ""}
             changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
+            derived={values[field.key]}
             onChange={(value) => onChangeField(field.key, value)}
           />
         ))}
