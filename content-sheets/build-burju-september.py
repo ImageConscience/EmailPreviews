@@ -95,11 +95,30 @@ def prod(row: dict, n: int, key: str, note: str = "", badge: str = "") -> None:
         row[f"product_{n}_badge"] = badge
 
 
+# How many product slots each template actually renders. A row that supplies
+# more is not filling a longer list -- the extra products are simply dropped,
+# silently, which is how a six-item ranking reached a template headlined
+# "The Five That Never Leave".
+SLOTS = {
+    "Hero Editorial": 3,
+    "Split Story": 4,
+    "Ranked List": 5,
+    "Palette Block": 6,
+    "Campaign Chapter": 5,
+    "Category Lookbook": 9,   # two tiles, the full-bleed break, then six rail
+}
+
+
 def send(**kw) -> dict:
     row = {c: "" for c in COLUMNS}
     row["send_time"] = "10:00"
     row["promo_line"] = SHIP
     products = kw.pop("products", [])
+    budget = SLOTS[kw["template"]]
+    if len(products) > budget:
+        raise SystemExit(
+            f'{kw["campaign"]}: {kw["template"]} renders {budget} products, '
+            f"but the row supplies {len(products)}")
     # The lookbook argues two styles side by side, then breaks full-bleed to a
     # third before the colourway rail. That third is a campaign frame rather
     # than a tile, so it comes out of the product list and into its own fields.
@@ -134,8 +153,8 @@ ROWS.append(send(
     cta_text="Shop the Edit", cta_url=C + "best-sellers",
     secondary_text="In the Edit", secondary_url=C + "best-sellers",
     hero_image=CDN + "Adira-matte-black-pump-1__16973.jpg?v=1716813764",
-    section_label="Chapter One", section_count="06",
-    products=["adira_black", "sybil_black", "dafne", "khadija", "adira_nude3", "sybil_leopard"],
+    section_label="Chapter One", section_count="05",
+    products=["adira_black", "sybil_black", "dafne", "khadija", "adira_nude3"],
 ))
 ROWS.append(send(
     template="Campaign Chapter", send_date="2026-09-09", campaign="Back to Life",
@@ -147,8 +166,8 @@ ROWS.append(send(
     cta_text="Shop the Edit", cta_url=C + "new-arrivals",
     secondary_text="In the Edit", secondary_url=C + "new-arrivals",
     hero_image=CDN + "Nyx-strappy-buckle-ankle-bootie-black-1.jpg?v=1776302623",
-    section_label="Chapter Two", section_count="06",
-    products=["nyx_black", "jett_black", "cora_black", "lowen_black", "bett_black", "karma"],
+    section_label="Chapter Two", section_count="05",
+    products=["nyx_black", "jett_black", "cora_black", "lowen_black", "bett_black"],
 ))
 ROWS.append(send(
     template="Campaign Chapter", send_date="2026-09-16", campaign="Back to the Grind",
@@ -160,8 +179,8 @@ ROWS.append(send(
     cta_text="Shop the Edit", cta_url=C + "advanced-guide-to-heels-dance",
     secondary_text="In the Edit", secondary_url=C + "advanced-guide-to-heels-dance",
     hero_image=CDN + "Sierralynn-black-suede-lace-up-bootie-1_e6990d06-3227-46ce-a7cd-4683fc2d71ff.jpg?v=1713711139",
-    section_label="Chapter Three", section_count="06",
-    products=["sierralynn_blk", "shabina_black", "xiomara_black", "tempest", "jezabel", "elliray"],
+    section_label="Chapter Three", section_count="05",
+    products=["sierralynn_blk", "shabina_black", "xiomara_black", "tempest", "jezabel"],
 ))
 
 # ------------------------------------------------------------------ A · heroes
@@ -317,33 +336,30 @@ ROWS.append(send(
               ("sierralynn_blk", "The suede sole version outsells the street sole two to one."),
               ("shabina_black", "The only pair on this list with no zip. That is the whole appeal."),
               ("jezabel", "Net upper, lace-up front. The pair people buy after their first class."),
-              ("xiomara_black", "Consistently top five, never number one. A quiet workhorse."),
-              ("tempest", "Rounds out the list every autumn without fail.")],
+              ("xiomara_black", "Consistently top five, never number one. A quiet workhorse.")],
 ))
 ROWS.append(send(
     template="Ranked List", send_date="2026-09-26", campaign="Statement Stilettos",
     subject="Six stilettos worth the walk to the car",
     preheader="A stiletto is a commitment. These six earn it.",
     eyebrow="The Ranking", headline_1="Worth the Walk", headline_2="to the Car.",
-    subhead="Six stilettos, ranked by how long you last in them",
+    subhead="Five stilettos, ranked by how long you last in them",
     cta_text="Shop Stilettos", cta_url=C + "4-5-inch-heels",
     products=[("adira_burg", "The classic pump in the season's colour. Nothing to explain."),
               ("starlette_burg", "Peep toe on a stiletto heel — rarer than it should be."),
               ("skylar_burg", "Strappy enough to hold, plain enough to wear twice a week."),
               ("adira_black", "The one you own before you own any of the others."),
-              ("rene_burg", "Open toe, ankle strap, and a heel that does not wobble."),
-              ("sybil_black", "The lowest price on this list and the highest repeat rate.")],
+              ("rene_burg", "Open toe, ankle strap, and a heel that does not wobble.")],
 ))
 ROWS.append(send(
     template="Ranked List", send_date="2026-09-29", campaign="Fall Roundup",
     subject="Everything September taught us",
-    preheader="The month in six pairs.",
-    eyebrow="Month End", headline_1="September,", headline_2="In Six Pairs.",
+    preheader="The month in five pairs.",
+    eyebrow="Month End", headline_1="September,", headline_2="In Five Pairs.",
     subhead="What moved, and what it says about the season",
     cta_text="Shop the Month", cta_url=C + "fall-faves",
     products=[("marley_burg", "Burgundy outsold black for the first time in four years."),
               ("koda_nude6", "Truly Nude shade six was the single fastest mover of the month."),
-              ("sierra_black", "Never off the list. Included here for completeness."),
               ("jett_burg", "The new-arrival that behaved like an established style."),
               ("shabina_tan", "Proof that the dark tan lycra should have launched sooner."),
               ("devilla_2", "Size-inclusive thigh highs, and the month's biggest surprise.")],

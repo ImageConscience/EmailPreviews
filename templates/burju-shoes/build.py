@@ -413,8 +413,11 @@ def template_b() -> str:
 # C -- The Ranked List
 # ---------------------------------------------------------------------------
 def template_c() -> str:
-    # Six rows rather than the design's five: the rhythm is the same, and a send
-    # that only ranks five leaves the sixth row's cells empty and loses it.
+    # Five rows, as the design has it -- "The Five That Never Leave". A sixth
+    # was here on the theory that an unused row would collapse; it does not.
+    # An empty slot renders its numeral and an empty crop, so the count is
+    # fixed rather than a maximum, and a send with fewer than five ranked
+    # products needs a different template, not a shorter list.
     rows = "".join(f"""
   <tr><td class="pad" style="background:{PAPER}; padding:26px 40px;{'' if n == 1 else f' border-top:1px solid {CLOUD};'}">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -431,7 +434,7 @@ def template_c() -> str:
         <p style="margin:8px 0 0; font-family:{BODY}; font-weight:500; font-size:12px; mso-line-height-rule:exactly; line-height:17px; color:{INK};">{{{{ product_{n}_price }}}}</p>
       </td>
     </tr></table>
-  </td></tr>""" for n in range(1, 7))
+  </td></tr>""" for n in range(1, 6))
 
     return (
         head("The Ranked List") + promo() + masthead() +

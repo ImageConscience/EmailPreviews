@@ -48,9 +48,29 @@ for headlines, DM Sans for everything else.
 ## Eight product slots cover all six
 
 `product_1` through `product_8`, each with image, title, price, url and note.
-D needs six across three colour bands and F needs six in its rail; A only needs
-three. `product_1_badge` and `product_2_badge` exist for F's two flag labels
-and nothing else uses them.
+`product_1_badge` and `product_2_badge` exist for F's two flag labels and
+nothing else uses them.
+
+Each template renders a **fixed** number of them, not a maximum:
+
+| Template | Products |
+| --- | --- |
+| A Hero Editorial | 3 |
+| B Split Story | 4 |
+| C Ranked List | 5 |
+| D Palette Block | 6, two per colour band |
+| E Campaign Chapter | 5, plus the burgundy count tile |
+| F Category Lookbook | 2 tiles + the break + 6 rail |
+
+A row that supplies more does not get a longer list — the extra products are
+dropped in silence. `content-sheets/build-burju-september.py` refuses to build
+such a row, because that silence is how a six-item ranking reached a template
+headlined "The Five That Never Leave", and how three chapter sends each carried
+a sixth product that never rendered.
+
+A row that supplies fewer is worse: an empty slot still draws its numeral and
+an empty crop. Nothing collapses a product row, so the counts above are the
+counts to fill.
 
 `product_N_note` does different work per template — a colourway in A, the
 one-line reason in C, a descriptor in F — which is what lets one column serve
