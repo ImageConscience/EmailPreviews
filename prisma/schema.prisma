@@ -115,6 +115,8 @@ model CatalogProduct {
   productType String?
   url         String
   imageUrl    String?
+  /// The store's own product copy ("Body (html)"), flattened to plain text.
+  description String?
   /// Formatted as the storefront gives it, e.g. "45.00". A string because it
   /// goes straight into a cell and then into the email verbatim.
   price       String?

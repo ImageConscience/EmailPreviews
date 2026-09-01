@@ -143,6 +143,7 @@ export interface ProductOption {
   imageUrl: string | null;
   available: boolean;
   productType: string | null;
+  description: string | null;
 }
 
 /** Products matching what has been typed, newest-synced first. */
@@ -176,6 +177,7 @@ export async function searchProductsAction(
       imageUrl: true,
       available: true,
       productType: true,
+      description: true,
     },
   });
   return products;
@@ -455,7 +457,14 @@ export async function resolveCollectionAction(
         select: {
           position: true,
           product: {
-            select: { title: true, price: true, url: true, imageUrl: true, syncedAt: true },
+            select: {
+              title: true,
+              price: true,
+              url: true,
+              imageUrl: true,
+              description: true,
+              syncedAt: true,
+            },
           },
         },
       },
@@ -471,6 +480,7 @@ export async function resolveCollectionAction(
     price: link.product.price,
     url: link.product.url,
     imageUrl: link.product.imageUrl,
+    description: link.product.description,
     position: link.position,
     // The storefront feed gives no created date, but it returns products
     // newest-first, so the collection's own order is the best proxy we have.
@@ -483,6 +493,12 @@ export async function resolveCollectionAction(
     handle: spec.handle,
     title: collection.title,
     available: collection.products.length,
-    products: ordered.map(({ title, price, url, imageUrl }) => ({ title, price, url, imageUrl })),
+    products: ordered.map(({ title, price, url, imageUrl, description }) => ({
+      title,
+      price,
+      url,
+      imageUrl,
+      description,
+    })),
   };
 }

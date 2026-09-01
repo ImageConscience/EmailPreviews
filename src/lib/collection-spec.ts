@@ -155,11 +155,24 @@ export function sortForOrder<T extends OrderableProduct>(products: T[], order: C
   }
 }
 
+/**
+ * The catalogue stores what the storefront gives, which is a bare "45.00".
+ * Cells carry the symbol, so add it here -- and in one place, because the
+ * picker and the collection fill writing prices in different shapes was a real
+ * difference nobody would have gone looking for.
+ */
+export function displayPrice(price: string | null | undefined): string {
+  const text = (price ?? "").trim();
+  if (!text) return "";
+  return /^[0-9]/.test(text) ? `$${text}` : text;
+}
+
 export interface FillProduct {
   title: string;
   price: string | null;
   url: string;
   imageUrl: string | null;
+  description?: string | null;
 }
 
 /**
@@ -183,6 +196,7 @@ export function applyFill(
       price: `product_${slot}_price`,
       url: `product_${slot}_url`,
       image: `product_${slot}_image`,
+      description: `product_${slot}_description`,
     };
     // Any hand-entered field claims the slot -- title alone is enough to mean
     // "this one is mine".
@@ -193,9 +207,10 @@ export function applyFill(
     if (!product) continue;
 
     next[keys.title] = product.title;
-    next[keys.price] = product.price ?? "";
+    next[keys.price] = displayPrice(product.price);
     next[keys.url] = product.url;
     next[keys.image] = product.imageUrl ?? "";
+    next[keys.description] = product.description ?? "";
   }
 
   return next;

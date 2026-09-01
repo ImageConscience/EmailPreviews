@@ -22,6 +22,8 @@ export interface StoreProduct {
   price: string | null;
   available: boolean;
   tags: string;
+  /** The store's own product copy, as plain text. */
+  description: string;
 }
 
 /** Shopify's cap. Asking for more is silently clamped, so ask for exactly it. */
@@ -55,6 +57,8 @@ interface RawProduct {
   tags?: string[] | string;
   images?: { src?: string }[];
   variants?: RawVariant[];
+  /** Shopify's product description. "Body (html)" in the admin and in exports. */
+  body_html?: string;
 }
 
 /**
@@ -76,6 +80,83 @@ function priceOf(variants: RawVariant[]): { price: string | null; available: boo
   return { price: cheapest.variant.price ?? null, available: inStock.length > 0 };
 }
 
+
+/**
+ * The HTML4 Latin-1 entity names, in code-point order from 160 to 255.
+ *
+ * Spelling them out beats a hand-picked handful: product copy is full of
+ * accents -- "Café", "Pokémon", a French artist's name -- and an entity that
+ * survives the flattening prints as "Caf&eacute;" in the email.
+ */
+const LATIN1 =
+  "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr " +
+  "deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 " +
+  "frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute " +
+  "Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml " +
+  "times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc " +
+  "atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml " +
+  "eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml " +
+  "yacute thorn yuml";
+
+const ENTITIES: Record<string, string> = {
+  ...Object.fromEntries(
+    LATIN1.split(" ").map((name, index) => [name, String.fromCodePoint(160 + index)]),
+  ),
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  "#39": "'",
+  apos: "'",
+  // A non-breaking space is a space once this is plain text, and leaving it as
+  // U+00A0 defeats the whitespace collapsing below.
+  nbsp: " ",
+  mdash: "\u2014",
+  ndash: "\u2013",
+  hellip: "\u2026",
+  rsquo: "\u2019",
+  lsquo: "\u2018",
+  rdquo: "\u201d",
+  ldquo: "\u201c",
+  bull: "\u2022",
+  trade: "\u2122",
+  euro: "\u20ac",
+};
+
+/**
+ * Shopify's product copy is HTML ("Body (html)"), and the templates render
+ * descriptions through the escaping form of the placeholder -- so handing them
+ * markup would print the tags. Flatten it to text instead.
+ *
+ * Block-level ends become spaces rather than being dropped, or the last word of
+ * one paragraph runs into the first of the next.
+ */
+export function htmlToText(html: string): string {
+  if (!html) return "";
+
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<\/(p|div|li|h[1-6]|tr|blockquote)>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, name: string) => {
+      const key = name.toLowerCase();
+      if (key.startsWith("#x")) {
+        const code = Number.parseInt(key.slice(2), 16);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      }
+      if (key.startsWith("#")) {
+        const code = Number.parseInt(key.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      }
+      // Named entities are case-sensitive -- &Aacute; is Á and &aacute; is á --
+      // so try the name as written before falling back to a lowercase match.
+      return ENTITIES[name] ?? ENTITIES[key] ?? match;
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function toProduct(raw: RawProduct, domain: string): StoreProduct | null {
   const externalId = raw.id == null ? "" : String(raw.id);
   const handle = raw.handle ?? "";
@@ -87,6 +168,7 @@ function toProduct(raw: RawProduct, domain: string): StoreProduct | null {
   return {
     externalId,
     handle,
+    description: htmlToText(raw.body_html ?? ""),
     title: raw.title?.trim() || handle,
     vendor: raw.vendor ?? "",
     productType: raw.product_type ?? "",

@@ -40,6 +40,7 @@ import {
   COLLECTION_ORDERS,
   ORDER_LABELS,
   applyFill,
+  displayPrice,
   formatCollectionSpec,
   parseCollectionSpec,
 } from "@/lib/collection-spec";
@@ -144,8 +145,9 @@ function productFill(group: string, product: ProductOption): Record<string, stri
   return {
     [`${group}_image`]: product.imageUrl ?? "",
     [`${group}_title`]: product.title,
-    [`${group}_price`]: product.price ? `$${product.price}` : "",
+    [`${group}_price`]: displayPrice(product.price),
     [`${group}_url`]: product.url,
+    [`${group}_description`]: product.description ?? "",
   };
 }
 
