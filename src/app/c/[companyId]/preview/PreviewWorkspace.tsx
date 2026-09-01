@@ -34,7 +34,7 @@ import { ImagePicker } from "./ImagePicker";
 import { ProductPicker } from "./ProductPicker";
 import type { CollectionOption, ProductOption, ResolvedCollection } from "@/actions/catalog";
 import { listCollectionsAction, resolveCollectionAction } from "@/actions/catalog";
-import { deriveValues } from "@/lib/derived";
+import { DERIVED_FIELDS, deriveValues } from "@/lib/derived";
 import {
   COLLECTION_BLOCKS,
   COLLECTION_ORDERS,
@@ -415,10 +415,20 @@ export function PreviewWorkspace({
     const out: (
       | { kind: "field"; field: Field }
       | { kind: "product"; group: string; fields: Field[] }
+      | { kind: "derived"; fields: Field[] }
     )[] = [];
     const tiles = new Map<string, { kind: "product"; group: string; fields: Field[] }>();
+    let derivedBlock: { kind: "derived"; fields: Field[] } | null = null;
 
     for (const field of templateFields) {
+      if (DERIVED_FIELDS.includes(normalizeKey(field.key))) {
+        if (derivedBlock) derivedBlock.fields.push(field);
+        else {
+          derivedBlock = { kind: "derived", fields: [field] };
+          out.push(derivedBlock);
+        }
+        continue;
+      }
       const group = productGroupOf(field.key);
       if (!group) {
         out.push({ kind: "field", field });
@@ -1228,6 +1238,18 @@ export function PreviewWorkspace({
                       setDraft((previous) => ({ ...previous, [block.field.key]: value }))
                     }
                   />
+                ) : block.kind === "derived" ? (
+                  <DerivedPrices
+                    key="derived-prices"
+                    companyId={companyId}
+                    fields={block.fields}
+                    draft={draft}
+                    baseline={baseline}
+                    values={values}
+                    onChangeField={(key, value) =>
+                      setDraft((previous) => ({ ...previous, [key]: value }))
+                    }
+                  />
                 ) : (
                   <ProductTile
                     key={block.group}
@@ -1676,6 +1698,80 @@ function FieldRow({
  * to swap it, and keeps the individual values underneath for the cases the
  * catalog cannot cover: a hand-written badge, a description worth rewriting.
  */
+
+/**
+ * Prices the app works out, kept together and out of the way.
+ *
+ * These are almost always empty -- the point of deriving them -- so showing two
+ * full-height boxes among the copy fields put the least interesting thing in
+ * the row at eye level. Folded, the group states what the email will actually
+ * say, which is the only thing worth checking at a glance.
+ */
+function DerivedPrices({
+  companyId,
+  fields,
+  draft,
+  baseline,
+  values,
+  onChangeField,
+}: {
+  companyId: string;
+  fields: Field[];
+  draft: Record<string, string>;
+  baseline: Record<string, string>;
+  /** The row after derivation, so the group can show what will be rendered. */
+  values: Record<string, string>;
+  onChangeField: (key: string, value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const overridden = fields.filter((field) => (draft[field.key] ?? "").trim() !== "").length;
+  const changed = fields.some(
+    (field) => (draft[field.key] ?? "") !== (baseline[field.key] ?? ""),
+  );
+
+  const summary = fields
+    .map((field) => {
+      const label = normalizeKey(field.key) === "member_price" ? "Members" : "Retail";
+      return `${label} ${values[field.key] || "—"}`;
+    })
+    .join(" · ");
+
+  return (
+    <div className={`tile${changed ? " is-changed" : ""}`}>
+      <div className="tile-head">
+        <span className="tile-text">
+          <span className="tile-name">{summary}</span>
+          <span className="tile-sub">
+            {overridden === 0
+              ? "worked out from the product"
+              : `${overridden} set by hand`}
+            {changed ? " · edited" : ""}
+          </span>
+        </span>
+      </div>
+
+      <button type="button" className="tile-toggle" onClick={() => setOpen((was) => !was)}>
+        {open ? "▾" : "▸"} {fields.length} {fields.length === 1 ? "field" : "fields"}
+        {overridden === 0 ? " · override" : ""}
+      </button>
+
+      {open &&
+        fields.map((field) => (
+          <FieldRow
+            key={field.key}
+            companyId={companyId}
+            field={field}
+            value={draft[field.key] ?? ""}
+            changed={(draft[field.key] ?? "") !== (baseline[field.key] ?? "")}
+            derived={values[field.key]}
+            onChange={(value) => onChangeField(field.key, value)}
+          />
+        ))}
+    </div>
+  );
+}
+
 function ProductTile({
   companyId,
   group,

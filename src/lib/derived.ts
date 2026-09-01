@@ -14,6 +14,15 @@
  * at a price no formula would produce.
  */
 
+/**
+ * Row-level fields the app works out, rather than someone filling them in.
+ *
+ * Grouped in the editor rather than sitting among the hand-written copy: they
+ * are normally empty, and two full-height boxes for values nobody types is
+ * noise in the middle of the fields that do need attention.
+ */
+export const DERIVED_FIELDS = ["member_price", "retail_price"];
+
 /** Museum of Graffiti's membership saving, and a sane default elsewhere. */
 const DEFAULT_DISCOUNT = 0.2;
 
