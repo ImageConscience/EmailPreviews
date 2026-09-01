@@ -259,7 +259,7 @@ grid, says how many slots are keeping their own products, and offers to clear
 exactly those. Clearing hands the grid over; the block then follows both the
 collection and the order.
 
-## 05-category-spotlight-featured (51)
+## 05-category-spotlight-featured (49)
 
 Category Spotlight with the email opening on a product rather than on the
 category alone. Same series, same fixtures, same footer — only the shape of the
@@ -281,6 +281,10 @@ What changed from `01`:
   above, inverted, which is what gives the email its second beat. It takes `product_4_description`, which
   `01` has no use for.
 - **Slots 5–8 are unchanged**, so `grid_collection` behaves identically.
+- **No `mid_cta`.** In `01` that red button sits between the two pick pairs; here
+  it landed directly under product 4, which already has its own *Shop This*
+  button, so the block offered two competing ways out. The category still has a
+  link at the top of the email and another in the footer.
 
 Both two-column blocks are `.col` cells, so they stack on mobile, where 240px
 of picture beside 256px of copy would leave neither enough room.
