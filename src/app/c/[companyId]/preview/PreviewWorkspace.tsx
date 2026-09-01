@@ -25,7 +25,7 @@ import {
   rowSubLabel,
   type DateRange,
 } from "@/lib/campaign";
-import { flag, isOn, useViewState } from "@/lib/view-state";
+import { flag, isOn, useViewState, validId } from "@/lib/view-state";
 import { ShareLink } from "@/components/ShareLink";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
@@ -218,9 +218,12 @@ export function PreviewWorkspace({
     initialView,
   );
 
-  const templateId = view.template || templates[0]?.id || "";
+  // Remembered from last time, so both can name something that has since been
+  // deleted -- a re-uploaded sheet is a new sheet with a new id. Fall back to
+  // the first rather than fetching an id that will 404.
+  const templateId = validId(view.template, templates.map((t) => t.id), templates[0]?.id ?? "");
   const setTemplateId = useCallback((id: string) => setView({ template: id }), [setView]);
-  const sheetId = view.sheet || sheets[0]?.id || "";
+  const sheetId = validId(view.sheet, sheets.map((s) => s.id), sheets[0]?.id ?? "");
   const setSheetId = useCallback((id: string) => setView({ sheet: id }), [setView]);
   const rowId = view.row;
   const setRowId = useCallback((id: string) => setView({ row: id }), [setView]);

@@ -126,3 +126,20 @@ export function useViewState<T extends State>(scope: string, defaults: T): ViewS
 /** "1"/"0" in a URL is shorter and clearer than "true"/"false". */
 export const flag = (on: boolean): string => (on ? "1" : "0");
 export const isOn = (value: string): boolean => value === "1";
+
+/**
+ * A remembered id that no longer names anything, treated as no choice.
+ *
+ * View state outlives the things it points at. A sheet filter is stored in
+ * localStorage and republished into the URL on every visit, so it survives the
+ * sheet being deleted or replaced by a re-upload -- and then quietly matches
+ * nothing. The page is not broken and does not say it is: it filters everything
+ * out and the control beside it reads "All sheets", because a `select` cannot
+ * show an option that is not there.
+ *
+ * Falling back is right rather than clever here. The thing the filter named is
+ * gone, so the honest reading of "show me that sheet" is "show me everything".
+ */
+export function validId(stored: string, known: string[], fallback = ""): string {
+  return known.includes(stored) ? stored : fallback;
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   defaultRange,
   formatIso,
@@ -11,7 +11,7 @@ import {
   todayIso,
   type DateRange,
 } from "@/lib/campaign";
-import { flag, isOn, useViewState } from "@/lib/view-state";
+import { flag, isOn, useViewState, validId } from "@/lib/view-state";
 import { ShareLink } from "@/components/ShareLink";
 
 export interface OverviewItem {
@@ -71,16 +71,40 @@ export function OverviewBoard({
       month: todayIso().slice(0, 7),
     };
   }, []);
-  const { state, set } = useViewState(`overview:${companyId}`, initial);
+  const { state, set, ready } = useViewState(`overview:${companyId}`, initial);
 
   const view = state.view === "calendar" ? "calendar" : "list";
   const setView = (next: "list" | "calendar") => set({ view: next });
   const search = state.q;
   const setSearch = (next: string) => set({ q: next });
-  const templateFilter = state.template;
+  // Both filters are remembered across visits, so both can name something that
+  // has since been deleted -- and a re-uploaded sheet is a new sheet with a new
+  // id, so this happens in ordinary use rather than only after a tidy-up. A
+  // stale id used to filter every row out while the control beside it read
+  // "All sheets", because a `select` cannot show an option that is not there:
+  // an empty page with no filter visibly set and, on a company down to one
+  // sheet, no sheet control rendered at all to clear it with.
+  const knownSheets = useMemo(() => sheets.map((s) => s.id), [sheets]);
+  const knownTemplates = useMemo(() => [UNASSIGNED, ...templates.map((t) => t.id)], [templates]);
+  const templateFilter = validId(state.template, knownTemplates);
   const setTemplateFilter = (next: string) => set({ template: next });
-  const sheetFilter = state.sheet;
+  const sheetFilter = validId(state.sheet, knownSheets);
   const setSheetFilter = (next: string) => set({ sheet: next });
+
+  // Say so, and tidy the stored value away so it cannot come back tomorrow.
+  const [droppedFilter, setDroppedFilter] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const stale: string[] = [];
+    if (state.sheet && !sheetFilter) stale.push("sheet");
+    if (state.template && !templateFilter) stale.push("template");
+    if (stale.length === 0) return;
+    setDroppedFilter(stale.join(" and "));
+    set({ ...(stale.includes("sheet") ? { sheet: "" } : {}), ...(stale.includes("template") ? { template: "" } : {}) });
+    // Once per arrival: `set` changes the state this reads, so anything else
+    // here would fire again on the value it just wrote.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
   const showHidden = isOn(state.hidden);
   const setShowHidden = (next: boolean) => set({ hidden: flag(next) });
   const month = state.month;
@@ -243,6 +267,18 @@ export function OverviewBoard({
               ))}
             </select>
           </label>
+        )}
+
+        {droppedFilter && (
+          <p
+            className="hint"
+            style={{ flexBasis: "100%", margin: "4px 0 0" }}
+            role="status"
+          >
+            A saved {droppedFilter} filter was cleared: what it pointed at no longer
+            exists. Uploading a sheet again creates a new one, so a filter set before
+            the upload stops matching anything.
+          </p>
         )}
 
         {view === "list" && (
