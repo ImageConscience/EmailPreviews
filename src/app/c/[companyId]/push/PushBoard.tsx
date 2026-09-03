@@ -32,6 +32,8 @@ export interface PushItem {
   audience: string;
   /** The audience came from the company default rather than this row. */
   audienceInherited: boolean;
+  /** Who has signed off in this template, current or not. */
+  approvers: { name: string; initials: string; hue: number; admin: boolean; stale: boolean }[];
   /** The send instant the row asks for, if it names one. */
   sendAt: string | null;
   sendAtLabel: string | null;
@@ -168,6 +170,7 @@ export function PushBoard({
               <tr>
                 <th className="tight">Send</th>
                 <th>Campaign</th>
+                <th className="tight">Sign-off</th>
                 <th className="tight">Audience</th>
                 <th className="tight">In Klaviyo</th>
                 <th className="tight" />
@@ -196,6 +199,9 @@ export function PushBoard({
                     <div className="ov-sub">
                       {[item.subject, item.templateName, item.sheetName].filter(Boolean).join(" · ")}
                     </div>
+                  </td>
+                  <td className="tight">
+                    <Approvers people={item.approvers} />
                   </td>
                   <td className="tight">
                     <span
@@ -240,6 +246,39 @@ export function PushBoard({
         />
       )}
     </main>
+  );
+}
+
+/**
+ * Who has signed this off, in the same dots the calendar uses.
+ *
+ * A dotted outline means the sign-off predates the latest edit. Those no longer
+ * hold the push up -- one current admin approval is the gate -- but they are
+ * still worth seeing: it is the difference between a row two people have read
+ * and a row one person waved through.
+ */
+function Approvers({
+  people,
+}: {
+  people: { name: string; initials: string; hue: number; admin: boolean; stale: boolean }[];
+}) {
+  if (people.length === 0) return <span className="hint">—</span>;
+  return (
+    <span className="push-dots">
+      {people.map((person, i) => (
+        <span
+          key={`${person.initials}-${i}`}
+          className={`av${person.stale ? " stale" : ""}${person.admin ? " is-admin" : ""}`}
+          style={{ background: `hsl(${person.hue} 58% 42%)` }}
+          title={
+            `${person.name}${person.admin ? " (admin)" : ""}` +
+            (person.stale ? " — approved an earlier version" : "")
+          }
+        >
+          {person.initials}
+        </span>
+      ))}
+    </span>
   );
 }
 

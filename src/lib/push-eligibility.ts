@@ -36,7 +36,25 @@ export interface RowForPush {
   values: Record<string, string>;
   columns: string[];
   hiddenAt: Date | null;
-  approvals: { templateId: string; contentHash: string; user: { name: string | null; email: string } }[];
+  approvals: ApprovalForPush[];
+}
+
+export interface ApprovalForPush {
+  templateId: string;
+  contentHash: string;
+  userId: string;
+  /** Admin or owner on this company: the sign-off the gate actually turns on. */
+  admin: boolean;
+  user: { name: string | null; email: string };
+}
+
+/** One approver, for showing who has signed off beside the push button. */
+export interface Approver {
+  userId: string;
+  name: string;
+  admin: boolean;
+  /** Given against an earlier version of the row or template. */
+  stale: boolean;
 }
 
 export interface TemplateForPush {
@@ -54,6 +72,8 @@ export interface Eligibility {
   blockers: string[];
   campaignName: string;
   subject: string;
+  /** Everyone who has signed off in this template, current or not. */
+  approvers: Approver[];
   audience: string;
   /** True when the audience came from the company default, not the row. */
   audienceInherited: boolean;
@@ -97,14 +117,33 @@ export function checkEligibility(
 
   if (row.hiddenAt) blockers.push("The row is hidden.");
 
+  /**
+   * One current admin sign-off opens the gate.
+   *
+   * It used to take every approval on the row being current, which read as
+   * strict and behaved as brittle: preparing a row for a push edits it, and
+   * that edit staled the very approvals the push then demanded. The person
+   * doing the preparing is the person trusted to send, so their sign-off on
+   * what is now on screen is the thing worth requiring. A colleague's older
+   * approval is still shown -- it just no longer stops the send.
+   */
   const mine = row.approvals.filter((a) => a.templateId === template.id);
-  if (mine.length === 0) {
-    blockers.push("Nobody has approved it in this template.");
-  } else {
-    const stale = mine.filter((a) => a.contentHash !== contentHash);
-    if (stale.length > 0) {
-      const who = stale.map((a) => a.user.name ?? a.user.email).join(", ");
-      blockers.push(`${who} approved an earlier version.`);
+  const approvers: Approver[] = mine.map((a) => ({
+    userId: a.userId,
+    name: a.user.name ?? a.user.email,
+    admin: a.admin,
+    stale: a.contentHash !== contentHash,
+  }));
+  const currentAdmins = approvers.filter((a) => a.admin && !a.stale);
+
+  if (currentAdmins.length === 0) {
+    if (mine.length === 0) {
+      blockers.push("Nobody has approved it in this template.");
+    } else if (!approvers.some((a) => a.admin)) {
+      blockers.push("No admin has approved it in this template.");
+    } else {
+      const who = approvers.filter((a) => a.admin).map((a) => a.name).join(", ");
+      blockers.push(`${who} approved an earlier version; an admin has to sign off on this one.`);
     }
   }
 
@@ -139,6 +178,7 @@ export function checkEligibility(
     blockers,
     campaignName,
     subject,
+    approvers,
     audience,
     audienceInherited,
     sendAt,

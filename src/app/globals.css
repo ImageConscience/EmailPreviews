@@ -1103,3 +1103,28 @@ input:focus, select:focus, textarea:focus {
   border-radius: 999px;
   padding: 2px 9px;
 }
+
+/* Sign-off dots on the push queue. The same shapes the preview uses, smaller,
+   because here they sit in a table row rather than beside a button. */
+.push-dots { display: inline-flex; align-items: center; }
+.push-dots .av {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fff;
+  border: 2px solid var(--surface);
+  margin-left: -6px;
+  cursor: default;
+  flex: 0 0 auto;
+}
+.push-dots .av:first-child { margin-left: 0; }
+/* Dotted: given against an earlier version. No longer holds the push up, since
+   one current admin sign-off is the gate, but still worth seeing. */
+.push-dots .av.stale { opacity: 0.45; border-style: dashed; border-color: var(--warn); }
+/* The sign-off the gate actually turns on. */
+.push-dots .av.is-admin { box-shadow: 0 0 0 1.5px var(--ok); }

@@ -14,8 +14,13 @@
  * Klaviyo dates its API and requires the header on every request. Pinned rather
  * than tracking latest, so their next revision cannot change what this app
  * sends to a client's account without anyone choosing it.
+ *
+ * Moved forward from 2024-10-15, which predates `additional-fields[template]`
+ * and answered the first real push with "additional-fields must be in []".
+ * Without the definition there is no block to fill, so nothing could be pushed
+ * at all. The campaign payload this app sends is unchanged between the two.
  */
-const REVISION = "2024-10-15";
+const REVISION = "2025-10-15";
 /**
  * Klaviyo, unless a test says otherwise.
  *

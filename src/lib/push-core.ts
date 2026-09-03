@@ -53,6 +53,22 @@ export interface PushResult {
   push?: PushState;
 }
 
+/**
+ * Of these user ids, which hold admin or owner on this company.
+ *
+ * One query rather than a role on every approval row: membership is where a
+ * role lives, and reading it here keeps the answer current even for somebody
+ * promoted after they approved.
+ */
+export async function adminIds(companyId: string, userIds: string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const memberships = await prisma.membership.findMany({
+    where: { companyId, userId: { in: [...new Set(userIds)] }, role: { in: ["admin", "owner"] } },
+    select: { userId: true },
+  });
+  return new Set(memberships.map((m) => m.userId));
+}
+
 function failure(error: unknown): PushResult {
   if (error instanceof AuthError) return { ok: false, error: error.message };
   if (error instanceof SecretError) return { ok: false, error: error.message };
@@ -139,7 +155,8 @@ async function prepare(
     prisma.sheetRow.findFirst({
       where: { id: rowId, sheet: { companyId } },
       select: { id: true, data: true, hiddenAt: true, sheet: { select: { columns: true } },
-        approvals: { select: { templateId: true, contentHash: true, user: { select: { name: true, email: true } } } } },
+        approvals: { select: { templateId: true, contentHash: true, userId: true,
+          user: { select: { name: true, email: true } } } } },
     }),
     prisma.template.findFirst({ where: { id: templateId, companyId }, select: { id: true, name: true, updatedAt: true } }),
   ]);
@@ -147,6 +164,10 @@ async function prepare(
   if (!company) return { error: "Company not found." };
   if (!row) return { error: "Row not found." };
   if (!template) return { error: "Template not found." };
+
+  // Which approvers are admins on this company, since one current admin
+  // sign-off is what the gate turns on.
+  const admins = await adminIds(companyId, row.approvals.map((a) => a.userId));
 
   // The same rule the list uses to decide what to offer, so the list and the
   // push can never disagree about whether a row is ready.
@@ -156,7 +177,7 @@ async function prepare(
       values: parseRecord(row.data),
       columns: parseStringArray(row.sheet.columns),
       hiddenAt: row.hiddenAt,
-      approvals: row.approvals,
+      approvals: row.approvals.map((a) => ({ ...a, admin: admins.has(a.userId) })),
     },
     template,
     {

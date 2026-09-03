@@ -33,6 +33,9 @@ const campaigns = new Map();
 const sendJobs = [];
 let nextId = 1;
 
+/** The revision from which GET /templates/{id} accepts additional-fields. */
+const DEFINITION_REVISION = "2025-01-15";
+
 createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   const send = (status, body) => {
@@ -55,8 +58,10 @@ createServer((req, res) => {
     return send(200, { ok: true });
   }
 
-  if ((req.headers.revision ?? "") !== "2024-10-15") {
-    return send(400, { errors: [{ detail: "missing or wrong revision header" }] });
+  // Any dated revision, the way Klaviyo takes any it still supports. Pinning
+  // one here made the mock a test of the constant rather than of the calls.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(req.headers.revision ?? "")) {
+    return send(400, { errors: [{ detail: "missing or malformed revision header" }] });
   }
   if ((req.headers.authorization ?? "") !== `Klaviyo-API-Key ${GOOD}`) {
     return send(401, { errors: [{ detail: "The API key you supplied is invalid." }] });
@@ -107,7 +112,18 @@ createServer((req, res) => {
     if (templateMatch && req.method === "GET") {
       const t = templates.get(templateMatch[1]);
       if (!t) return send(404, { errors: [{ detail: "No template with that id." }] });
-      return send(200, { data: { id: t.id, attributes: t } });
+      // The definition is an additional field, and Klaviyo only accepts the
+      // parameter from the revision that introduced it. Older revisions reject
+      // it outright with an empty allowed-list -- which is what a first real
+      // push hit, so the mock reproduces it.
+      const asked = url.searchParams.get("additional-fields[template]");
+      const revision = req.headers["revision"] ?? "";
+      if (asked && revision < DEFINITION_REVISION) {
+        return send(400, { errors: [{ detail: `additional-fields must be in []: (got ${asked})` }] });
+      }
+      const attributes = { ...t };
+      if (!asked) delete attributes.definition;
+      return send(200, { data: { id: t.id, attributes } });
     }
     if (templateMatch && req.method === "PATCH") {
       const t = templates.get(templateMatch[1]);

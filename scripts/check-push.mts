@@ -13,7 +13,7 @@ import { encryptSecret } from "../src/lib/secret.ts";
 import { approvalFingerprint } from "../src/lib/fingerprint.ts";
 import { performPush, performSchedule } from "../src/lib/push-core.ts";
 import { fetchAudiences } from "../src/lib/klaviyo.ts";
-import { checkEligibility } from "../src/lib/push-eligibility.ts";
+import { checkEligibility, type ApprovalForPush } from "../src/lib/push-eligibility.ts";
 import { audienceSlots, findAudienceColumns } from "../src/lib/template.ts";
 import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
 
@@ -36,6 +36,22 @@ await fetch("http://127.0.0.1:4599/__reset");
 // --- a company, a template, a sheet, a row ------------------------------
 const company = await prisma.company.findFirstOrThrow({ where: { name: "Acme Retail" } });
 const user = await prisma.user.findFirstOrThrow({ where: { email: "demo@example.com" } });
+// The gate turns on one current ADMIN sign-off, so the fixture has to say who
+// is one. A member's approval is exercised separately below.
+await prisma.membership.update({
+  where: { userId_companyId: { userId: user.id, companyId: company.id } },
+  data: { role: "admin" },
+});
+const member = await prisma.user.upsert({
+  where: { email: "push-member@example.com" },
+  update: {},
+  create: { email: "push-member@example.com", name: "Plain Member", passwordHash: "x" },
+});
+await prisma.membership.upsert({
+  where: { userId_companyId: { userId: member.id, companyId: company.id } },
+  update: { role: "member" },
+  create: { userId: member.id, companyId: company.id, role: "member" },
+});
 await prisma.company.update({
   where: { id: company.id },
   data: {
@@ -84,13 +100,40 @@ let r = await performPush(company.id, row.id, tpl.id, user.id);
 check("an unapproved row cannot push", !r.ok && /Nobody has approved/.test(r.error ?? ""), r.error);
 check("...and nothing was created", (await state()).campaigns.length === 0);
 
-// a stale approval blocks it, since this company requires every approval current
+// An admin's own approval, given against an earlier version, is not a current
+// sign-off and does not open the gate.
 await prisma.approval.create({ data: {
   rowId: row.id, templateId: tpl.id, userId: user.id, contentHash: "an-older-version" } });
 r = await performPush(company.id, row.id, tpl.id, user.id);
-check("a stale approval blocks the push", !r.ok && /approved an earlier version/.test(r.error ?? ""), r.error);
+check("a stale admin approval does not open the gate",
+  !r.ok && /has to sign off on this one/.test(r.error ?? ""), r.error);
 check("...and still nothing was created", (await state()).campaigns.length === 0);
 
+// A member's current approval is a real sign-off, and still not the one that
+// lets an email leave for a client's customers.
+await prisma.approval.deleteMany({ where: { rowId: row.id } });
+const fresh0 = await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } });
+const t0 = await prisma.template.findUniqueOrThrow({ where: { id: tpl.id } });
+await prisma.approval.create({ data: { rowId: row.id, templateId: tpl.id, userId: member.id,
+  contentHash: approvalFingerprint(fresh0.data, tpl.id, t0.updatedAt) } });
+r = await performPush(company.id, row.id, tpl.id, user.id);
+check("a member's approval alone does not open the gate",
+  !r.ok && /No admin has approved/.test(r.error ?? ""), r.error);
+check("...and still nothing was created", (await state()).campaigns.length === 0);
+
+// The point of the change: a colleague's stale approval must NOT hold the push
+// up once an admin has signed off on what is there now. Preparing a row for a
+// push edits it, and that edit is what stales everyone else.
+await prisma.approval.updateMany({
+  where: { rowId: row.id, userId: member.id }, data: { contentHash: "an-older-version" } });
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id);
+check("a stale colleague no longer blocks a current admin sign-off", r.ok, r.error);
+check("...and it really was pushed", (await state()).campaigns.length === 1);
+
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.approval.deleteMany({ where: { rowId: row.id } });
 await approve();
 
 // --- a bad audience ------------------------------------------------------
@@ -195,13 +238,13 @@ const columns = JSON.parse(sheet.columns) as string[];
 const forPush = async (over: Record<string, string> = {}, extra: Partial<{ hiddenAt: Date | null }> = {}) => {
   const fresh = await prisma.sheetRow.findUniqueOrThrow({
     where: { id: row.id },
-    include: { approvals: { select: { templateId: true, contentHash: true,
+    include: { approvals: { select: { templateId: true, contentHash: true, userId: true,
       user: { select: { name: true, email: true } } } } },
   });
   const data = JSON.stringify({ ...JSON.parse(fresh.data), ...over });
   return { data, values: JSON.parse(data), columns,
     hiddenAt: extra.hiddenAt !== undefined ? extra.hiddenAt : fresh.hiddenAt,
-    approvals: fresh.approvals };
+    approvals: fresh.approvals.map((a) => ({ ...a, admin: a.userId === user.id })) };
 };
 const tplNow = await prisma.template.findUniqueOrThrow({ where: { id: tpl.id } });
 
@@ -433,7 +476,7 @@ const aliased = {
   values: { subject: "Hello", list: "Newsletter" },
   columns: ["subject", "list"],
   hiddenAt: null,
-  approvals: [] as { templateId: string; contentHash: string; user: { name: string | null; email: string } }[],
+  approvals: [] as ApprovalForPush[],
 };
 let e2 = checkEligibility(aliased, tplNow, settings);
 check("eligibility reads the sheet's own audience column",
@@ -441,6 +484,41 @@ check("eligibility reads the sheet's own audience column",
 e2 = checkEligibility({ ...aliased, values: { subject: "Hello", list: "" } }, tplNow, settings);
 check("...and says which column it means when it is empty",
   e2.blockers.some((b) => b.includes("“list”")), e2.blockers.find((b) => /list/.test(b)));
+
+// --- who signed it off, for the dots on the queue -------------------------
+console.log("\nThe sign-off shown beside the push");
+const withPeople = (rows: { userId: string; admin: boolean; stale: boolean }[]) => ({
+  data: JSON.stringify({ subject: "Hello", audience: "Newsletter" }),
+  values: { subject: "Hello", audience: "Newsletter" },
+  columns: ["subject", "audience"],
+  hiddenAt: null,
+  approvals: rows.map((p, i) => ({
+    templateId: tplNow.id,
+    contentHash: p.stale
+      ? "older"
+      : approvalFingerprint(JSON.stringify({ subject: "Hello", audience: "Newsletter" }), tplNow.id, tplNow.updatedAt),
+    userId: p.userId,
+    admin: p.admin,
+    user: { name: `Person ${i}`, email: `p${i}@example.com` },
+  })) as ApprovalForPush[],
+});
+
+let g = checkEligibility(
+  withPeople([{ userId: "u1", admin: true, stale: false }, { userId: "u2", admin: false, stale: true }]),
+  tplNow, settings);
+check("one current admin sign-off is enough", g.ok, g.blockers.join(" "));
+check("...and both people are still shown", g.approvers.length === 2, `${g.approvers.length}`);
+check("...with the stale one marked as such",
+  g.approvers.filter((a) => a.stale).length === 1);
+check("...and the admin marked as the one that counts",
+  g.approvers.filter((a) => a.admin).length === 1);
+
+g = checkEligibility(withPeople([{ userId: "u2", admin: false, stale: false }]), tplNow, settings);
+check("members alone are not enough", !g.ok && g.blockers.some((b) => /No admin has approved/.test(b)),
+  g.blockers.join(" "));
+g = checkEligibility(withPeople([{ userId: "u1", admin: true, stale: true }]), tplNow, settings);
+check("a stale admin is not enough either",
+  !g.ok && g.blockers.some((b) => /sign off on this one/.test(b)), g.blockers.join(" "));
 
 // --- the company default audience ----------------------------------------
 // Filling an audience into every row would make every sign-off on those rows
@@ -452,7 +530,7 @@ const noAudience = {
   values: { subject: "Hello", audience: "" },
   columns: ["subject", "audience"],
   hiddenAt: null,
-  approvals: [] as { templateId: string; contentHash: string; user: { name: string | null; email: string } }[],
+  approvals: [] as ApprovalForPush[],
 };
 let d = checkEligibility(noAudience, tplNow, settings);
 check("a row with no audience and no default is not offered",

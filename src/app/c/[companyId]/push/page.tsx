@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { guardCompany } from "@/lib/guard";
 import { parseRecord, parseStringArray } from "@/lib/json";
 import { rowLabel } from "@/lib/campaign";
+import { avatarHue, initialsOf } from "@/lib/approval";
 import { envelopeSlots, findEnvelopeColumns, findTemplateColumn, matchTemplateName } from "@/lib/template";
 import { checkEligibility } from "@/lib/push-eligibility";
 import { DEFAULT_TIMEZONE } from "@/lib/zone";
@@ -27,7 +28,7 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
   // permission as approving a row in here.
   await guardCompany(companyId, "admin");
 
-  const [company, sheets, templates] = await Promise.all([
+  const [company, sheets, templates, adminships] = await Promise.all([
     prisma.company.findUniqueOrThrow({
       where: { id: companyId },
       select: {
@@ -46,7 +47,7 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
             approvals: {
               orderBy: { createdAt: "asc" },
               select: {
-                templateId: true, contentHash: true,
+                templateId: true, contentHash: true, userId: true,
                 user: { select: { name: true, email: true } },
               },
             },
@@ -66,7 +67,14 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
       orderBy: { name: "asc" },
       select: { id: true, name: true, updatedAt: true },
     }),
+    // Who can sign a row off for sending, as opposed to for reading. One query
+    // for the company, rather than one per row.
+    prisma.membership.findMany({
+      where: { companyId, role: { in: ["admin", "owner"] } },
+      select: { userId: true },
+    }),
   ]);
+  const admins = new Set(adminships.map((m) => m.userId));
 
   const connected = Boolean(company.klaviyoKeyCipher);
   const settings = {
@@ -104,7 +112,7 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
           values: data,
           columns,
           hiddenAt: row.hiddenAt,
-          approvals: row.approvals,
+          approvals: row.approvals.map((a) => ({ ...a, admin: admins.has(a.userId) })),
         },
         template,
         settings,
@@ -121,6 +129,15 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
         title: rowLabel(data, columns),
         subject: check.subject,
         campaignName: check.campaignName,
+        // Same dots as the calendar, so "who signed this off" reads the same
+        // wherever it is asked.
+        approvers: check.approvers.map((a) => ({
+          name: a.name,
+          initials: initialsOf(a.name.includes("@") ? null : a.name, a.name),
+          hue: avatarHue(a.userId),
+          admin: a.admin,
+          stale: a.stale,
+        })),
         audience: check.audience,
         audienceInherited: check.audienceInherited,
         sendAt: check.sendAt?.toISOString() ?? null,
