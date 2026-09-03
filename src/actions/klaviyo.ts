@@ -124,7 +124,13 @@ export async function disconnectKlaviyoAction(companyId: string): Promise<Klaviy
 /** The sender details every campaign this company pushes will carry. */
 export async function saveKlaviyoSettingsAction(
   companyId: string,
-  settings: { fromEmail: string; fromLabel: string; replyTo: string; timezone: string },
+  settings: {
+    fromEmail: string;
+    fromLabel: string;
+    replyTo: string;
+    timezone: string;
+    baseTemplateId: string;
+  },
 ): Promise<KlaviyoResult> {
   try {
     await requireCompanyAccess(companyId, "admin");
@@ -145,6 +151,7 @@ export async function saveKlaviyoSettingsAction(
         klaviyoFromLabel: settings.fromLabel.trim() || null,
         klaviyoReplyTo: replyTo || null,
         klaviyoTimezone: TIMEZONES.includes(settings.timezone) ? settings.timezone : DEFAULT_TIMEZONE,
+        klaviyoBaseTemplateId: settings.baseTemplateId.trim() || null,
       },
     });
 

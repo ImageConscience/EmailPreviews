@@ -23,7 +23,9 @@ const REVISION = "2024-10-15";
  * end against a stand-in rather than a client's live account. Unset in any real
  * deployment, which is the only configuration that reaches Klaviyo at all.
  */
-const BASE = process.env.KLAVIYO_API_BASE?.trim() || "https://a.klaviyo.com/api";
+function base(): string {
+  return process.env.KLAVIYO_API_BASE?.trim() || "https://a.klaviyo.com/api";
+}
 
 export class KlaviyoError extends Error {
   readonly status: number;
@@ -45,7 +47,7 @@ interface RequestOptions {
 }
 
 async function call<T>(apiKey: string, path: string, options: RequestOptions = {}): Promise<T> {
-  const url = new URL(`${BASE}${path}`);
+  const url = new URL(`${base()}${path}`);
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value != null && value !== "") url.searchParams.set(key, value);
   }
@@ -175,34 +177,61 @@ export async function fetchAudiences(apiKey: string): Promise<Audience[]> {
 
 // --- what the app writes -------------------------------------------------
 
+export interface TemplateDetail {
+  id: string;
+  name: string;
+  editorType: string;
+  /** The drag-and-drop structure, present only for templates that have one. */
+  definition: unknown;
+}
+
+/** One template, with its block structure. */
+export async function fetchTemplate(apiKey: string, templateId: string): Promise<TemplateDetail> {
+  const body = await call<{
+    data: { id: string; attributes: { name: string; editor_type: string; definition?: unknown } };
+  }>(apiKey, `/templates/${templateId}`, {
+    query: { "additional-fields[template]": "definition" },
+  });
+  return {
+    id: body.data.id,
+    name: body.data.attributes.name,
+    editorType: body.data.attributes.editor_type,
+    definition: body.data.attributes.definition ?? null,
+  };
+}
+
 /**
- * Create or replace the template holding one send's HTML.
+ * Copy the base template, chrome and all.
  *
- * `CODE` rather than a drag-and-drop template: the HTML is the thing that was
- * approved, and a template Klaviyo can rearrange is a template that can stop
- * matching what someone signed off on.
+ * A clone per send rather than one template edited over and over: each campaign
+ * then holds the content it was approved with, and editing next week's send
+ * cannot change what last week's already sent. Klaviyo's clone carries the
+ * drag-and-drop definition, which is the part that matters here.
  */
-export async function createTemplate(
-  apiKey: string,
-  name: string,
-  html: string,
-): Promise<string> {
-  const made = await call<{ data: { id: string } }>(apiKey, "/templates", {
+export async function cloneTemplate(apiKey: string, templateId: string, name: string): Promise<string> {
+  const made = await call<{ data: { id: string } }>(apiKey, "/template-clone", {
     method: "POST",
-    body: { data: { type: "template", attributes: { name, editor_type: "CODE", html } } },
+    body: { data: { type: "template", id: templateId, attributes: { name } } },
   });
   return made.data.id;
 }
 
-export async function updateTemplate(
+/**
+ * Write a drag-and-drop definition back.
+ *
+ * Klaviyo replaces the definition wholesale -- there is no way to patch one
+ * block -- so the caller reads it, changes the block it owns, and returns the
+ * rest untouched.
+ */
+export async function updateDndTemplate(
   apiKey: string,
   templateId: string,
   name: string,
-  html: string,
+  definition: unknown,
 ): Promise<void> {
   await call(apiKey, `/templates/${templateId}`, {
     method: "PATCH",
-    body: { data: { type: "template", id: templateId, attributes: { name, html } } },
+    body: { data: { type: "template", id: templateId, attributes: { name, definition } } },
   });
 }
 

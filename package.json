@@ -14,6 +14,8 @@
     "check:secrets": "tsx scripts/check-secrets.mts",
     "check:zone": "tsx scripts/check-zone.mts",
     "check:blocks": "tsx scripts/check-block-content.mts",
+    "klaviyo:mock": "node scripts/fixtures/klaviyo-mock.mjs",
+    "check:push": "tsx scripts/check-push.mts",
     "check": "npm run check:roundtrip && npm run check:secrets && npm run check:zone && npm run check:blocks",
     "postinstall": "prisma generate"
   },

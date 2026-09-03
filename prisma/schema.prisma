@@ -32,6 +32,7 @@ model User {
   approvals   Approval[]
   uploads     MediaAsset[]  @relation("MediaUploader")
   notes       RowNote[]
+  pushes      KlaviyoPush[]
 }
 
 model Session {
@@ -75,6 +76,11 @@ model Company {
   /// The zone the sheet's send times are written in.
   klaviyoTimezone    String?
   klaviyoLinkedAt    DateTime?
+  /// The drag-and-drop template in Klaviyo whose HTML block the content goes
+  /// into. Cloned per send, so the header, footer and unsubscribe stay the
+  /// client's and only the marked block is ours.
+  klaviyoBaseTemplateId String?
+  klaviyoBaseTemplateName String?
 
   memberships Membership[]
   templates   Template[]
@@ -201,6 +207,7 @@ model Template {
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   approvals Approval[]
+  pushes    KlaviyoPush[]
 
   @@index([companyId])
 }
@@ -243,6 +250,7 @@ model SheetRow {
   revisions RowRevision[]
   approvals Approval[]
   notes     RowNote[]
+  pushes    KlaviyoPush[]
 
   @@index([sheetId, position])
 }
@@ -269,6 +277,41 @@ model Approval {
   @@unique([rowId, templateId, userId])
   @@index([rowId])
   @@index([templateId])
+}
+
+/// What this app put into a client's Klaviyo, and when.
+///
+/// One per row-and-template pair, so pushing the same email twice updates the
+/// campaign it made rather than leaving a second one behind for someone to
+/// find later and wonder about. Keeping the ids is what makes the second push
+/// an update instead of a duplicate.
+model KlaviyoPush {
+  id                String   @id @default(cuid())
+  rowId             String
+  templateId        String
+  /// Klaviyo's ids for what was created.
+  campaignId        String
+  messageId         String
+  klaviyoTemplateId String
+  /// The approval fingerprint of what was pushed, so the app can tell whether
+  /// the row has been edited since and the campaign is now out of date.
+  contentHash       String
+  /// "draft", "scheduled", or "cancelled" -- what this app last did, which is
+  /// not necessarily what Klaviyo shows if someone changed it there.
+  status            String   @default("draft")
+  scheduledFor      DateTime?
+  campaignName      String
+  /// The audiences as named at push time, for showing where it went.
+  audienceNames     String   @default("")
+  pushedAt          DateTime @default(now())
+  pushedById        String?
+
+  row      SheetRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  pushedBy User?    @relation(fields: [pushedById], references: [id], onDelete: SetNull)
+
+  @@unique([rowId, templateId])
+  @@index([rowId])
 }
 
 /// A message on one row, from one person, to whoever else works on it.

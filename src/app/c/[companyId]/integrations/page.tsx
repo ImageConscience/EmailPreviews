@@ -30,6 +30,7 @@ export default async function IntegrationsPage({
         klaviyoFromLabel: true,
         klaviyoReplyTo: true,
         klaviyoTimezone: true,
+        klaviyoBaseTemplateId: true,
       },
     }),
     prisma.catalogProduct.count({ where: { companyId } }),
@@ -74,6 +75,7 @@ export default async function IntegrationsPage({
           fromLabel: company?.klaviyoFromLabel ?? "",
           replyTo: company?.klaviyoReplyTo ?? "",
           timezone: company?.klaviyoTimezone ?? DEFAULT_TIMEZONE,
+          baseTemplateId: company?.klaviyoBaseTemplateId ?? "",
           canStoreSecrets: secretsAvailable(),
         }}
       />

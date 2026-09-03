@@ -19,6 +19,7 @@ export interface KlaviyoState {
   fromLabel: string;
   replyTo: string;
   timezone: string;
+  baseTemplateId: string;
   /** False when the deployment has no ENCRYPTION_KEY, so nothing can be stored. */
   canStoreSecrets: boolean;
 }
@@ -52,6 +53,7 @@ export function KlaviyoPanel({
   const [fromLabel, setFromLabel] = useState(state.fromLabel);
   const [replyTo, setReplyTo] = useState(state.replyTo);
   const [timezone, setTimezone] = useState(state.timezone);
+  const [baseTemplateId, setBaseTemplateId] = useState(state.baseTemplateId);
 
   const connect = async () => {
     setBusy("Asking Klaviyo whose key this is…");
@@ -91,6 +93,7 @@ export function KlaviyoPanel({
       fromLabel,
       replyTo,
       timezone,
+      baseTemplateId,
     });
     setBusy(null);
     if (!result.ok) {
@@ -163,6 +166,24 @@ export function KlaviyoPanel({
                 disabled={!canEdit}
                 onChange={(e) => setReplyTo(e.target.value)}
               />
+            </div>
+
+            <div className="field">
+              <span>Base template ID</span>
+              <input
+                type="text"
+                value={baseTemplateId}
+                disabled={!canEdit}
+                placeholder="XyZ123"
+                onChange={(e) => setBaseTemplateId(e.target.value)}
+              />
+              <p className="hint">
+                The drag-and-drop template in Klaviyo holding your header, footer and unsubscribe.
+                Each send clones it and fills the HTML block marked{" "}
+                <code>&lt;!-- EMAILPREVIEWS:CONTENT --&gt;</code>. With only one HTML block in the
+                template the marker is optional. The ID is in the editor URL:{" "}
+                <code>klaviyo.com/email-editor/<strong>ID</strong>/edit</code>.
+              </p>
             </div>
 
             <div className="field">
