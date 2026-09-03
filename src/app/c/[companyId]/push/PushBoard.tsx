@@ -189,7 +189,7 @@ export function PushBoard({
                       <span className="ov-nodate">No date</span>
                     )}
                   </td>
-                  <td>
+                  <td className="push-campaign">
                     <Link
                       href={`/c/${companyId}/preview?sheet=${item.sheetId}&row=${item.rowId}`}
                       className="ov-title"
@@ -203,14 +203,8 @@ export function PushBoard({
                   <td className="tight">
                     <Approvers people={item.approvers} />
                   </td>
-                  <td className="tight">
-                    <span
-                      className="badge"
-                      title={item.audienceInherited ? "From this company's default audience" : undefined}
-                    >
-                      {item.audience}
-                      {item.audienceInherited && " *"}
-                    </span>
+                  <td className="push-aud">
+                    <Audiences value={item.audience} inherited={item.audienceInherited} />
                   </td>
                   <td className="tight">
                     <PushedCell item={item} />
@@ -246,6 +240,34 @@ export function PushBoard({
         />
       )}
     </main>
+  );
+}
+
+/**
+ * Who a send goes to, one chip per audience.
+ *
+ * Real segment names are sentences -- "2026 | Deep Engaged | BxC" and three
+ * more of the same -- and as a single run of text they took the whole row and
+ * left the campaign name wrapping one word per line. One chip each, wrapping
+ * inside a column that has a ceiling, so a long audience costs its own cell
+ * height rather than every other column's width.
+ */
+function Audiences({ value, inherited }: { value: string; inherited: boolean }) {
+  const names = value.split(",").map((part) => part.trim()).filter(Boolean);
+  if (names.length === 0) return <span className="hint">—</span>;
+  return (
+    <div>
+      <div className="push-audiences">
+        {names.map((name) => (
+          <span key={name} className="badge" title={name}>
+            {name}
+          </span>
+        ))}
+      </div>
+      {inherited && (
+        <div className="ov-sub">This company&rsquo;s default</div>
+      )}
+    </div>
   );
 }
 

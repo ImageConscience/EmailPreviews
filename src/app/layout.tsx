@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SetupNeeded } from "@/components/SetupNeeded";
+import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,7 +29,12 @@ function setupIssue() {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const issue = setupIssue();
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Before first paint: a theme decided after hydration is a white page
+            that turns dark while you are looking at it. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>{issue ? <SetupNeeded {...issue} /> : children}</body>
     </html>
   );

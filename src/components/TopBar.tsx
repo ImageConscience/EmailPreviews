@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { logoutAction } from "@/actions/auth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 /** Sentinel option value: not a company, a trip to the company list. */
 const NEW_COMPANY = "__new__";
@@ -113,6 +114,7 @@ export function TopBar({ companyId, companyName, userName, role, canPush, otherC
       </nav>
       <div className="spacer" />
       <div className="row" style={{ gap: 8 }}>
+        <ThemeToggle />
         {/*
           Always a select, even with one company: this is where someone looks
           for their other companies, so it is also where "add another" belongs.
