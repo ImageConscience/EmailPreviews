@@ -196,3 +196,39 @@ export function useMineFilter(
 export function validId(stored: string, known: string[], fallback = ""): string {
   return known.includes(stored) ? stored : fallback;
 }
+
+/**
+ * Whether a collapsible rail is open.
+ *
+ * Kept out of the URL on purpose, unlike the filters beside it. How wide
+ * somebody wants their own sidebar is not part of what a shared link is saying,
+ * and a colleague opening a pasted view should get their own layout back rather
+ * than inheriting the sender's.
+ */
+export function useRail(key: string, initial = true): [boolean, (next: boolean) => void] {
+  const [open, setOpen] = useState(initial);
+  const storageKey = `emailpreviews:rail:${key}`;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored === "open" || stored === "shut") setOpen(stored === "open");
+    } catch {
+      // Storage unavailable costs the preference, not the page.
+    }
+  }, [storageKey]);
+
+  const set = useCallback(
+    (next: boolean) => {
+      setOpen(next);
+      try {
+        window.localStorage.setItem(storageKey, next ? "open" : "shut");
+      } catch {
+        /* as above */
+      }
+    },
+    [storageKey],
+  );
+
+  return [open, set];
+}

@@ -18,6 +18,8 @@
   --ok-soft: #e4f5ec;
   --sent: #6d3bd1;
   --sent-soft: #efe9fc;
+  --rail: #dee4ee;
+  --rail-border: #c5cfdd;
   --radius: 8px;
   --radius-sm: 5px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
@@ -46,6 +48,8 @@
     --ok-soft: #10301f;
     --sent: #b198f5;
     --sent-soft: #2a2140;
+    --rail: #0f1319;
+    --rail-border: #232a34;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
   }
@@ -265,6 +269,51 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* The filter rail. Its own tone because it is chrome either side of the email:
+   the stage is what you are looking at, the right pane is where you work, and
+   this is neither. */
+.ws-rail { background: var(--rail); border-right-color: var(--rail-border); }
+.ws-rail .ws-section { border-bottom-color: var(--rail-border); }
+.ws-rail select,
+.ws-rail input[type="date"] { background: var(--surface); }
+
+.rail-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--rail);
+  border-bottom: 1px solid var(--rail-border);
+}
+.rail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.rail-toggle:hover { color: var(--text); }
+.rail-title { flex: 1; text-align: left; }
+.rail-chevron { font-size: 15px; line-height: 1; }
+
+/* Shut: the column narrows to the button that reopens it, and everything else
+   stops taking up layout rather than being hidden on top of it. */
+.workspace.rail-shut { grid-template-columns: 42px minmax(0, 1fr) 340px; }
+.workspace.rail-shut .ws-rail > *:not(.rail-head) { display: none; }
+.workspace.rail-shut .rail-toggle { justify-content: center; padding: 11px 0; }
+@media (max-width: 1100px) {
+  .workspace.rail-shut { grid-template-columns: 1fr; }
+  .workspace.rail-shut .ws-rail > *:not(.rail-head) { display: none; }
 }
 .ws-pane:last-child { border-right: none; border-left: 1px solid var(--border); }
 .ws-section { padding: 14px; border-bottom: 1px solid var(--border); }

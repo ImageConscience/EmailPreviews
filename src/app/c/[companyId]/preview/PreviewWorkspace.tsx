@@ -28,7 +28,7 @@ import {
   rowSubLabel,
   type DateRange,
 } from "@/lib/campaign";
-import { flag, isOn, useMineFilter, useViewState, validId } from "@/lib/view-state";
+import { flag, isOn, useMineFilter, useRail, useViewState, validId } from "@/lib/view-state";
 import type { MineFilter } from "@/lib/view-state";
 import { ShareLink } from "@/components/ShareLink";
 import { PreviewFrame } from "./PreviewFrame";
@@ -143,6 +143,21 @@ type DeviceId = (typeof DEVICES)[number]["id"];
 
 /** Filter value for rows whose template cell is empty or names nothing real. */
 const UNASSIGNED_ROWS = "__unassigned__";
+
+/** A funnel. Inline because it is one path and a font would be a whole file. */
+function FunnelIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden focusable="false">
+      <path
+        d="M1.5 2.5h13l-5 5.6v4.6l-3 1.3V8.1z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 /**
  * Fields named product_<n>_<part> are one tile, filled together.
@@ -274,6 +289,7 @@ export function PreviewWorkspace({
   // Which rows are mine still to sign off. Shared with the overview, and kept
   // out of the URL for the reason the hook explains.
   const [mine, setMineFilter] = useMineFilter(companyId, currentUserId);
+  const [filtersOpen, setFiltersOpen] = useRail(`preview:${companyId}`);
   /** "" is every row; otherwise a template id, or UNASSIGNED_ROWS. */
   const templateFilter = view.filter;
   const setTemplateFilter = (next: string) => setView({ filter: next });
@@ -942,9 +958,28 @@ export function PreviewWorkspace({
   const deviceWidth = DEVICES.find((d) => d.id === device)?.width ?? null;
 
   return (
-    <div className="workspace">
-      {/* ---------- left: pickers ---------- */}
-      <aside className="ws-pane">
+    <div className={`workspace${filtersOpen ? "" : " rail-shut"}`}>
+      {/*
+        ---------- left: filters and the row list ----------
+        Collapsible, because the thing people came to look at is an email of a
+        fixed width and this rail is 260px of the screen it is not using. Shut,
+        it leaves the button that reopens it and nothing else.
+      */}
+      <aside className="ws-pane ws-rail">
+        <div className="rail-head">
+          <button
+            type="button"
+            className="rail-toggle"
+            aria-expanded={filtersOpen}
+            title={filtersOpen ? "Hide the filters and row list" : "Show the filters and row list"}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+          >
+            <FunnelIcon />
+            {filtersOpen && <span className="rail-title">Filters</span>}
+            {filtersOpen && <span className="rail-chevron" aria-hidden>&#8249;</span>}
+          </button>
+        </div>
+
         <div className="ws-section">
           <h3>Template</h3>
           {templateColumn ? (
