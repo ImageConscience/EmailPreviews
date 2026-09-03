@@ -4,8 +4,9 @@ import { prisma } from "@/lib/db";
 import { guardCompany } from "@/lib/guard";
 import { parseRecord, parseStringArray } from "@/lib/json";
 import { rowLabel } from "@/lib/campaign";
-import { findTemplateColumn, matchTemplateName } from "@/lib/template";
+import { envelopeSlots, findEnvelopeColumns, findTemplateColumn, matchTemplateName } from "@/lib/template";
 import { checkEligibility } from "@/lib/push-eligibility";
+import { DEFAULT_TIMEZONE } from "@/lib/zone";
 import { PushBoard, type PushItem } from "./PushBoard";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +82,7 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
   for (const sheet of sheets) {
     const columns = parseStringArray(sheet.columns);
     const templateColumn = findTemplateColumn(columns);
+    const slots = envelopeSlots(findEnvelopeColumns(columns));
 
     for (const row of sheet.rows) {
       const data = parseRecord(row.data);
@@ -118,6 +120,10 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
         campaignName: check.campaignName,
         audience: check.audience,
         sendAt: check.sendAt?.toISOString() ?? null,
+        // The raw cells, so the dialog can offer them for editing and say what
+        // the sheet currently holds.
+        sheetDate: (data[slots.sendDate] ?? "").trim(),
+        sheetTime: (data[slots.sendTime] ?? "").trim(),
         sendAtLabel: check.sendAtLabel,
         canSchedule: check.canSchedule,
         past: Boolean(check.sendAt && check.sendAt.getTime() <= Date.now()),
@@ -181,7 +187,7 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
         [company.klaviyoFromLabel, company.klaviyoFromEmail].filter(Boolean).join(" · ") ||
         "no from-address set"
       }
-      timezone={company.klaviyoTimezone ?? "America/New_York"}
+      timezone={company.klaviyoTimezone ?? DEFAULT_TIMEZONE}
       ready={Boolean(company.klaviyoBaseTemplateId && company.klaviyoFromEmail)}
     />
   );

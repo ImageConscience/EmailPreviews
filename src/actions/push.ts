@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { AuthError, requireCompanyAccess } from "@/lib/auth";
-import { performPush, performSchedule, type PushMode, type PushResult } from "@/lib/push-core";
+import { performPush, performSchedule, type PushMode, type PushResult, type SendOverride } from "@/lib/push-core";
 
-export type { PushMode, PushResult, PushState } from "@/lib/push-core";
+export type { PushMode, PushResult, PushState, SendOverride } from "@/lib/push-core";
 
 /**
  * The doors into a client's Klaviyo, each with the access it needs.
@@ -20,6 +20,7 @@ export async function pushToKlaviyoAction(
   rowId: string,
   templateId: string,
   mode: PushMode = "draft",
+  override?: SendOverride,
 ): Promise<PushResult> {
   // Admin and above for both. Pushing writes into a client's Klaviyo account,
   // which is a different kind of act from approving a row in this app, and the
@@ -32,10 +33,13 @@ export async function pushToKlaviyoAction(
     // promise and leave the dialog saying "Talking to Klaviyo…" indefinitely.
     return { ok: false, error: refusal(error) };
   }
-  const result = await performPush(companyId, rowId, templateId, access.user.id, mode);
+  const result = await performPush(companyId, rowId, templateId, access.user.id, mode, override);
   if (result.ok) {
     revalidatePath(`/c/${companyId}/overview`);
     revalidatePath(`/c/${companyId}/push`);
+    // An overridden send time is a sheet edit, so the sheet's own view of it is
+    // now out of date too.
+    revalidatePath(`/c/${companyId}/sheets`);
   }
   return result;
 }

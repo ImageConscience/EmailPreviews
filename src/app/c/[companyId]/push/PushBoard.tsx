@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { pushToKlaviyoAction, type PushMode } from "@/actions/push";
+import { describe, zonedToUtc } from "@/lib/zone";
 import { flag, isOn, useViewState, validId } from "@/lib/view-state";
 
 export interface PushedState {
@@ -32,6 +33,9 @@ export interface PushItem {
   /** The send instant the row asks for, if it names one. */
   sendAt: string | null;
   sendAtLabel: string | null;
+  /** The sheet's own cells, which the dialog can edit. */
+  sheetDate: string;
+  sheetTime: string;
   /** Whether that instant is real and still in the future. */
   canSchedule: boolean;
   /** The row names a send time that has already gone by. */
@@ -219,6 +223,7 @@ export function PushBoard({
           companyId={companyId}
           item={open}
           accountName={accountName}
+          timezone={timezone}
           onClose={() => setOpen(null)}
           onDone={() => {
             setOpen(null);
@@ -265,26 +270,49 @@ function PushDialog({
   companyId,
   item,
   accountName,
+  timezone,
   onClose,
   onDone,
 }: {
   companyId: string;
   item: PushItem;
   accountName: string;
+  timezone: string;
   onClose: () => void;
   onDone: () => void;
 }) {
   const [mode, setMode] = useState<PushMode>("draft");
+  const [date, setDate] = useState(item.sheetDate);
+  const [time, setTime] = useState(item.sheetTime);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<string[] | null>(null);
   const [done, setDone] = useState(false);
 
+  // The send time is read live rather than taken from the row, because these
+  // inputs can change it: what Schedule offers has to answer to what is on
+  // screen, not to what the sheet said when the page was drawn.
+  const when = date ? zonedToUtc(date, time, timezone) : { utc: null, warning: undefined };
+  const canSchedule = Boolean(when.utc && when.utc.getTime() > Date.now());
+  const label = when.utc ? describe(when.utc, timezone) : null;
+  const changed = date !== item.sheetDate || time !== item.sheetTime;
+  const unreadable = Boolean(date) && !when.utc;
+
+  // Losing the Schedule option while it is selected would otherwise leave the
+  // button saying "Push and schedule" over a time nothing can schedule.
+  const effectiveMode: PushMode = canSchedule ? mode : "draft";
+
   const run = async () => {
     setBusy(true);
     setError(null);
     try {
-      const result = await pushToKlaviyoAction(companyId, item.rowId, item.templateId, mode);
+      const result = await pushToKlaviyoAction(
+        companyId,
+        item.rowId,
+        item.templateId,
+        effectiveMode,
+        changed ? { date, time } : undefined,
+      );
       if (!result.ok) {
         setError(result.error ?? "Could not push.");
         return;
@@ -316,7 +344,7 @@ function PushDialog({
             <>
               <p style={{ marginTop: 0 }}>
                 <strong>{item.campaignName || item.title}</strong> is in {accountName} as a{" "}
-                {mode === "scheduled" ? "scheduled campaign" : "draft"}.
+                {effectiveMode === "scheduled" ? "scheduled campaign" : "draft"}.
               </p>
               {notes?.map((note, i) => (
                 <p key={i} className="hint">
@@ -336,14 +364,62 @@ function PushDialog({
                 <dd>{item.subject}</dd>
                 <dt>To</dt>
                 <dd>{item.audience}</dd>
-                <dt>Send time</dt>
-                <dd>{item.sendAtLabel ?? "none set"}</dd>
                 <dt>Account</dt>
                 <dd>{accountName}</dd>
               </dl>
 
-              {item.warning && (
-                <p className="hint" style={{ color: "var(--danger)" }}>{item.warning}</p>
+              {/*
+                The sheet is where a send time lives, so this is prefilled from
+                it and writes back to it. Editing here is for the change you
+                make with your hand already on the push button -- not a second
+                place for a send time to be kept.
+              */}
+              <div className="push-when">
+                <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
+                  <label className="field" style={{ margin: 0 }}>
+                    <span>Send date</span>
+                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                  </label>
+                  <label className="field" style={{ margin: 0 }}>
+                    <span>Time</span>
+                    <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                  </label>
+                  {changed && (
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => {
+                        setDate(item.sheetDate);
+                        setTime(item.sheetTime);
+                      }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                <p className="hint">
+                  {unreadable ? (
+                    <span style={{ color: "var(--danger)" }}>
+                      That is not a date and time this can read.
+                    </span>
+                  ) : label ? (
+                    <>Goes out {label}.</>
+                  ) : (
+                    "No send time. It can be pushed as a draft and dated later."
+                  )}
+                </p>
+                {changed && !unreadable && (
+                  <p className="hint" style={{ color: "var(--accent)" }}>
+                    This also changes the sheet, which is where the send time lives.{" "}
+                    {item.sheetDate || item.sheetTime
+                      ? `It currently says ${[item.sheetDate, item.sheetTime].filter(Boolean).join(" ")}.`
+                      : "It currently has none."}
+                  </p>
+                )}
+              </div>
+
+              {when.warning && (
+                <p className="hint" style={{ color: "var(--danger)" }}>{when.warning}</p>
               )}
               {item.pushed?.status === "scheduled" ? (
                 <p className="hint" style={{ color: "var(--danger)" }}>
@@ -366,7 +442,7 @@ function PushDialog({
                   <input
                     type="radio"
                     name="mode"
-                    checked={mode === "draft"}
+                    checked={effectiveMode === "draft"}
                     onChange={() => setMode("draft")}
                   />
                   <span>
@@ -377,30 +453,32 @@ function PushDialog({
                     </span>
                   </span>
                 </label>
-                <label className={item.canSchedule ? "" : "is-off"}>
+                <label className={canSchedule ? "" : "is-off"}>
                   <input
                     type="radio"
                     name="mode"
-                    checked={mode === "scheduled"}
-                    disabled={!item.canSchedule}
+                    checked={effectiveMode === "scheduled"}
+                    disabled={!canSchedule}
                     onChange={() => setMode("scheduled")}
                   />
                   <span>
                     <strong>Schedule</strong>
                     <span className="hint">
-                      {item.canSchedule ? (
-                        <>Klaviyo will send this to {item.audience} at {item.sendAtLabel}.</>
-                      ) : item.sendAt ? (
-                        "That send time has already passed. Change the date in the sheet."
+                      {canSchedule ? (
+                        <>Klaviyo will send this to {item.audience} at {label}.</>
+                      ) : unreadable ? (
+                        "That date and time cannot be read."
+                      ) : when.utc ? (
+                        "That send time has already passed. Pick a later one."
                       ) : (
-                        "Scheduling needs a send date and time. Add one to the row first."
+                        "Scheduling needs a send date and time. Set one above."
                       )}
                     </span>
                   </span>
                 </label>
               </fieldset>
 
-              {mode === "scheduled" && (
+              {effectiveMode === "scheduled" && (
                 <p className="hint" style={{ color: "var(--danger)" }}>
                   This puts a real send in {accountName}&rsquo;s queue.
                 </p>
@@ -411,12 +489,12 @@ function PushDialog({
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={busy}
+                  disabled={busy || unreadable}
                   onClick={() => void run()}
                 >
                   {busy
                     ? "Talking to Klaviyo…"
-                    : mode === "scheduled"
+                    : effectiveMode === "scheduled"
                       ? "Push and schedule"
                       : "Push as draft"}
                 </button>

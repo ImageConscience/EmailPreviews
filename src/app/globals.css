@@ -962,3 +962,13 @@ input:focus, select:focus, textarea:focus {
 .push-modes label > span { display: block; }
 .push-modes label .hint { display: block; margin: 2px 0 0; }
 .push-modes input { margin-top: 3px; flex: none; }
+.push-when {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.push-when .field span { font-size: 12px; }
+.push-when input { width: auto; }
+.push-when .hint { margin: 8px 0 0; }
+.push-when .hint + .hint { margin-top: 4px; }

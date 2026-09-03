@@ -292,6 +292,100 @@ check("and re-scheduling it puts exactly one job back",
   r.ok && s.sendJobs.length === 1 && s.campaigns[0]?.status === "Scheduled",
   `${s.sendJobs.length} job(s), ${s.campaigns[0]?.status}`);
 
+// --- overriding the send time at the push --------------------------------
+// The sheet is where a send time lives, so an override is written back to it
+// rather than kept beside it. The interesting part is what happens to the
+// sign-offs: a send time is not content, so an approval survives it -- unless
+// the template actually prints the date, in which case it must not.
+console.log("\nOverriding the send time");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...JSON.parse(row.data), send_date: "2026-12-01", send_time: "10:00" }) } });
+await approve();
+
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled",
+  { date: "2026-12-04", time: "14:30" });
+check("an overridden time pushes", r.ok, r.error);
+
+let saved = JSON.parse((await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data);
+check("...and is written back to the sheet",
+  saved.send_date === "2026-12-04" && saved.send_time === "14:30",
+  `${saved.send_date} ${saved.send_time}`);
+check("...and says so", (r.notes ?? []).some((n) => /sheet's send time was changed/.test(n)),
+  (r.notes ?? []).find((n) => /sheet/.test(n)));
+check("...keeping the old values as a revision",
+  (await prisma.rowRevision.findFirst({ where: { rowId: row.id }, orderBy: { changedAt: "desc" } }))
+    ?.data.includes('"send_date":"2026-12-01"') ?? false);
+
+// 14:30 New York on 4 Dec is 19:30 UTC.
+s = await state();
+check("...and Klaviyo got the new time, in UTC",
+  (s.campaigns[0]?.attributes?.send_strategy as { datetime?: string })?.datetime?.startsWith("2026-12-04T19:30"),
+  (s.campaigns[0]?.attributes?.send_strategy as { datetime?: string })?.datetime);
+
+// The sign-off has to survive, or the row falls out of the queue the instant
+// somebody nudges the time.
+const kept = await prisma.approval.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
+const tplNow2 = await prisma.template.findUniqueOrThrow({ where: { id: tpl.id } });
+const rowNow = await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } });
+check("the sign-off survives a time change",
+  kept.contentHash === approvalFingerprint(rowNow.data, tpl.id, tplNow2.updatedAt));
+check("...so the row is still eligible afterwards",
+  checkEligibility(await forPush(), tplNow2, settings).ok);
+
+// Setting a date on a row that had none, from here.
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...JSON.parse(rowNow.data), send_date: "", send_time: "" }) } });
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled",
+  { date: "2026-12-05", time: "09:00" });
+check("a row with no date can be given one here", r.ok, r.error);
+saved = JSON.parse((await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data);
+check("...and the sheet now has it", saved.send_date === "2026-12-05", saved.send_date);
+
+// Refusals, before anything is written.
+const before2 = (await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data;
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled", { date: "2020-01-01", time: "09:00" });
+check("an overridden time in the past is refused", !r.ok && /already passed/.test(r.error ?? ""), r.error);
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft", { date: "2026-13-45", time: "09:00" });
+check("an unreadable overridden date is refused", !r.ok && /is not a date and time/.test(r.error ?? ""), r.error);
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft", { date: "", time: "09:00" });
+check("a time with no date is refused", !r.ok && /needs a date/.test(r.error ?? ""), r.error);
+check("...and none of those touched the sheet",
+  (await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data === before2);
+
+// A template that prints the send date is the one case where a time change is
+// a content change, and the sign-off must not be carried over it.
+const printing = await prisma.template.create({ data: {
+  companyId: company.id, name: "Prints The Date",
+  html: "<html><body><p>Out on {{ send_date }}</p><p>{{ subject }}</p></body></html>" } });
+await prisma.approval.create({ data: { rowId: row.id, templateId: printing.id, userId: user.id,
+  contentHash: approvalFingerprint(before2, printing.id, printing.updatedAt) } });
+r = await performPush(company.id, row.id, printing.id, user.id, "draft", { date: "2026-12-08", time: "09:00" });
+check("a template that prints the date refuses the override",
+  !r.ok && /prints the send date/.test(r.error ?? ""), r.error);
+check("...without changing the sheet",
+  (await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data === before2);
+
+// ...and pushing a different template must leave that one's sign-off stale.
+// (approve() clears the row's approvals, so the date-printing one is put back
+// afterwards -- it is the thing under test here.)
+await approve();
+await prisma.approval.create({ data: { rowId: row.id, templateId: printing.id, userId: user.id,
+  contentHash: approvalFingerprint(
+    (await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data,
+    printing.id, printing.updatedAt) } });
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft", { date: "2026-12-10", time: "07:00" });
+check("overriding elsewhere still pushes", r.ok, r.error);
+const after = await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } });
+const printed = await prisma.approval.findFirstOrThrow({ where: { rowId: row.id, templateId: printing.id } });
+check("...but the date-printing template's sign-off went stale",
+  printed.contentHash !== approvalFingerprint(after.data, printing.id, printing.updatedAt));
+check("...and it said so", (r.notes ?? []).some((n) => /went stale/.test(n)),
+  (r.notes ?? []).find((n) => /stale/.test(n)));
+await prisma.template.delete({ where: { id: printing.id } });
+
 await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
 
 await prisma.contentSheet.delete({ where: { id: sheet.id } });

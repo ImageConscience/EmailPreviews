@@ -8,7 +8,8 @@ import { KlaviyoError, assignTemplate, cancelCampaign, cloneTemplate, createCamp
 import { klaviyoKeyForCompany } from "@/lib/klaviyo-key";
 import { renderRow } from "@/lib/render-row";
 import { findContentBlock, toBlockContent } from "@/lib/block-content";
-import { findEnvelopeColumns } from "@/lib/template";
+import { envelopeSlots, extractPlaceholders, findEnvelopeColumns, normalizeKey } from "@/lib/template";
+import { DEFAULT_TIMEZONE, zonedToUtc } from "@/lib/zone";
 import { parseRecord, parseStringArray } from "@/lib/json";
 import {
   AUDIENCE_COLUMN,
@@ -19,6 +20,20 @@ import {
 
 /** What a push is asking for. */
 export type PushMode = "draft" | "scheduled";
+
+/**
+ * A send time entered at the push instead of read from the sheet.
+ *
+ * The sheet stays the home of a send time, so an override is written back to it
+ * rather than kept beside it: two places holding different answers is how a
+ * calendar starts lying about when things go out.
+ */
+export interface SendOverride {
+  /** `yyyy-mm-dd`, or empty to clear the date. */
+  date: string;
+  /** `HH:mm`, or empty. */
+  time: string;
+}
 
 export interface PushState {
   campaignId: string;
@@ -198,6 +213,161 @@ async function prepare(
   };
 }
 
+
+/**
+ * Write an overridden send time back to the sheet, and keep the sign-offs.
+ *
+ * Editing a row normally invalidates every approval on it, because the
+ * fingerprint covers the whole row and almost any edit changes the email. A
+ * send time usually does not: it decides when Klaviyo mails the thing, and
+ * nothing about what it says. So an approval is carried forward when the
+ * template it was given against provably does not print the field -- which is
+ * decided by looking for the placeholder, not by assuming.
+ *
+ * Where a template does print it, the approval is left to go stale, and the
+ * push refuses rather than sending an email nobody has read in this form.
+ */
+async function applySendOverride(
+  row: { id: string; data: string; sheetId: string },
+  columns: string[],
+  template: { id: string; name: string; html: string },
+  approvals: { templateId: string }[],
+  override: SendOverride,
+  userId: string,
+): Promise<{ changed: boolean; note?: string } | { error: string }> {
+  const slots = envelopeSlots(findEnvelopeColumns(columns));
+  const current = parseRecord(row.data);
+  const date = override.date.trim();
+  const time = override.time.trim();
+
+  const was = { date: (current[slots.sendDate] ?? "").trim(), time: (current[slots.sendTime] ?? "").trim() };
+  if (was.date === date && was.time === time) return { changed: false };
+
+  const touched = new Set([normalizeKey(slots.sendDate), normalizeKey(slots.sendTime)]);
+  const prints = (html: string) =>
+    extractPlaceholders(html).some((name) => touched.has(normalizeKey(name)));
+
+  if (prints(template.html)) {
+    return {
+      error:
+        `“${template.name}” prints the send date in the email itself, so changing it here would ` +
+        "change what people already approved. Edit the row and have it approved again.",
+    };
+  }
+
+  // Every other template this row is approved in gets the same test, one at a
+  // time: a sign-off in a template that does print the date has to go stale
+  // even though the one being pushed does not.
+  const otherIds = [...new Set(approvals.map((a) => a.templateId))].filter((id) => id !== template.id);
+  const others = otherIds.length
+    ? await prisma.template.findMany({ where: { id: { in: otherIds } }, select: { id: true, html: true, updatedAt: true } })
+    : [];
+
+  const next = { ...current, [slots.sendDate]: date, [slots.sendTime]: time };
+  const nextData = JSON.stringify(next);
+
+  const lowered = new Set(columns.map((c) => c.toLowerCase()));
+  const added = [slots.sendDate, slots.sendTime].filter((k) => !lowered.has(k.toLowerCase()));
+
+  const carry = [
+    { id: template.id, updatedAt: null as Date | null },
+    ...others.filter((t) => !prints(t.html)).map((t) => ({ id: t.id, updatedAt: t.updatedAt })),
+  ];
+
+  const templateUpdatedAt = new Map(others.map((t) => [t.id, t.updatedAt]));
+  const pushedAt = await prisma.template.findUniqueOrThrow({
+    where: { id: template.id }, select: { updatedAt: true },
+  });
+  templateUpdatedAt.set(template.id, pushedAt.updatedAt);
+
+  await prisma.$transaction([
+    prisma.rowRevision.create({
+      data: {
+        rowId: row.id,
+        data: row.data,
+        changedById: userId,
+        note: "Send time changed while pushing to Klaviyo",
+      },
+    }),
+    prisma.sheetRow.update({ where: { id: row.id }, data: { data: nextData } }),
+    ...(added.length
+      ? [prisma.contentSheet.update({
+          where: { id: row.sheetId },
+          data: { columns: JSON.stringify([...columns, ...added]) },
+        })]
+      : []),
+    ...carry.map((t) =>
+      prisma.approval.updateMany({
+        where: { rowId: row.id, templateId: t.id },
+        data: { contentHash: approvalFingerprint(nextData, t.id, templateUpdatedAt.get(t.id)!) },
+      }),
+    ),
+  ]);
+
+  const staleNames = others.filter((t) => prints(t.html)).length;
+  const say = (d: string, t: string) => [d || "no date", t].filter(Boolean).join(" ");
+  return {
+    changed: true,
+    note:
+      `The sheet's send time was changed from ${say(was.date, was.time)} to ${say(date, time)}.` +
+      (staleNames > 0
+        ? ` ${staleNames} sign-off${staleNames === 1 ? "" : "s"} in other templates that print the ` +
+          "date went stale."
+        : ""),
+  };
+}
+
+/** Load what the override needs, check it, and hand it to the write. */
+async function applyOverride(
+  companyId: string,
+  rowId: string,
+  templateId: string,
+  userId: string,
+  override: SendOverride,
+  mode: PushMode,
+): Promise<{ note?: string } | { error: string }> {
+  const [row, template, company] = await Promise.all([
+    prisma.sheetRow.findFirst({
+      where: { id: rowId, sheet: { companyId } },
+      select: { id: true, data: true, sheetId: true,
+        sheet: { select: { columns: true } },
+        approvals: { select: { templateId: true } } },
+    }),
+    prisma.template.findFirst({ where: { id: templateId, companyId }, select: { id: true, name: true, html: true } }),
+    prisma.company.findUnique({ where: { id: companyId }, select: { klaviyoTimezone: true } }),
+  ]);
+  if (!row) return { error: "Row not found." };
+  if (!template) return { error: "Template not found." };
+
+  const date = override.date.trim();
+  const time = override.time.trim();
+  if (!date && time) return { error: "A send time needs a date to go with it." };
+
+  // Read it before writing it: a date the app cannot parse would be stored on
+  // the sheet and then rejected by the push, leaving the row edited for nothing.
+  const zone = company?.klaviyoTimezone ?? DEFAULT_TIMEZONE;
+  if (date) {
+    const when = zonedToUtc(date, time, zone);
+    if (!when.utc) return { error: `“${date} ${time}”.trim() is not a date and time this can read.` };
+    if (mode === "scheduled" && when.utc.getTime() <= Date.now()) {
+      return { error: "That send time has already passed." };
+    }
+  } else if (mode === "scheduled") {
+    return { error: "Scheduling needs a send date and time; this row has none." };
+  }
+
+  const applied = await applySendOverride(
+    { id: row.id, data: row.data, sheetId: row.sheetId },
+    parseStringArray(row.sheet.columns),
+    template,
+    row.approvals,
+    override,
+    userId,
+  );
+  if ("error" in applied) return { error: applied.error };
+  return { note: applied.note };
+}
+
 /**
  * Put an approved row into Klaviyo as a draft campaign.
  *
@@ -215,10 +385,21 @@ export async function performPush(
   templateId: string,
   userId: string,
   mode: PushMode = "draft",
+  override?: SendOverride,
 ): Promise<PushResult> {
   try {
     const apiKey = await klaviyoKeyForCompany(companyId);
     if (!apiKey) return { ok: false, error: "This company is not connected to Klaviyo." };
+
+    // An overridden send time is a sheet edit, and it happens first so that
+    // everything below -- the eligibility check included -- reads one row with
+    // one send time on it.
+    const overrideNotes: string[] = [];
+    if (override) {
+      const applied = await applyOverride(companyId, rowId, templateId, userId, override, mode);
+      if ("error" in applied) return { ok: false, error: applied.error };
+      if (applied.note) overrideNotes.push(applied.note);
+    }
 
     const ready = await prepare(companyId, rowId, templateId, mode);
     if ("error" in ready) return { ok: false, error: ready.error };
@@ -336,6 +517,7 @@ export async function performPush(
         ...(unscheduled && mode !== "scheduled"
           ? ["It was scheduled in Klaviyo before this push, and is now back to a draft."]
           : []),
+        ...overrideNotes,
         ...ready.notes,
       ],
       push: present(saved, ready.contentHash),
