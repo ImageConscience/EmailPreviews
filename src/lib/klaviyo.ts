@@ -1,0 +1,386 @@
+/**
+ * Talking to a client's Klaviyo account.
+ *
+ * Every call here is made with a private key belonging to somebody else's
+ * business, against an account that can mail their customers. That shapes two
+ * things throughout: errors are surfaced with whatever Klaviyo actually said
+ * rather than flattened into "something went wrong", because the person reading
+ * it has to decide whether it is safe to try again; and nothing in this file
+ * sends anything on its own. Scheduling is one named function, called from one
+ * place, and it is the only door.
+ */
+
+/**
+ * Klaviyo dates its API and requires the header on every request. Pinned rather
+ * than tracking latest, so their next revision cannot change what this app
+ * sends to a client's account without anyone choosing it.
+ */
+const REVISION = "2024-10-15";
+/**
+ * Klaviyo, unless a test says otherwise.
+ *
+ * The override exists so the connection and push flows can be exercised end to
+ * end against a stand-in rather than a client's live account. Unset in any real
+ * deployment, which is the only configuration that reaches Klaviyo at all.
+ */
+const BASE = process.env.KLAVIYO_API_BASE?.trim() || "https://a.klaviyo.com/api";
+
+export class KlaviyoError extends Error {
+  readonly status: number;
+  /** Klaviyo's own error objects, when it returned any. */
+  readonly detail: string;
+
+  constructor(status: number, detail: string) {
+    super(detail || `Klaviyo returned ${status}.`);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+interface RequestOptions {
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  body?: unknown;
+  /** Query string parameters, already in Klaviyo's `filter`/`fields[x]` shapes. */
+  query?: Record<string, string | undefined>;
+}
+
+async function call<T>(apiKey: string, path: string, options: RequestOptions = {}): Promise<T> {
+  const url = new URL(`${BASE}${path}`);
+  for (const [key, value] of Object.entries(options.query ?? {})) {
+    if (value != null && value !== "") url.searchParams.set(key, value);
+  }
+
+  const response = await fetch(url, {
+    method: options.method ?? "GET",
+    headers: {
+      Authorization: `Klaviyo-API-Key ${apiKey}`,
+      revision: REVISION,
+      accept: "application/vnd.api+json",
+      ...(options.body ? { "content-type": "application/vnd.api+json" } : {}),
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    // A client's account should not be kept waiting on us, nor us on it.
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (response.status === 204) return undefined as T;
+
+  const text = await response.text();
+  let parsed: unknown = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    // Klaviyo returning something that is not JSON is itself the useful fact.
+  }
+
+  if (!response.ok) {
+    throw new KlaviyoError(response.status, explain(response.status, parsed, text));
+  }
+  return parsed as T;
+}
+
+/**
+ * What went wrong, in terms of what to do about it.
+ *
+ * Klaviyo's error bodies are a list of objects with `detail`, which is usually
+ * the most useful sentence available; the status codes that mean something
+ * specific get said plainly instead, because "401" is not an instruction.
+ */
+function explain(status: number, parsed: unknown, raw: string): string {
+  const errors = (parsed as { errors?: { detail?: string; title?: string }[] } | null)?.errors;
+  const detail = errors?.map((e) => e.detail || e.title).filter(Boolean).join("; ");
+
+  if (status === 401 || status === 403) {
+    return detail
+      ? `Klaviyo rejected the API key: ${detail}`
+      : "Klaviyo rejected the API key. Check it is a private key with the scopes this needs.";
+  }
+  if (status === 429) {
+    return "Klaviyo is rate limiting this account. Wait a moment and try again.";
+  }
+  return detail || raw.slice(0, 400) || `Klaviyo returned ${status}.`;
+}
+
+// --- what the app reads --------------------------------------------------
+
+export interface KlaviyoAccount {
+  id: string;
+  name: string;
+  /** The public site id, which is what identifies an account to a person. */
+  publicId: string;
+  timezone: string | null;
+}
+
+/**
+ * Who this key belongs to.
+ *
+ * Doubles as the key test, and is the reason the connection screen can name the
+ * account: the failure worth designing against is not a bad key, which announces
+ * itself, but a good key for the wrong client.
+ */
+export async function fetchAccount(apiKey: string): Promise<KlaviyoAccount> {
+  const body = await call<{
+    data: { id: string; attributes: { contact_information?: { organization_name?: string }; public_api_key?: string; timezone?: string } }[];
+  }>(apiKey, "/accounts", { query: { "fields[account]": "contact_information,public_api_key,timezone" } });
+
+  const account = body.data?.[0];
+  if (!account) throw new KlaviyoError(404, "That key works, but it is not attached to an account.");
+
+  return {
+    id: account.id,
+    name: account.attributes.contact_information?.organization_name?.trim() || account.id,
+    publicId: account.attributes.public_api_key ?? account.id,
+    timezone: account.attributes.timezone ?? null,
+  };
+}
+
+export interface Audience {
+  id: string;
+  name: string;
+  kind: "list" | "segment";
+}
+
+/** Every list and segment, so a sheet can name one and the app can resolve it. */
+export async function fetchAudiences(apiKey: string): Promise<Audience[]> {
+  const out: Audience[] = [];
+
+  for (const [path, kind] of [
+    ["/lists", "list"],
+    ["/segments", "segment"],
+  ] as const) {
+    let cursor: string | undefined;
+    // Bounded: an account with more audiences than this has a naming problem
+    // that a longer loop would not fix, and an unbounded one is a way to hang.
+    for (let page = 0; page < 20; page += 1) {
+      const body = await call<{
+        data: { id: string; attributes: { name: string } }[];
+        links?: { next?: string | null };
+      }>(apiKey, path, {
+        query: { "fields[list]": "name", "fields[segment]": "name", "page[cursor]": cursor },
+      });
+
+      for (const item of body.data ?? []) {
+        out.push({ id: item.id, name: item.attributes.name, kind });
+      }
+
+      const next = body.links?.next;
+      if (!next) break;
+      cursor = new URL(next).searchParams.get("page[cursor]") ?? undefined;
+      if (!cursor) break;
+    }
+  }
+
+  return out;
+}
+
+// --- what the app writes -------------------------------------------------
+
+/**
+ * Create or replace the template holding one send's HTML.
+ *
+ * `CODE` rather than a drag-and-drop template: the HTML is the thing that was
+ * approved, and a template Klaviyo can rearrange is a template that can stop
+ * matching what someone signed off on.
+ */
+export async function createTemplate(
+  apiKey: string,
+  name: string,
+  html: string,
+): Promise<string> {
+  const made = await call<{ data: { id: string } }>(apiKey, "/templates", {
+    method: "POST",
+    body: { data: { type: "template", attributes: { name, editor_type: "CODE", html } } },
+  });
+  return made.data.id;
+}
+
+export async function updateTemplate(
+  apiKey: string,
+  templateId: string,
+  name: string,
+  html: string,
+): Promise<void> {
+  await call(apiKey, `/templates/${templateId}`, {
+    method: "PATCH",
+    body: { data: { type: "template", id: templateId, attributes: { name, html } } },
+  });
+}
+
+export interface CampaignContent {
+  name: string;
+  subject: string;
+  previewText: string;
+  fromEmail: string;
+  fromLabel: string;
+  replyTo?: string;
+  includedAudiences: string[];
+  excludedAudiences: string[];
+  /** When to send. Absent leaves the campaign undated for a person to decide. */
+  sendAt: Date | null;
+}
+
+export interface CampaignRefs {
+  campaignId: string;
+  messageId: string;
+}
+
+function messageDefinition(content: CampaignContent) {
+  return {
+    channel: "email" as const,
+    label: content.name,
+    content: {
+      subject: content.subject,
+      preview_text: content.previewText,
+      from_email: content.fromEmail,
+      from_label: content.fromLabel,
+      ...(content.replyTo ? { reply_to_email: content.replyTo } : {}),
+    },
+  };
+}
+
+function sendStrategy(sendAt: Date | null) {
+  // `is_local: false` means everyone receives it at the same instant, which is
+  // what a wall-clock time in the sheet means. Local-time sending is a
+  // different product decision and would need its own column to ask for.
+  return sendAt
+    ? { method: "static" as const, datetime: sendAt.toISOString(), options: { is_local: false as const } }
+    : undefined;
+}
+
+/** A new draft campaign, with its one email message. */
+export async function createCampaign(apiKey: string, content: CampaignContent): Promise<CampaignRefs> {
+  const body = await call<{
+    data: { id: string; relationships?: { "campaign-messages"?: { data?: { id: string }[] } } };
+    included?: { type: string; id: string }[];
+  }>(apiKey, "/campaigns", {
+    method: "POST",
+    query: { include: "campaign-messages" },
+    body: {
+      data: {
+        type: "campaign",
+        attributes: {
+          name: content.name,
+          audiences: { included: content.includedAudiences, excluded: content.excludedAudiences },
+          "campaign-messages": { data: [{ type: "campaign-message", attributes: { definition: messageDefinition(content) } }] },
+          ...(sendStrategy(content.sendAt) ? { send_strategy: sendStrategy(content.sendAt) } : {}),
+        },
+      },
+    },
+  });
+
+  const messageId =
+    body.data.relationships?.["campaign-messages"]?.data?.[0]?.id ??
+    body.included?.find((i) => i.type === "campaign-message")?.id;
+
+  if (!messageId) {
+    throw new KlaviyoError(500, "Klaviyo made the campaign but did not say which message belongs to it.");
+  }
+  return { campaignId: body.data.id, messageId };
+}
+
+/** Bring an existing draft back in line with the row it came from. */
+export async function updateCampaign(
+  apiKey: string,
+  refs: CampaignRefs,
+  content: CampaignContent,
+): Promise<void> {
+  await call(apiKey, `/campaigns/${refs.campaignId}`, {
+    method: "PATCH",
+    body: {
+      data: {
+        type: "campaign",
+        id: refs.campaignId,
+        attributes: {
+          name: content.name,
+          audiences: { included: content.includedAudiences, excluded: content.excludedAudiences },
+          ...(sendStrategy(content.sendAt) ? { send_strategy: sendStrategy(content.sendAt) } : {}),
+        },
+      },
+    },
+  });
+
+  await call(apiKey, `/campaign-messages/${refs.messageId}`, {
+    method: "PATCH",
+    body: {
+      data: {
+        type: "campaign-message",
+        id: refs.messageId,
+        attributes: { definition: messageDefinition(content) },
+      },
+    },
+  });
+}
+
+export async function assignTemplate(
+  apiKey: string,
+  messageId: string,
+  klaviyoTemplateId: string,
+): Promise<void> {
+  await call(apiKey, `/campaign-message-assign-template`, {
+    method: "POST",
+    body: {
+      data: {
+        type: "campaign-message",
+        id: messageId,
+        relationships: { template: { data: { type: "template", id: klaviyoTemplateId } } },
+      },
+    },
+  });
+}
+
+export interface CampaignState {
+  id: string;
+  name: string;
+  status: string;
+  /** When Klaviyo believes it will send, if it is scheduled. */
+  scheduledAt: string | null;
+  sendTime: string | null;
+  archived: boolean;
+}
+
+export async function fetchCampaign(apiKey: string, campaignId: string): Promise<CampaignState | null> {
+  try {
+    const body = await call<{
+      data: { id: string; attributes: { name: string; status: string; scheduled_at: string | null; send_time: string | null; archived: boolean } };
+    }>(apiKey, `/campaigns/${campaignId}`, {
+      query: { "fields[campaign]": "name,status,scheduled_at,send_time,archived" },
+    });
+    const a = body.data.attributes;
+    return {
+      id: body.data.id,
+      name: a.name,
+      status: a.status,
+      scheduledAt: a.scheduled_at,
+      sendTime: a.send_time,
+      archived: a.archived,
+    };
+  } catch (error) {
+    // A campaign deleted in Klaviyo is not an error here -- it means the record
+    // this app holds is stale, and the caller decides what to do about that.
+    if (error instanceof KlaviyoError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/**
+ * The only function in this file that causes mail to be sent.
+ *
+ * Klaviyo sends according to the campaign's own send strategy, so a campaign
+ * dated in the future is scheduled rather than sent now -- but this is still
+ * the point of no return, and it is deliberately not folded into any of the
+ * functions above.
+ */
+export async function scheduleCampaign(apiKey: string, campaignId: string): Promise<void> {
+  await call(apiKey, "/campaign-send-jobs", {
+    method: "POST",
+    body: { data: { type: "campaign-send-job", id: campaignId } },
+  });
+}
+
+/** Stop a scheduled campaign that has not started going out. */
+export async function cancelCampaign(apiKey: string, campaignId: string): Promise<void> {
+  await call(apiKey, `/campaign-send-jobs/${campaignId}`, {
+    method: "PATCH",
+    body: { data: { type: "campaign-send-job", id: campaignId, attributes: { action: "cancel" } } },
+  });
+}

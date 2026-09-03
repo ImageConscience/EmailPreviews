@@ -11,6 +11,9 @@
     "db:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "check:roundtrip": "tsx scripts/check-roundtrip.mts",
+    "check:secrets": "tsx scripts/check-secrets.mts",
+    "check:zone": "tsx scripts/check-zone.mts",
+    "check": "npm run check:roundtrip && npm run check:secrets && npm run check:zone",
     "postinstall": "prisma generate"
   },
   "dependencies": {

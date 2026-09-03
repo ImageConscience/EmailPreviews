@@ -57,6 +57,25 @@ model Company {
   /// When the product cache was last refreshed from that storefront.
   catalogSyncedAt DateTime?
 
+  /// Klaviyo, for the clients where we hold a key. Encrypted with the app's
+  /// ENCRYPTION_KEY rather than stored plainly: it can read a client's whole
+  /// customer list and mail them, so a copy of this database on its own must
+  /// not be enough to do either.
+  klaviyoKeyCipher   String?
+  /// The last four characters, which is all anyone needs to tell two keys apart.
+  klaviyoKeyHint     String?
+  /// Which Klaviyo account the key turned out to belong to. Shown wherever a
+  /// push is offered: the dangerous mistake is not a bad key, it is a good key
+  /// for the wrong client.
+  klaviyoAccountName String?
+  klaviyoAccountId   String?
+  klaviyoFromEmail   String?
+  klaviyoFromLabel   String?
+  klaviyoReplyTo     String?
+  /// The zone the sheet's send times are written in.
+  klaviyoTimezone    String?
+  klaviyoLinkedAt    DateTime?
+
   memberships Membership[]
   templates   Template[]
   sheets      ContentSheet[]
