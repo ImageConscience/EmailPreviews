@@ -11,16 +11,23 @@
  */
 
 /**
- * Klaviyo dates its API and requires the header on every request. Pinned rather
- * than tracking latest, so their next revision cannot change what this app
- * sends to a client's account without anyone choosing it.
+ * Klaviyo dates its API and requires the header on every request.
  *
- * Moved forward from 2024-10-15, which predates `additional-fields[template]`
- * and answered the first real push with "additional-fields must be in []".
- * Without the definition there is no block to fill, so nothing could be pushed
- * at all. The campaign payload this app sends is unchanged between the two.
+ * Pinned rather than tracking latest, so their next revision cannot change what
+ * this app sends to a client's account without anyone choosing it. It has to be
+ * a revision Klaviyo actually publishes: a date they do not recognise does not
+ * come back as an error, it is treated as the oldest revision they still
+ * support, which is a confusing way to find out you mistyped -- an endpoint
+ * simply behaves as it did years ago.
+ *
+ * 2024-10-15 predates `additional-fields[template]`, so it answered a push with
+ * "additional-fields must be in []" and left no block to fill. The override
+ * exists so a deployment can move this without waiting on a code change, which
+ * is the difference between testing a revision in a minute and in a day.
  */
-const REVISION = "2025-10-15";
+export function revision(): string {
+  return process.env.KLAVIYO_API_REVISION?.trim() || "2025-07-15";
+}
 /**
  * Klaviyo, unless a test says otherwise.
  *
@@ -49,6 +56,8 @@ interface RequestOptions {
   body?: unknown;
   /** Query string parameters, already in Klaviyo's `filter`/`fields[x]` shapes. */
   query?: Record<string, string | undefined>;
+  /** Override the pinned revision. Only the setup check has cause to. */
+  revision?: string;
 }
 
 async function call<T>(apiKey: string, path: string, options: RequestOptions = {}): Promise<T> {
@@ -61,7 +70,7 @@ async function call<T>(apiKey: string, path: string, options: RequestOptions = {
     method: options.method ?? "GET",
     headers: {
       Authorization: `Klaviyo-API-Key ${apiKey}`,
-      revision: REVISION,
+      revision: options.revision ?? revision(),
       accept: "application/vnd.api+json",
       ...(options.body ? { "content-type": "application/vnd.api+json" } : {}),
     },
@@ -185,6 +194,21 @@ export async function fetchAudiences(apiKey: string): Promise<Audience[]> {
 
 // --- what the app writes -------------------------------------------------
 
+/**
+ * Revisions worth trying when the pinned one will not read a definition.
+ *
+ * Only the setup check uses these, and only after the configured revision has
+ * already failed: the push itself stays on one revision, because a send that
+ * silently negotiates its own API version is a send nobody can reason about.
+ * Newest first, so the answer is the most current one that works.
+ */
+export const CANDIDATE_REVISIONS = [
+  "2025-07-15",
+  "2025-04-15",
+  "2025-01-15",
+  "2024-10-15",
+];
+
 export interface TemplateDetail {
   id: string;
   name: string;
@@ -193,13 +217,36 @@ export interface TemplateDetail {
   definition: unknown;
 }
 
-/** One template, with its block structure. */
-export async function fetchTemplate(apiKey: string, templateId: string): Promise<TemplateDetail> {
-  const body = await call<{
-    data: { id: string; attributes: { name: string; editor_type: string; definition?: unknown } };
-  }>(apiKey, `/templates/${templateId}`, {
-    query: { "additional-fields[template]": "definition" },
-  });
+/**
+ * One template, with its block structure.
+ *
+ * The definition is an additional field, and which revisions accept the request
+ * for it is the one thing here that has actually bitten. So the revision in use
+ * is named in the error rather than left for someone to deduce from a sentence
+ * about empty lists.
+ */
+export async function fetchTemplate(
+  apiKey: string,
+  templateId: string,
+  as?: string,
+): Promise<TemplateDetail> {
+  let body: { data: { id: string; attributes: { name: string; editor_type: string; definition?: unknown } } };
+  try {
+    body = await call(apiKey, `/templates/${templateId}`, {
+      query: { "additional-fields[template]": "definition" },
+      revision: as,
+    });
+  } catch (error) {
+    if (error instanceof KlaviyoError && /additional-fields/.test(error.detail)) {
+      throw new KlaviyoError(
+        error.status,
+        `${error.detail} This app asked for the template's definition using API revision ` +
+          `${as ?? revision()}, which does not accept it. ` +
+          "Set KLAVIYO_API_REVISION to one that does.",
+      );
+    }
+    throw error;
+  }
   return {
     id: body.data.id,
     name: body.data.attributes.name,

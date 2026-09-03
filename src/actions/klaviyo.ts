@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { AuthError, requireCompanyAccess } from "@/lib/auth";
 import { decryptSecret, encryptSecret, SecretError, secretHint, secretsAvailable } from "@/lib/secret";
-import { fetchAccount, fetchAudiences, KlaviyoError, type Audience } from "@/lib/klaviyo";
+import { CANDIDATE_REVISIONS, fetchAccount, fetchAudiences, fetchTemplate, KlaviyoError,
+  revision, type Audience, type TemplateDetail } from "@/lib/klaviyo";
+import { CONTENT_MARKER, findContentBlock } from "@/lib/block-content";
 import { DEFAULT_TIMEZONE, TIMEZONES } from "@/lib/zone";
 
 export interface KlaviyoResult {
@@ -192,5 +194,116 @@ export async function listKlaviyoAudiencesAction(companyId: string): Promise<Aud
     return { ok: true, audiences: audiences.sort((a, b) => a.name.localeCompare(b.name)) };
   } catch (error) {
     return failure(error);
+  }
+}
+
+export interface BaseTemplateReport {
+  ok: boolean;
+  error?: string;
+  /** The API revision the check was made with, since that is what usually bites. */
+  revision: string;
+  /** Set when the configured revision failed and another one worked. */
+  worksAt?: string;
+  name?: string;
+  editorType?: string;
+  /** How many HTML blocks the template has, and whether ours was identifiable. */
+  htmlBlocks?: number;
+  marked?: boolean;
+  note?: string;
+}
+
+/**
+ * Ask Klaviyo for the base template and say what came back.
+ *
+ * Everything this reports, a push already knows -- and reported by dying
+ * half-way through with one sentence from Klaviyo. That made every question
+ * about the setup cost a deploy and a real push against a client's account.
+ * This answers the same question in a second, and names the API revision it
+ * used, because a template that reads fine at one revision and not at another
+ * is the failure that has actually happened.
+ */
+export async function checkBaseTemplateAction(companyId: string): Promise<BaseTemplateReport> {
+  const used = revision();
+  try {
+    await requireCompanyAccess(companyId, "admin");
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { klaviyoBaseTemplateId: true },
+    });
+    const id = company?.klaviyoBaseTemplateId?.trim();
+    if (!id) return { ok: false, revision: used, error: "No base template ID is set." };
+
+    const key = await klaviyoKeyFor(companyId);
+    if (!key) return { ok: false, revision: used, error: "This company is not connected to Klaviyo." };
+
+    // If the configured revision cannot read a definition, find out which can
+    // rather than reporting a dead end. It is the question the error raises,
+    // and answering it is four reads of one template.
+    let template: TemplateDetail;
+    let worksAt: string | undefined;
+    try {
+      template = await fetchTemplate(key, id);
+    } catch (error) {
+      if (!(error instanceof KlaviyoError) || !/additional-fields/.test(error.detail)) throw error;
+      let rescued: TemplateDetail | null = null;
+      for (const candidate of CANDIDATE_REVISIONS) {
+        if (candidate === used) continue;
+        try {
+          rescued = await fetchTemplate(key, id, candidate);
+          if (rescued.definition) {
+            worksAt = candidate;
+            break;
+          }
+          rescued = null;
+        } catch {
+          // That revision will not do it either; try the next.
+        }
+      }
+      if (!rescued || !worksAt) {
+        return { ok: false, revision: used, error: error.detail };
+      }
+      template = rescued;
+    }
+    if (!template.definition) {
+      return {
+        ok: false,
+        revision: used,
+        name: template.name,
+        editorType: template.editorType,
+        error:
+          `“${template.name}” is a ${template.editorType} template, which has no blocks to fill. ` +
+          "The base template has to be a drag-and-drop one.",
+      };
+    }
+
+    // Count the HTML blocks the same way the push finds them, so this reports
+    // what the push will actually do rather than something adjacent to it.
+    let htmlBlocks = 0;
+    JSON.stringify(template.definition, (_key, value) => {
+      if (value && typeof value === "object" && (value as { type?: string }).type === "html") {
+        htmlBlocks += 1;
+      }
+      return value;
+    });
+
+    const found = findContentBlock(template.definition);
+    if ("error" in found) {
+      return {
+        ok: false, revision: used, name: template.name, editorType: template.editorType,
+        htmlBlocks, marked: false, error: found.error,
+      };
+    }
+
+    const marked = JSON.stringify(found.block).includes(CONTENT_MARKER);
+    return {
+      ok: true, revision: used, name: template.name, editorType: template.editorType,
+      htmlBlocks, marked, worksAt,
+      note: marked
+        ? "The marked block is the one that will be filled."
+        : "No marker, but there is only one HTML block, so that is the one that will be filled.",
+    };
+  } catch (error) {
+    const failed = failure(error);
+    return { ok: false, revision: used, error: failed.error };
   }
 }

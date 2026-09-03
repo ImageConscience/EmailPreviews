@@ -1162,3 +1162,19 @@ input:focus, select:focus, textarea:focus {
 .theme-toggle button:hover { color: var(--text); }
 .theme-toggle button.is-on { background: var(--surface); color: var(--accent); }
 
+
+/* The base-template check. Says what Klaviyo returned, and which revision it
+   was asked with -- the thing that has actually gone wrong. */
+.tpl-report {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+}
+.tpl-report.is-ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.tpl-report.is-bad { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+/* The template is fine; the revision it is being read with is not, so a push
+   would still fail. Not a pass. */
+.tpl-report.is-warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.tpl-report .hint { color: inherit; opacity: 0.75; margin: 0; }

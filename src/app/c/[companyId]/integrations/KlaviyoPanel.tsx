@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  checkBaseTemplateAction,
   connectKlaviyoAction,
   disconnectKlaviyoAction,
   saveKlaviyoSettingsAction,
+  type BaseTemplateReport,
 } from "@/actions/klaviyo";
 import { AudienceChooser, useAudiences } from "@/components/AudienceChooser";
 import { TIMEZONES } from "@/lib/zone";
@@ -61,6 +63,7 @@ export function KlaviyoPanel({
   const [audienceExclude, setAudienceExclude] = useState(state.audienceExclude);
   // Only worth a round trip once there is a key to make it with.
   const audiences = useAudiences(companyId, state.connected);
+  const [report, setReport] = useState<BaseTemplateReport | null>(null);
 
   const connect = async () => {
     setBusy("Asking Klaviyo whose key this is…");
@@ -193,6 +196,54 @@ export function KlaviyoPanel({
                 template the marker is optional. The ID is in the editor URL:{" "}
                 <code>klaviyo.com/email-editor/<strong>ID</strong>/edit</code>.
               </p>
+              {/* The same read a push makes, on its own, so a setup question
+                  costs a second rather than a real campaign. */}
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={!!busy || !baseTemplateId.trim()}
+                onClick={() => {
+                  setBusy("Reading the template from Klaviyo…");
+                  setReport(null);
+                  void checkBaseTemplateAction(companyId).then((result) => {
+                    setBusy(null);
+                    setReport(result);
+                  });
+                }}
+              >
+                Check this template
+              </button>
+              {/* Green only when a push would actually work. A template that reads
+                  fine at some other revision is not a pass: the push uses the
+                  configured one and will keep failing. */}
+              {report && (
+                <div
+                  className={
+                    "tpl-report" +
+                    (!report.ok ? " is-bad" : report.worksAt ? " is-warn" : " is-ok")
+                  }
+                >
+                  {report.ok ? (
+                    <>
+                      <strong>{report.name}</strong> — {report.editorType}, {report.htmlBlocks} HTML{" "}
+                      {report.htmlBlocks === 1 ? "block" : "blocks"}
+                      {report.marked ? ", one of them marked" : ""}. {report.note}
+                    </>
+                  ) : (
+                    <>{report.error}</>
+                  )}
+                  <div className="hint" style={{ marginTop: 4 }}>
+                    Read using Klaviyo API revision <code>{report.revision}</code>.
+                    {report.worksAt && (
+                      <>
+                        {" "}That revision could not read the definition, but{" "}
+                        <code>{report.worksAt}</code> can. Set{" "}
+                        <code>KLAVIYO_API_REVISION</code> to it, or pushes will keep failing.
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/*

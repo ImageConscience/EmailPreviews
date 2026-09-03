@@ -12,7 +12,7 @@ import { PrismaClient } from "@prisma/client";
 import { encryptSecret } from "../src/lib/secret.ts";
 import { approvalFingerprint } from "../src/lib/fingerprint.ts";
 import { performPush, performSchedule } from "../src/lib/push-core.ts";
-import { fetchAudiences } from "../src/lib/klaviyo.ts";
+import { CANDIDATE_REVISIONS, fetchAudiences, fetchTemplate, revision } from "../src/lib/klaviyo.ts";
 import { checkEligibility, type ApprovalForPush } from "../src/lib/push-eligibility.ts";
 import { audienceSlots, findAudienceColumns } from "../src/lib/template.ts";
 import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
@@ -431,6 +431,47 @@ check("...but the date-printing template's sign-off went stale",
 check("...and it said so", (r.notes ?? []).some((n) => /went stale/.test(n)),
   (r.notes ?? []).find((n) => /stale/.test(n)));
 await prisma.template.delete({ where: { id: printing.id } });
+
+// --- the API revision ----------------------------------------------------
+// A revision Klaviyo does not publish is not an error: it is treated as the
+// oldest one they still support, so an endpoint quietly behaves as it did years
+// ago. That is how a fix that looked right shipped and failed the same way.
+console.log("\nThe API revision");
+check("a revision is sent, and it is a date", /^\d{4}-\d{2}-\d{2}$/.test(revision()), revision());
+
+const asked = process.env.KLAVIYO_API_REVISION;
+process.env.KLAVIYO_API_REVISION = "2024-10-15";
+try {
+  await fetchTemplate(KEY, "BASE01");
+  check("an old revision cannot read a template definition", false, "it succeeded");
+} catch (error) {
+  const detail = (error as Error).message;
+  check("an old revision cannot read a template definition",
+    /additional-fields/.test(detail), detail.slice(0, 60));
+  check("...and the error names the revision that was used, not just the symptom",
+    detail.includes("2024-10-15"), detail.slice(-90));
+  check("...and says which knob changes it", /KLAVIYO_API_REVISION/.test(detail));
+}
+// Assigning undefined stores the string "undefined", which is not a date and
+// so is not a revision Klaviyo would take.
+if (asked === undefined) delete process.env.KLAVIYO_API_REVISION;
+else process.env.KLAVIYO_API_REVISION = asked;
+check("the default revision can read one", (await fetchTemplate(KEY, "BASE01")).definition !== null);
+
+// The setup check answers the question the failure raises: which revision does
+// work. Only the check does this -- the push stays on one revision, because a
+// send that negotiates its own API version is a send nobody can reason about.
+process.env.KLAVIYO_API_REVISION = "2024-10-15";
+let worked: string | null = null;
+for (const candidate of CANDIDATE_REVISIONS) {
+  try {
+    if ((await fetchTemplate(KEY, "BASE01", candidate)).definition) { worked = candidate; break; }
+  } catch { /* not this one */ }
+}
+check("a working revision can be found by trying the candidates", worked !== null, worked ?? "none");
+check("...and it is the newest that works", worked === CANDIDATE_REVISIONS[0], worked ?? "none");
+if (asked === undefined) delete process.env.KLAVIYO_API_REVISION;
+else process.env.KLAVIYO_API_REVISION = asked;
 
 // --- reading the account's lists -----------------------------------------
 // Klaviyo rejects a sparse fieldset naming a type the endpoint cannot return,
