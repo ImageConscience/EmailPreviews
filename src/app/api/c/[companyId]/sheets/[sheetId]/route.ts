@@ -34,6 +34,15 @@ export async function GET(
               orderBy: { createdAt: "asc" },
               include: { user: { select: { name: true, email: true } } },
             },
+            // What has already gone to Klaviyo, so the sign-off can say so and
+            // refuse to be withdrawn out from under a live campaign.
+            pushes: {
+              select: {
+                templateId: true, status: true, campaignName: true,
+                scheduledFor: true, pushedAt: true,
+                pushedBy: { select: { name: true, email: true } },
+              },
+            },
           },
         },
         _count: { select: { rows: true } },
@@ -64,6 +73,14 @@ export async function GET(
         hiddenBy: row.hiddenBy?.name ?? row.hiddenBy?.email ?? null,
         noteCount: row._count.notes,
         data: parseRecord(row.data),
+        pushes: row.pushes.map((push) => ({
+          templateId: push.templateId,
+          status: push.status,
+          campaignName: push.campaignName,
+          scheduledFor: push.scheduledFor?.toISOString() ?? null,
+          pushedAt: push.pushedAt.toISOString(),
+          pushedBy: push.pushedBy?.name ?? push.pushedBy?.email ?? null,
+        })),
         approvals: row.approvals.map((approval) => {
           const updatedAt = templateUpdatedAt.get(approval.templateId);
           const currentHash = updatedAt

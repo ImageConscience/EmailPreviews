@@ -37,6 +37,8 @@ export interface OverviewItem {
   /** Whether the person looking at this has a current approval on it. */
   approvedByMe: boolean;
   notes: number;
+  /** "scheduled" or "draft" once it has gone to Klaviyo. */
+  published: string | null;
   hidden: boolean;
   hiddenBy: string | null;
 }
@@ -470,6 +472,15 @@ function ListView({
 
 function SignOff({ item }: { item: OverviewItem }) {
   if (item.hidden) return <span className="badge">Hidden</span>;
+  // Where it got to beats how many signed off on it: once something is in
+  // Klaviyo, that is the answer to "what is happening with this".
+  if (item.published) {
+    return (
+      <span className="badge badge-sent">
+        {item.published === "scheduled" ? "Scheduled" : "Drafted"}
+      </span>
+    );
+  }
   if (item.approvals > 0) {
     return (
       <span className="badge badge-ok">
@@ -558,7 +569,12 @@ function CalendarView({
                   <Link
                     key={item.rowId}
                     href={href(item)}
-                    className={`cal-item${item.hidden ? " is-hidden" : ""}${item.approvals > 0 ? " is-approved" : ""}`}
+                    className={
+                      `cal-item${item.hidden ? " is-hidden" : ""}` +
+                      // Published outranks approved: it is the later state, and
+                      // the calendar has one colour to spend per item.
+                      (item.published ? " is-sent" : item.approvals > 0 ? " is-approved" : "")
+                    }
                     title={calendarTitle(item)}
                   >
                     {item.sendTime && <span className="cal-time">{item.sendTime}</span>}
@@ -646,6 +662,9 @@ function Marks({ item }: { item: OverviewItem }) {
 function calendarTitle(item: OverviewItem): string {
   const lines = [item.title];
   if (item.templateName) lines.push(item.templateName);
+  if (item.published) {
+    lines.push(item.published === "scheduled" ? "Scheduled in Klaviyo" : "Drafted in Klaviyo");
+  }
   if (item.approvers.length > 0) {
     lines.push(
       `Approved by ${item.approvers

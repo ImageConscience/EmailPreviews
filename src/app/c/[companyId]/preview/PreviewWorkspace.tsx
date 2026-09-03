@@ -78,7 +78,19 @@ interface SheetPayload {
     noteCount: number;
     data: Record<string, string>;
     approvals: (ApprovalView & { templateId: string })[];
+    pushes: PushMark[];
   }[];
+}
+
+/** What a row is in Klaviyo, in one template. */
+export interface PushMark {
+  templateId: string;
+  /** "draft" or "scheduled". */
+  status: string;
+  campaignName: string;
+  scheduledFor: string | null;
+  pushedAt: string;
+  pushedBy: string | null;
 }
 
 interface TemplatePayload {
@@ -491,6 +503,12 @@ export function PreviewWorkspace({
       setTemplateId(templates[0].id);
     }
   }, [currentRow, rowDefaultTemplate, templates]);
+
+  /** What this row is in Klaviyo in the template on screen, if anything. */
+  const rowPush = useMemo(
+    () => (currentRow?.pushes ?? []).find((p) => p.templateId === templateId) ?? null,
+    [currentRow, templateId],
+  );
 
   /** Sign-off is per row and template, so only this pair's approvals show. */
   const [noteOverrides, setNoteOverrides] = useState<Record<string, number>>({});
@@ -1117,6 +1135,7 @@ export function PreviewWorkspace({
             templateId={templateId}
             currentUserId={currentUserId}
             approvals={rowApprovals}
+            push={rowPush}
             dirty={dirty}
             onChange={applyApprovals}
           />

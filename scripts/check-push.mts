@@ -13,6 +13,7 @@ import { encryptSecret } from "../src/lib/secret.ts";
 import { approvalFingerprint } from "../src/lib/fingerprint.ts";
 import { performPush, performSchedule } from "../src/lib/push-core.ts";
 import { checkEligibility } from "../src/lib/push-eligibility.ts";
+import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
 
 const prisma = new PrismaClient();
 const KEY = "pk_live_testkey0000000000000000000000ab";
@@ -385,6 +386,58 @@ check("...but the date-printing template's sign-off went stale",
 check("...and it said so", (r.notes ?? []).some((n) => /went stale/.test(n)),
   (r.notes ?? []).find((n) => /stale/.test(n)));
 await prisma.template.delete({ where: { id: printing.id } });
+
+// --- the sign-off after it has gone out ----------------------------------
+// Once a pair is in Klaviyo the approval it went out on stops being a toggle.
+// Withdrawing it would leave a live campaign that this app says nobody
+// approved; editing the row is still the way to take something back.
+console.log("\nWithdrawing a sign-off after the push");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...JSON.parse(row.data), send_date: "2026-12-01", send_time: "10:00" }) } });
+await approve();
+
+const beforePush = await prisma.approval.count({ where: { rowId: row.id, templateId: tpl.id } });
+check("the row is approved before it goes", beforePush === 1, `${beforePush}`);
+
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+check("it pushes as a draft", r.ok, r.error);
+let mark = await prisma.klaviyoPush.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
+check("...and the push is recorded as a draft", publishedFromStatus(mark.status) === "drafted", mark.status);
+
+// The action needs a request context, so the rule itself is exercised here the
+// way the action reads it: a live push for this pair means no withdrawal.
+const blocksWithdrawal = async (rowId: string, templateId: string) =>
+  (await publishedState(rowId, templateId)) !== null;
+check("a drafted pair blocks a withdrawal", await blocksWithdrawal(row.id, tpl.id));
+
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled");
+check("it schedules", r.ok, r.error);
+mark = await prisma.klaviyoPush.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
+check("...and is recorded as scheduled", publishedFromStatus(mark.status) === "scheduled", mark.status);
+check("a scheduled pair blocks a withdrawal too", await blocksWithdrawal(row.id, tpl.id));
+check("a cancelled one does not", publishedFromStatus("cancelled") === null);
+
+// A different template on the same row is a different email and is untouched.
+const other = await prisma.template.create({ data: {
+  companyId: company.id, name: "Another Layout", html: "<html><body><p>{{ subject }}</p></body></html>" } });
+check("another template on the same row is not blocked", !(await blocksWithdrawal(row.id, other.id)));
+await prisma.template.delete({ where: { id: other.id } });
+
+// Editing the row is the way back: it makes every sign-off stale, which is what
+// takes the approval away without needing to withdraw it.
+const held = JSON.parse((await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data);
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...held, subject: "Changed my mind" }) } });
+const tplLive = await prisma.template.findUniqueOrThrow({ where: { id: tpl.id } });
+const rowLive = await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } });
+const stillHeld = await prisma.approval.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
+check("editing the row makes the sign-off stale, published or not",
+  stillHeld.contentHash !== approvalFingerprint(rowLive.data, tpl.id, tplLive.updatedAt));
+check("...so the row is no longer eligible to push",
+  !checkEligibility(await forPush(), tplLive, settings).ok);
+await prisma.sheetRow.update({ where: { id: row.id }, data: { data: JSON.stringify(held) } });
 
 await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
 
