@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  audienceColumnNames,
+  audienceSlots,
   envelopeColumnNames,
   envelopeSlots,
+  findAudienceColumns,
   findEnvelopeColumns,
   findTemplateColumn,
   looksLikeImageUrl,
@@ -197,11 +200,17 @@ export function PreviewWorkspace({
   currentUserId,
   templates,
   sheets,
+  klaviyoConnected,
+  defaultAudience,
 }: {
   companyId: string;
   currentUserId: string;
   templates: TemplateSummary[];
   sheets: SheetSummary[];
+  /** Whether this company has a Klaviyo account behind it. */
+  klaviyoConnected: boolean;
+  /** Where sends go when a row names nobody. */
+  defaultAudience: { audience: string; exclude: string };
 }) {
   /**
    * What is on screen and what is filtered, kept in the URL so a preview can be
@@ -377,7 +386,33 @@ export function PreviewWorkspace({
     () => findEnvelopeColumns(sheet?.columns ?? []),
     [sheet],
   );
-  const envelopeKeys = useMemo(() => envelopeColumnNames(envelopeColumns), [envelopeColumns]);
+  /**
+   * Who it goes to. Only a field at all when there is a Klaviyo account behind
+   * it -- for everyone else these are just two more columns, and a required-
+   * looking audience box would be noise in an approval queue.
+   */
+  const audienceColumns = useMemo(
+    () => findAudienceColumns(sheet?.columns ?? []),
+    [sheet],
+  );
+  const audience = useMemo(() => audienceSlots(audienceColumns), [audienceColumns]);
+  const audienceProps = useMemo(
+    () =>
+      klaviyoConnected
+        ? { companyId, slots: audience, known: audienceColumns, fallback: defaultAudience }
+        : null,
+    [klaviyoConnected, companyId, audience, audienceColumns, defaultAudience],
+  );
+
+  // Claimed by the bar above the render, so they do not also show as ordinary
+  // columns in the field list -- but only while the bar is actually showing them.
+  const envelopeKeys = useMemo(
+    () => [
+      ...envelopeColumnNames(envelopeColumns),
+      ...(klaviyoConnected ? audienceColumnNames(audienceColumns) : []),
+    ],
+    [envelopeColumns, audienceColumns, klaviyoConnected],
+  );
   /** The key each envelope field writes to: the sheet's column, or the default. */
   const envelope = useMemo(() => envelopeSlots(envelopeColumns), [envelopeColumns]);
 
@@ -1184,6 +1219,7 @@ export function PreviewWorkspace({
                 <EnvelopeFields
                   slots={envelope}
                   known={envelopeColumns}
+                  audience={audienceProps}
                   values={draft}
                   baseline={baseline}
                   width={null}

@@ -13,6 +13,7 @@ import { encryptSecret } from "../src/lib/secret.ts";
 import { approvalFingerprint } from "../src/lib/fingerprint.ts";
 import { performPush, performSchedule } from "../src/lib/push-core.ts";
 import { checkEligibility } from "../src/lib/push-eligibility.ts";
+import { audienceSlots, findAudienceColumns } from "../src/lib/template.ts";
 import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
 
 const prisma = new PrismaClient();
@@ -386,6 +387,104 @@ check("...but the date-printing template's sign-off went stale",
 check("...and it said so", (r.notes ?? []).some((n) => /went stale/.test(n)),
   (r.notes ?? []).find((n) => /stale/.test(n)));
 await prisma.template.delete({ where: { id: printing.id } });
+
+// --- naming the audience column ------------------------------------------
+// The preview writes to whichever column the sheet already uses, and the push
+// reads it the same way. A sheet saying "list" and a push looking only for
+// "audience" would put a field on screen that changed nothing.
+console.log("\nWhich column names the audience");
+for (const [header, why] of [
+  ["audience", "the default"],
+  ["list", "a sheet that calls it a list"],
+  ["Segment", "capitalised, as a spreadsheet would have it"],
+  ["send_to", "a sheet that calls it send_to"],
+] as const) {
+  const slots = audienceSlots(findAudienceColumns([header, "subject"]));
+  check(`${why} resolves to “${header}”`, slots.audience === header, slots.audience);
+}
+const bare = audienceSlots(findAudienceColumns(["subject"]));
+check("a sheet with no audience column gets the default to write into",
+  bare.audience === "audience" && bare.exclude === "audience_exclude",
+  `${bare.audience} / ${bare.exclude}`);
+
+// And the eligibility rule has to read that column, not a hard-coded one.
+const aliased = {
+  data: JSON.stringify({ subject: "Hello", list: "Newsletter" }),
+  values: { subject: "Hello", list: "Newsletter" },
+  columns: ["subject", "list"],
+  hiddenAt: null,
+  approvals: [] as { templateId: string; contentHash: string; user: { name: string | null; email: string } }[],
+};
+let e2 = checkEligibility(aliased, tplNow, settings);
+check("eligibility reads the sheet's own audience column",
+  !e2.blockers.some((b) => /audience/.test(b)) && e2.audience === "Newsletter", e2.audience);
+e2 = checkEligibility({ ...aliased, values: { subject: "Hello", list: "" } }, tplNow, settings);
+check("...and says which column it means when it is empty",
+  e2.blockers.some((b) => b.includes("“list”")), e2.blockers.find((b) => /list/.test(b)));
+
+// --- the company default audience ----------------------------------------
+// Filling an audience into every row would make every sign-off on those rows
+// stale, since an approval is fingerprinted against the row. So the company
+// carries a default and a row only names one when it differs.
+console.log("\nThe default audience");
+const noAudience = {
+  data: JSON.stringify({ subject: "Hello", audience: "" }),
+  values: { subject: "Hello", audience: "" },
+  columns: ["subject", "audience"],
+  hiddenAt: null,
+  approvals: [] as { templateId: string; contentHash: string; user: { name: string | null; email: string } }[],
+};
+let d = checkEligibility(noAudience, tplNow, settings);
+check("a row with no audience and no default is not offered",
+  d.blockers.some((b) => /no default audience/.test(b)), d.blockers.join(" "));
+
+d = checkEligibility(noAudience, tplNow, { ...settings, audience: "Newsletter" });
+check("...but the company default fills it in", d.audience === "Newsletter", d.audience);
+check("...and it is marked as inherited, not the row's own", d.audienceInherited);
+
+d = checkEligibility(
+  { ...noAudience, values: { subject: "Hello", audience: "VIP" } },
+  tplNow, { ...settings, audience: "Newsletter" });
+check("a row that names one overrides the default", d.audience === "VIP", d.audience);
+check("...and is not marked inherited", !d.audienceInherited);
+
+// End to end: the default has to reach Klaviyo, not just the list.
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+const kept2 = JSON.parse((await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data);
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...kept2, audience: "", audience_exclude: "",
+    send_date: "2026-12-01", send_time: "10:00" }) } });
+await prisma.company.update({ where: { id: company.id },
+  data: { klaviyoAudience: "Newsletter", klaviyoAudienceExclude: "VIP" } });
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+check("a row with no audience of its own pushes on the default", r.ok, r.error);
+s = await state();
+check("...to the audiences the default names",
+  JSON.stringify(s.campaigns[0]?.attributes?.audiences) === JSON.stringify({ included: ["L1"], excluded: ["S2"] }),
+  JSON.stringify(s.campaigns[0]?.attributes?.audiences));
+
+// And the row still wins where it has an opinion.
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...kept2, audience: "Engaged 90 days", audience_exclude: "",
+    send_date: "2026-12-01", send_time: "10:00" }) } });
+await approve();
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await fetch("http://127.0.0.1:4599/__reset");
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+s = await state();
+check("a row that names its own audience overrides the default in the push",
+  r.ok && JSON.stringify(s.campaigns[0]?.attributes?.audiences?.included) === JSON.stringify(["S1"]),
+  JSON.stringify(s.campaigns[0]?.attributes?.audiences));
+check("...while still taking the company's exclusions",
+  JSON.stringify(s.campaigns[0]?.attributes?.audiences?.excluded) === JSON.stringify(["S2"]),
+  JSON.stringify(s.campaigns[0]?.attributes?.audiences?.excluded));
+
+await prisma.company.update({ where: { id: company.id },
+  data: { klaviyoAudience: null, klaviyoAudienceExclude: null } });
+await prisma.sheetRow.update({ where: { id: row.id }, data: { data: JSON.stringify(kept2) } });
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
 
 // --- the sign-off after it has gone out ----------------------------------
 // Once a pair is in Klaviyo the approval it went out on stops being a toggle.

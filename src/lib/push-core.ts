@@ -8,15 +8,11 @@ import { KlaviyoError, assignTemplate, cancelCampaign, cloneTemplate, createCamp
 import { klaviyoKeyForCompany } from "@/lib/klaviyo-key";
 import { renderRow } from "@/lib/render-row";
 import { findContentBlock, toBlockContent } from "@/lib/block-content";
-import { envelopeSlots, extractPlaceholders, findEnvelopeColumns, normalizeKey } from "@/lib/template";
+import { audienceSlots, envelopeSlots, extractPlaceholders, findAudienceColumns,
+  findEnvelopeColumns, normalizeKey } from "@/lib/template";
 import { DEFAULT_TIMEZONE, zonedToUtc } from "@/lib/zone";
 import { parseRecord, parseStringArray } from "@/lib/json";
-import {
-  AUDIENCE_COLUMN,
-  EXCLUDE_COLUMN,
-  checkEligibility,
-  scheduleBlocker,
-} from "@/lib/push-eligibility";
+import { checkEligibility, scheduleBlocker } from "@/lib/push-eligibility";
 
 /** What a push is asking for. */
 export type PushMode = "draft" | "scheduled";
@@ -137,7 +133,7 @@ async function prepare(
       select: {
         klaviyoFromEmail: true, klaviyoFromLabel: true, klaviyoReplyTo: true,
         klaviyoTimezone: true, klaviyoBaseTemplateId: true, klaviyoAccountName: true,
-        klaviyoKeyCipher: true,
+        klaviyoKeyCipher: true, klaviyoAudience: true, klaviyoAudienceExclude: true,
       },
     }),
     prisma.sheetRow.findFirst({
@@ -168,6 +164,8 @@ async function prepare(
       baseTemplateId: company.klaviyoBaseTemplateId,
       timezone: company.klaviyoTimezone,
       connected: Boolean(company.klaviyoKeyCipher),
+      audience: company.klaviyoAudience,
+      audienceExclude: company.klaviyoAudienceExclude,
     },
   );
   if (!check.ok) return { error: check.blockers.join(" ") };
@@ -406,14 +404,25 @@ export async function performPush(
 
     // --- who it goes to, resolved against the live account ---------------
     const row = await prisma.sheetRow.findFirstOrThrow({
-      where: { id: rowId }, select: { data: true },
+      where: { id: rowId },
+      select: { data: true, sheet: { select: { columns: true } } },
     });
     const data = parseRecord(row.data);
-    const audienceCell = (data[AUDIENCE_COLUMN] ?? "").trim();
+    const audienceKeys = audienceSlots(findAudienceColumns(parseStringArray(row.sheet.columns)));
+    const defaults = await prisma.company.findUniqueOrThrow({
+      where: { id: companyId },
+      select: { klaviyoAudience: true, klaviyoAudienceExclude: true },
+    });
+    // Same fallback the eligibility rule applies, so what the list offered and
+    // what actually gets sent to are the same set of people.
+    const audienceCell =
+      (data[audienceKeys.audience] ?? "").trim() || (defaults.klaviyoAudience ?? "").trim();
     if (!audienceCell) {
       return {
         ok: false,
-        error: `This row has no “${AUDIENCE_COLUMN}” value, so there is nobody to send it to.`,
+        error:
+          `This row has no “${audienceKeys.audience}” and this company has no default audience, ` +
+          "so there is nobody to send it to.",
       };
     }
 
@@ -421,7 +430,8 @@ export async function performPush(
     const included = resolveAudiences(audienceCell, available);
     if ("error" in included) return { ok: false, error: included.error };
 
-    const excludeCell = (data[EXCLUDE_COLUMN] ?? "").trim();
+    const excludeCell =
+      (data[audienceKeys.exclude] ?? "").trim() || (defaults.klaviyoAudienceExclude ?? "").trim();
     const excluded = excludeCell ? resolveAudiences(excludeCell, available) : { ids: [], names: [] };
     if ("error" in excluded) return { ok: false, error: excluded.error };
 

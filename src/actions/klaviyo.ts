@@ -130,6 +130,8 @@ export async function saveKlaviyoSettingsAction(
     replyTo: string;
     timezone: string;
     baseTemplateId: string;
+    audience: string;
+    audienceExclude: string;
   },
 ): Promise<KlaviyoResult> {
   try {
@@ -152,10 +154,15 @@ export async function saveKlaviyoSettingsAction(
         klaviyoReplyTo: replyTo || null,
         klaviyoTimezone: TIMEZONES.includes(settings.timezone) ? settings.timezone : DEFAULT_TIMEZONE,
         klaviyoBaseTemplateId: settings.baseTemplateId.trim() || null,
+        klaviyoAudience: settings.audience.trim() || null,
+        klaviyoAudienceExclude: settings.audienceExclude.trim() || null,
       },
     });
 
     revalidatePath(`/c/${companyId}/integrations`);
+    // The default audience decides what the push queue will offer, so that
+    // screen's answer changes with it.
+    revalidatePath(`/c/${companyId}/push`);
     return { ok: true };
   } catch (error) {
     return failure(error);

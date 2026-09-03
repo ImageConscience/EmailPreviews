@@ -262,6 +262,48 @@ const ENVELOPE_ALIASES = {
   sendTime: ["send_time", "time", "scheduled_time", "schedule_time"],
 };
 
+/**
+ * Who a campaign goes to.
+ *
+ * Kept apart from the envelope rather than added to it. Subject, preview text
+ * and a send time are facts about every email whoever is sending it; an
+ * audience is a fact about sending through Klaviyo, and a company that has not
+ * connected an account should not be asked for one. So these are resolved the
+ * same way and shown by the same bar, but only when there is somewhere for them
+ * to go.
+ */
+const AUDIENCE_ALIASES = {
+  audience: ["audience", "list", "segment", "audiences", "send_to", "to"],
+  exclude: ["audience_exclude", "exclude", "excluded", "suppress", "exclude_audience"],
+};
+
+export interface AudienceColumns {
+  audience: string | null;
+  exclude: string | null;
+}
+
+const AUDIENCE_DEFAULT_KEYS = { audience: "audience", exclude: "audience_exclude" } as const;
+
+export function findAudienceColumns(columns: string[]): AudienceColumns {
+  const pick = (names: string[]) =>
+    columns.find((column) => names.includes(normalizeKey(column))) ?? null;
+  return { audience: pick(AUDIENCE_ALIASES.audience), exclude: pick(AUDIENCE_ALIASES.exclude) };
+}
+
+export type AudienceSlots = Record<keyof AudienceColumns, string>;
+
+/** The key each audience field reads and writes: the sheet's, or the default. */
+export function audienceSlots(columns: AudienceColumns): AudienceSlots {
+  return {
+    audience: columns.audience ?? AUDIENCE_DEFAULT_KEYS.audience,
+    exclude: columns.exclude ?? AUDIENCE_DEFAULT_KEYS.exclude,
+  };
+}
+
+export function audienceColumnNames(columns: AudienceColumns): string[] {
+  return Object.values(audienceSlots(columns));
+}
+
 export interface EnvelopeColumns {
   subject: string | null;
   preheader: string | null;

@@ -31,6 +31,8 @@ export default async function IntegrationsPage({
         klaviyoReplyTo: true,
         klaviyoTimezone: true,
         klaviyoBaseTemplateId: true,
+        klaviyoAudience: true,
+        klaviyoAudienceExclude: true,
       },
     }),
     prisma.catalogProduct.count({ where: { companyId } }),
@@ -76,6 +78,8 @@ export default async function IntegrationsPage({
           replyTo: company?.klaviyoReplyTo ?? "",
           timezone: company?.klaviyoTimezone ?? DEFAULT_TIMEZONE,
           baseTemplateId: company?.klaviyoBaseTemplateId ?? "",
+          audience: company?.klaviyoAudience ?? "",
+          audienceExclude: company?.klaviyoAudienceExclude ?? "",
           canStoreSecrets: secretsAvailable(),
         }}
       />

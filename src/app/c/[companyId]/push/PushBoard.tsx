@@ -30,6 +30,8 @@ export interface PushItem {
   subject: string;
   campaignName: string;
   audience: string;
+  /** The audience came from the company default rather than this row. */
+  audienceInherited: boolean;
   /** The send instant the row asks for, if it names one. */
   sendAt: string | null;
   sendAtLabel: string | null;
@@ -196,7 +198,13 @@ export function PushBoard({
                     </div>
                   </td>
                   <td className="tight">
-                    <span className="badge">{item.audience}</span>
+                    <span
+                      className="badge"
+                      title={item.audienceInherited ? "From this company's default audience" : undefined}
+                    >
+                      {item.audience}
+                      {item.audienceInherited && " *"}
+                    </span>
                   </td>
                   <td className="tight">
                     <PushedCell item={item} />
@@ -363,7 +371,14 @@ function PushDialog({
                 <dt>Subject</dt>
                 <dd>{item.subject}</dd>
                 <dt>To</dt>
-                <dd>{item.audience}</dd>
+                <dd>
+                  {item.audience}
+                  {item.audienceInherited && (
+                    <span className="hint" style={{ display: "block", fontWeight: 400 }}>
+                      This company&rsquo;s default — the row does not name one.
+                    </span>
+                  )}
+                </dd>
                 <dt>Account</dt>
                 <dd>{accountName}</dd>
               </dl>

@@ -1,5 +1,5 @@
 import { approvalFingerprint } from "@/lib/fingerprint";
-import { findEnvelopeColumns } from "@/lib/template";
+import { audienceSlots, findAudienceColumns, findEnvelopeColumns } from "@/lib/template";
 import { DEFAULT_TIMEZONE, describe, zonedToUtc } from "@/lib/zone";
 
 /**
@@ -16,7 +16,7 @@ import { DEFAULT_TIMEZONE, describe, zonedToUtc } from "@/lib/zone";
  * happen once, at the push.
  */
 
-/** Sheet columns naming who a send goes to. */
+/** The default sheet columns naming who a send goes to; aliases are accepted. */
 export const AUDIENCE_COLUMN = "audience";
 export const EXCLUDE_COLUMN = "audience_exclude";
 
@@ -25,6 +25,9 @@ export interface CompanyPushSettings {
   baseTemplateId: string | null;
   timezone: string | null;
   connected: boolean;
+  /** Where sends go when a row does not say otherwise. */
+  audience?: string | null;
+  audienceExclude?: string | null;
 }
 
 export interface RowForPush {
@@ -52,6 +55,8 @@ export interface Eligibility {
   campaignName: string;
   subject: string;
   audience: string;
+  /** True when the audience came from the company default, not the row. */
+  audienceInherited: boolean;
   /** The instant the row asks for, if it names one. */
   sendAt: Date | null;
   /** That instant as a person in the company's zone reads it. */
@@ -72,7 +77,15 @@ export function checkEligibility(
   const get = (column: string | null | undefined) => (column ? (row.values[column] ?? "").trim() : "");
 
   const subject = get(envelope.subject);
-  const audience = (row.values[AUDIENCE_COLUMN] ?? "").trim();
+  // Resolved the same way the preview resolves it, so a sheet whose column is
+  // called "list" gets one answer from both.
+  const audienceKeys = audienceSlots(findAudienceColumns(row.columns));
+  // The row wins; the company default fills in. Most campaigns for a client go
+  // to the same place, and writing that into every row would be both busywork
+  // and a way to make every sign-off stale the moment it was done.
+  const ownAudience = (row.values[audienceKeys.audience] ?? "").trim();
+  const audience = ownAudience || (company.audience ?? "").trim();
+  const audienceInherited = !ownAudience && audience !== "";
   const campaignName = (row.values.campaign ?? row.values.campaign_name ?? "").trim() || subject;
   const contentHash = approvalFingerprint(row.data, template.id, template.updatedAt);
 
@@ -96,7 +109,11 @@ export function checkEligibility(
   }
 
   if (!subject) blockers.push("It has no subject line.");
-  if (!audience) blockers.push(`It has no “${AUDIENCE_COLUMN}” value.`);
+  if (!audience) {
+    blockers.push(
+      `It has no “${audienceKeys.audience}”, and no default audience is set for this company.`,
+    );
+  }
 
   // The send time is not required for a draft, so a missing one is not a
   // blocker -- it only decides whether scheduling is on the table.
@@ -123,6 +140,7 @@ export function checkEligibility(
     campaignName,
     subject,
     audience,
+    audienceInherited,
     sendAt,
     sendAtLabel: sendAt ? describe(sendAt, zone) : null,
     warning,

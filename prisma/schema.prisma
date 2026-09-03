@@ -81,6 +81,14 @@ model Company {
   /// client's and only the marked block is ours.
   klaviyoBaseTemplateId String?
   klaviyoBaseTemplateName String?
+  /// Who sends go to when a row does not say otherwise, comma separated.
+  ///
+  /// A default rather than a per-row requirement because most of a client's
+  /// campaigns go to the same place, and because an approval is fingerprinted
+  /// against the row: filling an audience into every row after it had been
+  /// approved would make every sign-off stale, every time.
+  klaviyoAudience        String?
+  klaviyoAudienceExclude String?
 
   memberships Membership[]
   templates   Template[]

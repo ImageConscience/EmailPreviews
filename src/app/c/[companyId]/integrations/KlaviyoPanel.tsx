@@ -7,6 +7,7 @@ import {
   disconnectKlaviyoAction,
   saveKlaviyoSettingsAction,
 } from "@/actions/klaviyo";
+import { AudienceChooser, useAudiences } from "@/components/AudienceChooser";
 import { TIMEZONES } from "@/lib/zone";
 
 export interface KlaviyoState {
@@ -20,6 +21,8 @@ export interface KlaviyoState {
   replyTo: string;
   timezone: string;
   baseTemplateId: string;
+  audience: string;
+  audienceExclude: string;
   /** False when the deployment has no ENCRYPTION_KEY, so nothing can be stored. */
   canStoreSecrets: boolean;
 }
@@ -54,6 +57,10 @@ export function KlaviyoPanel({
   const [replyTo, setReplyTo] = useState(state.replyTo);
   const [timezone, setTimezone] = useState(state.timezone);
   const [baseTemplateId, setBaseTemplateId] = useState(state.baseTemplateId);
+  const [audience, setAudience] = useState(state.audience);
+  const [audienceExclude, setAudienceExclude] = useState(state.audienceExclude);
+  // Only worth a round trip once there is a key to make it with.
+  const audiences = useAudiences(companyId, state.connected);
 
   const connect = async () => {
     setBusy("Asking Klaviyo whose key this is…");
@@ -94,6 +101,8 @@ export function KlaviyoPanel({
       replyTo,
       timezone,
       baseTemplateId,
+      audience,
+      audienceExclude,
     });
     setBusy(null);
     if (!result.ok) {
@@ -183,6 +192,42 @@ export function KlaviyoPanel({
                 <code>&lt;!-- EMAILPREVIEWS:CONTENT --&gt;</code>. With only one HTML block in the
                 template the marker is optional. The ID is in the editor URL:{" "}
                 <code>klaviyo.com/email-editor/<strong>ID</strong>/edit</code>.
+              </p>
+            </div>
+
+            {/*
+              Most of a client's campaigns go to the same place, so this is set
+              once here and a row only names an audience when it differs. It is
+              also the difference between a working queue and a broken one: an
+              audience filled into every row after the fact would make every
+              sign-off on those rows stale, since an approval is fingerprinted
+              against the row it was given on.
+            */}
+            <div className="field aud-setting">
+              <span>Default audience</span>
+              <AudienceChooser
+                state={audiences}
+                value={audience}
+                onChange={setAudience}
+                empty="Nobody — every row will have to name its own"
+              />
+              <p className="hint">
+                Where a campaign goes when its row does not say otherwise. A row that names one
+                overrides this.
+              </p>
+            </div>
+
+            <div className="field aud-setting">
+              <span>Always exclude</span>
+              <AudienceChooser
+                state={audiences}
+                value={audienceExclude}
+                onChange={setAudienceExclude}
+                empty="No exclusions"
+              />
+              <p className="hint">
+                Suppressed on every send that does not name its own exclusions — a recent-buyers
+                segment, say.
               </p>
             </div>
 

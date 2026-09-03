@@ -33,6 +33,7 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
       select: {
         klaviyoKeyCipher: true, klaviyoAccountName: true, klaviyoFromEmail: true,
         klaviyoFromLabel: true, klaviyoTimezone: true, klaviyoBaseTemplateId: true,
+        klaviyoAudience: true, klaviyoAudienceExclude: true,
       },
     }),
     prisma.contentSheet.findMany({
@@ -73,6 +74,8 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
     baseTemplateId: company.klaviyoBaseTemplateId,
     timezone: company.klaviyoTimezone,
     connected,
+    audience: company.klaviyoAudience,
+    audienceExclude: company.klaviyoAudienceExclude,
   };
 
   const summaries = templates.map((t) => ({ id: t.id, name: t.name }));
@@ -119,6 +122,7 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
         subject: check.subject,
         campaignName: check.campaignName,
         audience: check.audience,
+        audienceInherited: check.audienceInherited,
         sendAt: check.sendAt?.toISOString() ?? null,
         // The raw cells, so the dialog can offer them for editing and say what
         // the sheet currently holds.
