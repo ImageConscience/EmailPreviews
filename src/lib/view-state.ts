@@ -128,6 +128,59 @@ export const flag = (on: boolean): string => (on ? "1" : "0");
 export const isOn = (value: string): boolean => value === "1";
 
 /**
+ * "What is left for me to do", which is a different question from "what is
+ * approved". Per-viewer by design: two people working the same queue should
+ * each see their own remainder.
+ */
+export type MineFilter = "" | "todo" | "done";
+
+/**
+ * The one filter that does not travel in a link.
+ *
+ * Every other setting here is shareable because it means the same thing to
+ * whoever opens it. This one does not: pasted to a colleague, "not approved by
+ * me" would quietly re-point at them and show a different list than the sender
+ * saw. So it lives in localStorage only -- it survives a reload and a break
+ * mid-queue, which is what it is for, and a shared link carries the view
+ * without it.
+ *
+ * Keyed by person as well as company, and shared between the overview and the
+ * preview: someone working a queue sets it once and it follows them between
+ * the two views rather than being two settings that can disagree.
+ */
+export function useMineFilter(
+  companyId: string,
+  userId: string,
+): [MineFilter, (next: MineFilter) => void] {
+  const [mine, setMine] = useState<MineFilter>("");
+  const key = `emailpreviews:mine:${companyId}:${userId}`;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(key);
+      if (stored === "todo" || stored === "done") setMine(stored);
+    } catch {
+      // Storage unavailable costs the convenience, not the page.
+    }
+  }, [key]);
+
+  const set = useCallback(
+    (next: MineFilter) => {
+      setMine(next);
+      try {
+        if (next) window.localStorage.setItem(key, next);
+        else window.localStorage.removeItem(key);
+      } catch {
+        /* as above */
+      }
+    },
+    [key],
+  );
+
+  return [mine, set];
+}
+
+/**
  * A remembered id that no longer names anything, treated as no choice.
  *
  * View state outlives the things it points at. A sheet filter is stored in

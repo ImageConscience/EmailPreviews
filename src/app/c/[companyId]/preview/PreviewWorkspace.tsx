@@ -25,7 +25,8 @@ import {
   rowSubLabel,
   type DateRange,
 } from "@/lib/campaign";
-import { flag, isOn, useViewState, validId } from "@/lib/view-state";
+import { flag, isOn, useMineFilter, useViewState, validId } from "@/lib/view-state";
+import type { MineFilter } from "@/lib/view-state";
 import { ShareLink } from "@/components/ShareLink";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
@@ -206,7 +207,6 @@ export function PreviewWorkspace({
       sheet: "",
       row: "",
       filter: "",
-      q: "",
       hidden: flag(false),
       from: fallback.from,
       to: fallback.to,
@@ -249,8 +249,9 @@ export function PreviewWorkspace({
   const setDevice = (next: DeviceId) => setView({ device: next });
   const highlightMissing = isOn(view.gaps);
   const setHighlightMissing = (next: boolean) => setView({ gaps: flag(next) });
-  const filter = view.q;
-  const setFilter = (next: string) => setView({ q: next });
+  // Which rows are mine still to sign off. Shared with the overview, and kept
+  // out of the URL for the reason the hook explains.
+  const [mine, setMineFilter] = useMineFilter(companyId, currentUserId);
   /** "" is every row; otherwise a template id, or UNASSIGNED_ROWS. */
   const templateFilter = view.filter;
   const setTemplateFilter = (next: string) => setView({ filter: next });
@@ -687,7 +688,6 @@ export function PreviewWorkspace({
 
   const visibleRows = useMemo(() => {
     if (!sheet) return [];
-    const needle = filter.trim().toLowerCase();
     return sheet.rows.filter((row) => {
       // The row you are looking at never vanishes underneath you -- hiding it
       // would leave the editor pointed at something not in the list.
@@ -702,10 +702,25 @@ export function PreviewWorkspace({
           return false;
         }
       }
-      if (!needle) return true;
-      return Object.values(row.data).some((value) => value.toLowerCase().includes(needle));
+      if (mine && !isCurrent) {
+        // The same reading the overview uses: a current approval of mine on
+        // this row, in whichever template it was given.
+        const signed = row.approvals.some((a) => a.userId === currentUserId && !a.stale);
+        if (mine === "todo" ? signed : !signed) return false;
+      }
+      return true;
     });
-  }, [sheet, filter, templateFilter, rowTemplateIds, showHidden, rowId, sendDateColumn, range]);
+  }, [
+    sheet,
+    mine,
+    currentUserId,
+    templateFilter,
+    rowTemplateIds,
+    showHidden,
+    rowId,
+    sendDateColumn,
+    range,
+  ]);
 
   const hiddenCount = useMemo(
     () => (sheet?.rows ?? []).filter((row) => row.hiddenAt).length,
@@ -893,10 +908,6 @@ export function PreviewWorkspace({
                   </option>
                 )}
               </select>
-              <p className="hint">
-                Narrows the list below to the rows using that template. Each row still
-                previews in whichever template it asks for.
-              </p>
               {templateFilter && currentRow && !visibleRows.some((r) => r.id === currentRow.id) && (
                 <p className="hint" style={{ color: "var(--warn)" }}>
                   The row on screen is not in this filter.
@@ -928,13 +939,19 @@ export function PreviewWorkspace({
               </option>
             ))}
           </select>
-          <input
-            type="text"
-            placeholder="Filter rows…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+          {/* Personal: it filters by whoever is signed in, and unlike everything
+              else in this rail it is not carried by a shared link. Shared with
+              the overview, so the queue reads the same in both. */}
+          <select
+            value={mine}
+            onChange={(e) => setMineFilter(e.target.value as MineFilter)}
             style={{ marginTop: 8 }}
-          />
+            title="Filters by your own sign-off. Not carried in a shared link."
+          >
+            <option value="">Any sign-off</option>
+            <option value="todo">Not approved by me</option>
+            <option value="done">Approved by me</option>
+          </select>
 
           <label className="check">
             <input
@@ -1023,7 +1040,14 @@ export function PreviewWorkspace({
             ))}
             {visibleRows.length === 0 && (
               <li>
-                <div className="ws-section hint">No rows match “{filter}”.</div>
+                {/* Name the filter that emptied it, so the way out is obvious. */}
+                <div className="ws-section hint">
+                  {mine === "todo"
+                    ? "Nothing left for you to sign off here."
+                    : mine === "done"
+                      ? "You have not approved anything here yet."
+                      : "No rows match these filters."}
+                </div>
               </li>
             )}
           </ul>

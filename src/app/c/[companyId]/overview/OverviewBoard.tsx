@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import type { MineFilter } from "@/lib/view-state";
 import {
   defaultRange,
   formatIso,
@@ -11,7 +12,7 @@ import {
   todayIso,
   type DateRange,
 } from "@/lib/campaign";
-import { flag, isOn, useViewState, validId } from "@/lib/view-state";
+import { flag, isOn, useMineFilter, useViewState, validId } from "@/lib/view-state";
 import { ShareLink } from "@/components/ShareLink";
 
 export interface OverviewItem {
@@ -40,12 +41,6 @@ export interface OverviewItem {
   hiddenBy: string | null;
 }
 
-/**
- * "What is left for me to do", which is a different question from "what is
- * approved". Deliberately per-viewer: two people working the same queue should
- * each see their own remainder.
- */
-type MineFilter = "" | "todo" | "done";
 
 const UNASSIGNED = "__unassigned__";
 const MONTHS = [
@@ -131,35 +126,8 @@ export function OverviewBoard({
   const setRange = (next: DateRange) =>
     set({ from: next.from, to: next.to, undated: flag(next.includeUndated) });
 
-  /**
-   * The one filter that does not go in the URL.
-   *
-   * Everything else here is shareable because it means the same thing to
-   * whoever opens the link. "Not approved by me" does not: pasted to a
-   * colleague it would quietly re-point at them and show a different list than
-   * the sender saw. So it lives in localStorage only -- it survives a reload
-   * and a break mid-queue, which is what it is for, and a shared link carries
-   * the view without it.
-   */
-  const [mine, setMine] = useState<MineFilter>("");
-  const mineKey = `emailpreviews:mine:${companyId}:${currentUserId}`;
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(mineKey);
-      if (stored === "todo" || stored === "done") setMine(stored);
-    } catch {
-      // Storage unavailable costs the convenience, not the page.
-    }
-  }, [mineKey]);
-  const setMineFilter = (next: MineFilter) => {
-    setMine(next);
-    try {
-      if (next) window.localStorage.setItem(mineKey, next);
-      else window.localStorage.removeItem(mineKey);
-    } catch {
-      /* as above */
-    }
-  };
+  // Shared with the preview, so someone working a queue sets it once.
+  const [mine, setMineFilter] = useMineFilter(companyId, currentUserId);
 
   const hiddenCount = useMemo(() => items.filter((i) => i.hidden).length, [items]);
 
@@ -306,7 +274,7 @@ export function OverviewBoard({
         <label className="field" style={{ marginBottom: 0, flex: "1 1 170px" }}>
           <span>My sign-off</span>
           <select value={mine} onChange={(e) => setMineFilter(e.target.value as MineFilter)}>
-            <option value="">Everything</option>
+            <option value="">Any sign-off</option>
             <option value="todo">Not approved by me</option>
             <option value="done">Approved by me</option>
           </select>
