@@ -204,6 +204,8 @@ export interface BaseTemplateReport {
   revision: string;
   /** Set when the configured revision failed and another one worked. */
   worksAt?: string;
+  /** Which way of asking produced the definition. */
+  readBy?: string;
   name?: string;
   editorType?: string;
   /** How many HTML blocks the template has, and whether ours was identifiable. */
@@ -236,25 +238,25 @@ export async function checkBaseTemplateAction(companyId: string): Promise<BaseTe
     const key = await klaviyoKeyFor(companyId);
     if (!key) return { ok: false, revision: used, error: "This company is not connected to Klaviyo." };
 
-    // If the configured revision cannot read a definition, find out which can
+    // If the configured revision cannot read a definition, find one that can
     // rather than reporting a dead end. It is the question the error raises,
-    // and answering it is four reads of one template.
+    // and answering it is a handful of reads of one template.
     let template: TemplateDetail;
     let worksAt: string | undefined;
     try {
       template = await fetchTemplate(key, id);
     } catch (error) {
-      if (!(error instanceof KlaviyoError) || !/additional-fields/.test(error.detail)) throw error;
+      if (!(error instanceof KlaviyoError)) throw error;
       let rescued: TemplateDetail | null = null;
       for (const candidate of CANDIDATE_REVISIONS) {
         if (candidate === used) continue;
         try {
-          rescued = await fetchTemplate(key, id, candidate);
-          if (rescued.definition) {
+          const attempt = await fetchTemplate(key, id, candidate);
+          if (attempt.definition) {
+            rescued = attempt;
             worksAt = candidate;
             break;
           }
-          rescued = null;
         } catch {
           // That revision will not do it either; try the next.
         }
@@ -297,7 +299,7 @@ export async function checkBaseTemplateAction(companyId: string): Promise<BaseTe
     const marked = JSON.stringify(found.block).includes(CONTENT_MARKER);
     return {
       ok: true, revision: used, name: template.name, editorType: template.editorType,
-      htmlBlocks, marked, worksAt,
+      htmlBlocks, marked, worksAt, readBy: template.readBy,
       note: marked
         ? "The marked block is the one that will be filled."
         : "No marker, but there is only one HTML block, so that is the one that will be filled.",

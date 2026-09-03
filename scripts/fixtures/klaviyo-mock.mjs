@@ -36,8 +36,24 @@ let nextId = 1;
 /** The revision from which GET /templates/{id} accepts additional-fields. */
 const DEFINITION_REVISION = "2025-01-15";
 
+/**
+ * How this Klaviyo hands over a template definition.
+ *
+ * "additional-fields" is the documented way and the one the client tries first.
+ * "plain" is the world the live account appears to be in: the parameter is
+ * understood but the allowed list is empty, because the definition has become
+ * an ordinary field returned by default. Switchable at runtime so one mock can
+ * play both, and the client can be shown to cope with either.
+ */
+let templateMode = "additional-fields";
+
 createServer((req, res) => {
   const url = new URL(req.url, "http://x");
+  if (url.pathname === "/__template-mode") {
+    templateMode = url.searchParams.get("mode") ?? "additional-fields";
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ templateMode }));
+  }
   const send = (status, body) => {
     res.writeHead(status, { "content-type": "application/vnd.api+json" });
     res.end(JSON.stringify(body));
@@ -118,11 +134,14 @@ createServer((req, res) => {
       // push hit, so the mock reproduces it.
       const asked = url.searchParams.get("additional-fields[template]");
       const revision = req.headers["revision"] ?? "";
-      if (asked && revision < DEFINITION_REVISION) {
+      const gated = templateMode === "additional-fields" && revision >= DEFINITION_REVISION;
+      if (asked && !gated) {
         return send(400, { errors: [{ detail: `additional-fields must be in []: (got ${asked})` }] });
       }
       const attributes = { ...t };
-      if (!asked) delete attributes.definition;
+      // Gated: only handed over when asked for. Otherwise it is an ordinary
+      // field and comes back like any other.
+      if (templateMode === "additional-fields" && !asked) delete attributes.definition;
       return send(200, { data: { id: t.id, attributes } });
     }
     if (templateMatch && req.method === "PATCH") {

@@ -1,3 +1,19 @@
+/*
+ * Padding inside the box, everywhere.
+ *
+ * Without this, `width: 100%` plus padding is wider than its container: the
+ * page shell overflowed to the right by exactly its own 40px of horizontal
+ * padding, so the left edge looked inset and the right ran off the screen. The
+ * rest of this file was written expecting border-box, which is why it read as
+ * correct nearly everywhere and only showed up on the one page wide enough to
+ * fill the viewport.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 :root {
   --bg: #f6f7f9;
   --surface: #ffffff;

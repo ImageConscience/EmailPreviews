@@ -233,7 +233,8 @@ export function KlaviyoPanel({
                     <>{report.error}</>
                   )}
                   <div className="hint" style={{ marginTop: 4 }}>
-                    Read using Klaviyo API revision <code>{report.revision}</code>.
+                    Read using Klaviyo API revision <code>{report.revision}</code>
+                    {report.readBy ? <> (asked via <code>{report.readBy}</code>)</> : null}.
                     {report.worksAt && (
                       <>
                         {" "}That revision could not read the definition, but{" "}

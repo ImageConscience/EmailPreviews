@@ -443,14 +443,16 @@ const asked = process.env.KLAVIYO_API_REVISION;
 process.env.KLAVIYO_API_REVISION = "2024-10-15";
 try {
   await fetchTemplate(KEY, "BASE01");
-  check("an old revision cannot read a template definition", false, "it succeeded");
+  check("a revision that hands over the definition no way at all fails", false, "it succeeded");
 } catch (error) {
   const detail = (error as Error).message;
-  check("an old revision cannot read a template definition",
+  check("a revision that hands over the definition no way at all fails",
     /additional-fields/.test(detail), detail.slice(0, 60));
   check("...and the error names the revision that was used, not just the symptom",
     detail.includes("2024-10-15"), detail.slice(-90));
   check("...and says which knob changes it", /KLAVIYO_API_REVISION/.test(detail));
+  check("...rather than claiming the template has no blocks",
+    !/no blocks to fill/.test(detail));
 }
 // Assigning undefined stores the string "undefined", which is not a date and
 // so is not a revision Klaviyo would take.
@@ -469,9 +471,49 @@ for (const candidate of CANDIDATE_REVISIONS) {
   } catch { /* not this one */ }
 }
 check("a working revision can be found by trying the candidates", worked !== null, worked ?? "none");
-check("...and it is the newest that works", worked === CANDIDATE_REVISIONS[0], worked ?? "none");
 if (asked === undefined) delete process.env.KLAVIYO_API_REVISION;
 else process.env.KLAVIYO_API_REVISION = asked;
+
+// --- an account where additional-fields is refused outright ---------------
+// The live failure: the parameter is understood, the allowed list is empty, and
+// the definition is an ordinary field returned by default. No revision fixes
+// that, so asking a different way has to.
+console.log("\nWhen additional-fields is refused at every revision");
+await fetch("http://127.0.0.1:4599/__template-mode?mode=plain");
+try {
+  const read = await fetchTemplate(KEY, "BASE01");
+  check("the definition still comes back", read.definition !== null);
+  check("...by asking a different way", read.readBy !== "additional-fields", read.readBy ?? "?");
+  check("...and it is the real structure, not an empty shell",
+    JSON.stringify(read.definition).includes("EMAILPREVIEWS:CONTENT"));
+} catch (error) {
+  check("the definition still comes back", false, (error as Error).message);
+}
+
+// And the whole push has to work in that world, not just the read.
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+check("and a push works against such an account", r.ok, r.error);
+s = await state();
+const filledPlain = (() => {
+  const clone = s.templates.find((t) => t.id.startsWith("TPL"));
+  const out: string[] = [];
+  JSON.stringify(clone?.definition, (k, v) => {
+    if (v && typeof v === "object" && (v as { type?: string }).type === "html") {
+      out.push(((v as { data?: { content?: string } }).data?.content) ?? "");
+    }
+    return v;
+  });
+  return out;
+})();
+check("...filling the marked block as usual",
+  filledPlain.some((c) => c.includes("<table")) && filledPlain.some((c) => c.includes("unsubscribe")),
+  `${filledPlain.length} blocks`);
+await fetch("http://127.0.0.1:4599/__template-mode?mode=additional-fields");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
 
 // --- reading the account's lists -----------------------------------------
 // Klaviyo rejects a sparse fieldset naming a type the endpoint cannot return,

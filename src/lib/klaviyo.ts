@@ -195,18 +195,39 @@ export async function fetchAudiences(apiKey: string): Promise<Audience[]> {
 // --- what the app writes -------------------------------------------------
 
 /**
- * Revisions worth trying when the pinned one will not read a definition.
+ * Revisions worth trying when the configured one will not read a definition.
  *
- * Only the setup check uses these, and only after the configured revision has
- * already failed: the push itself stays on one revision, because a send that
- * silently negotiates its own API version is a send nobody can reason about.
- * Newest first, so the answer is the most current one that works.
+ * Only the setup check uses these. The push stays on one revision, because a
+ * send that silently negotiates its own API version is a send nobody can reason
+ * about. Newest first, so the answer is the most current one that works.
  */
 export const CANDIDATE_REVISIONS = [
+  "2026-04-15",
+  "2026-01-15",
+  "2025-10-15",
   "2025-07-15",
   "2025-04-15",
   "2025-01-15",
   "2024-10-15",
+];
+
+/**
+ * The ways of asking for a template's structure.
+ *
+ * There is more than one because Klaviyo has changed its mind about which it
+ * is. "additional-fields must be in []" is what you get when the parameter is
+ * understood but the allowed list for this resource is empty -- which is how an
+ * endpoint reads once the field it used to gate has become an ordinary one. So
+ * rather than pick a side and be wrong again, ask each way and keep the answer
+ * that comes back with a definition.
+ *
+ * All three are reads of the same template, so trying them costs latency and
+ * nothing else.
+ */
+export const TEMPLATE_READS: { id: string; query: Record<string, string | undefined> }[] = [
+  { id: "additional-fields", query: { "additional-fields[template]": "definition" } },
+  { id: "fields", query: { "fields[template]": "name,editor_type,definition" } },
+  { id: "plain", query: {} },
 ];
 
 export interface TemplateDetail {
@@ -215,44 +236,80 @@ export interface TemplateDetail {
   editorType: string;
   /** The drag-and-drop structure, present only for templates that have one. */
   definition: unknown;
+  /** Which of TEMPLATE_READS produced it, for the setup check to report. */
+  readBy?: string;
+}
+
+/** A drag-and-drop template is the only kind that has a definition to miss. */
+function draggable(editorType: string): boolean {
+  return /DRAG/i.test(editorType);
 }
 
 /**
  * One template, with its block structure.
  *
- * The definition is an additional field, and which revisions accept the request
- * for it is the one thing here that has actually bitten. So the revision in use
- * is named in the error rather than left for someone to deduce from a sentence
- * about empty lists.
+ * Tries each way of asking until one comes back with a definition. A template
+ * that has none to give -- a code template -- stops the search at the first
+ * successful read rather than pointlessly asking twice more.
  */
 export async function fetchTemplate(
   apiKey: string,
   templateId: string,
   as?: string,
 ): Promise<TemplateDetail> {
-  let body: { data: { id: string; attributes: { name: string; editor_type: string; definition?: unknown } } };
-  try {
-    body = await call(apiKey, `/templates/${templateId}`, {
-      query: { "additional-fields[template]": "definition" },
-      revision: as,
-    });
-  } catch (error) {
-    if (error instanceof KlaviyoError && /additional-fields/.test(error.detail)) {
-      throw new KlaviyoError(
-        error.status,
-        `${error.detail} This app asked for the template's definition using API revision ` +
-          `${as ?? revision()}, which does not accept it. ` +
-          "Set KLAVIYO_API_REVISION to one that does.",
-      );
+  type Body = { data: { id: string; attributes: { name: string; editor_type: string; definition?: unknown } } };
+
+  let lastError: unknown = null;
+  let lastBody: { body: Body; readBy: string } | null = null;
+
+  for (const attempt of TEMPLATE_READS) {
+    let body: Body;
+    try {
+      body = await call<Body>(apiKey, `/templates/${templateId}`, {
+        query: attempt.query,
+        revision: as,
+      });
+    } catch (error) {
+      // A refusal of one way of asking is not a refusal of the template.
+      if (error instanceof KlaviyoError && error.status === 400) {
+        lastError = error;
+        continue;
+      }
+      throw error;
     }
-    throw error;
+
+    const attributes = body.data.attributes;
+    if (attributes.definition != null || !draggable(attributes.editor_type)) {
+      return {
+        id: body.data.id,
+        name: attributes.name,
+        editorType: attributes.editor_type,
+        definition: attributes.definition ?? null,
+        readBy: attempt.id,
+      };
+    }
+    lastBody = { body, readBy: attempt.id };
   }
-  return {
-    id: body.data.id,
-    name: body.data.attributes.name,
-    editorType: body.data.attributes.editor_type,
-    definition: body.data.attributes.definition ?? null,
-  };
+
+  /*
+   * Nothing worked. A drag-and-drop template always has a definition, so
+   * reaching here means it could not be read, not that there is none -- and
+   * handing back a null would have the caller announce "no blocks to fill"
+   * about a template full of blocks. Say what actually happened instead, and
+   * name the revision, since that is the thing that has been wrong.
+   */
+  const refused =
+    lastError instanceof KlaviyoError
+      ? lastError.detail
+      : "Klaviyo returned the template without its definition.";
+  const status = lastError instanceof KlaviyoError ? lastError.status : 400;
+  const name = lastBody ? `“${lastBody.body.data.attributes.name}” ` : "";
+  throw new KlaviyoError(
+    status,
+    `${refused} This app asked for ${name}template's structure three ways using API revision ` +
+      `${as ?? revision()}, and got it from none of them. Set KLAVIYO_API_REVISION to one that ` +
+      "works — the base template check on the integrations screen will find one.",
+  );
 }
 
 /**
