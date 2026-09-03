@@ -73,11 +73,31 @@ createServer((req, res) => {
         contact_information: { organization_name: "Pretend Client Co" },
         public_api_key: "AbC123", timezone: "America/New_York" } }] });
     }
+    // Klaviyo rejects a sparse fieldset naming a type the endpoint cannot
+    // return. Mirroring that here is the point: a mock that shrugs it off lets
+    // the request pass in testing and fail against the real account, which is
+    // exactly how the audience picker shipped empty.
+    const fieldFamilies = (allowed) => {
+      for (const key of url.searchParams.keys()) {
+        const family = /^fields\[([^\]]+)\]$/.exec(key)?.[1];
+        if (family && !allowed.includes(family)) {
+          return send(400, { errors: [{ detail:
+            `'${family}' is not an allowed field family for this resource. ` +
+            `Allowed field families are ${allowed.join(", ")}.` }] });
+        }
+      }
+      return null;
+    };
+
     if (p === "/lists") {
+      const bad = fieldFamilies(["list", "profile", "tag", "flow"]);
+      if (bad) return bad;
       return send(200, { data: [{ id: "L1", attributes: { name: "Newsletter" } },
         { id: "L3", attributes: { name: "Ambiguous" } }], links: { next: null } });
     }
     if (p === "/segments") {
+      const bad = fieldFamilies(["segment", "profile", "tag", "flow"]);
+      if (bad) return bad;
       return send(200, { data: [{ id: "S1", attributes: { name: "Engaged 90 days" } },
         { id: "S2", attributes: { name: "VIP" } },
         { id: "S3", attributes: { name: "Ambiguous" } }], links: { next: null } });

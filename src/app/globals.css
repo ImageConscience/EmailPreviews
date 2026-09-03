@@ -515,52 +515,6 @@ input:focus, select:focus, textarea:focus {
 .envelope .env-inline .env-label { flex: 0 0 auto; padding-top: 0; }
 .envelope .env-inline input { font-size: 13px; color: var(--text); width: auto; min-width: 130px; }
 
-/* Audience: chips for what is chosen, a select to add to it. Only rendered at
-   all when the company has a Klaviyo account. */
-.envelope .env-audience { align-items: flex-start; }
-.envelope .aud-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.envelope .aud-field { display: flex; align-items: flex-start; gap: 8px; }
-.envelope .aud-label { flex: 0 0 62px; font-size: 10px; padding-top: 5px; color: var(--text-faint); }
-.envelope .aud-body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.envelope .aud-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.envelope .aud-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 4px 2px 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-}
-/* A value the account does not have: a rename in Klaviyo, or something typed
-   before this picker existed. Kept, and flagged -- dropping it would change
-   who gets the email. */
-.envelope .aud-chip.is-missing { background: var(--danger-soft); color: var(--danger); }
-.envelope .aud-chip em { font-style: normal; font-weight: 700; }
-.envelope .aud-chip button {
-  border: none;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 3px;
-  opacity: 0.65;
-}
-.envelope .aud-chip button:hover { opacity: 1; }
-.envelope .aud-none { font-size: 12px; color: var(--text-faint); font-style: italic; }
-.envelope .aud-status { font-size: 12px; color: var(--text-faint); }
-.envelope .aud-body select {
-  width: auto;
-  max-width: 240px;
-  font-size: 12px;
-  padding: 3px 6px;
-  border-color: var(--border);
-}
-.envelope .aud-body input { border-color: var(--border); font-size: 12px; }
-
 /* Named only once someone types into a field the sheet has no column for. */
 .envelope .env-note { margin: 9px 0 0; font-size: 12px; color: var(--text-faint); }
 .envelope .env-note code { margin-left: 5px; color: var(--text-muted); }
@@ -1038,6 +992,57 @@ input:focus, select:focus, textarea:focus {
    are different facts and should not read as the same one at a glance. */
 .badge-sent { background: var(--sent-soft); color: var(--sent); border-color: transparent; }
 .cal-item.is-sent { border-left-color: var(--sent); background: var(--sent-soft); }
+/* Audience: chips for what is chosen, a select to add to it. In the rail
+   rather than the envelope bar -- it is a fact about the send, not about what
+   the email looks like, and it was pushing the render down the page. */
+.aud-panel .aud-field { display: flex; align-items: flex-start; gap: 8px; }
+.aud-panel .aud-field + .aud-field { margin-top: 8px; }
+.aud-panel .aud-label {
+  flex: 0 0 58px;
+  padding-top: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.aud-panel .aud-body { flex: 1; min-width: 0; }
+.aud-panel .aud-body select { width: 100%; margin-top: 6px; font-size: 12px; padding: 3px 6px; }
+.aud-panel .aud-body input { margin-top: 6px; font-size: 12px; }
+.aud-note { margin: 10px 0 0; font-size: 11.5px; color: var(--text-faint); }
+.aud-note code { margin-left: 5px; color: var(--text-muted); }
+.aud-error { margin: 8px 0 0; font-size: 11.5px; color: var(--danger); }
+
+.aud-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.aud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+/* A value the account does not have: renamed in Klaviyo, or typed before this
+   picker existed. Kept and flagged -- dropping it would change who gets it. */
+.aud-chip.is-missing { background: var(--danger-soft); color: var(--danger); }
+.aud-chip em { font-style: normal; font-weight: 700; }
+.aud-chip button {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+  opacity: 0.65;
+}
+.aud-chip button:hover { opacity: 1; }
+.aud-none { font-size: 12px; color: var(--text-faint); font-style: italic; }
+.aud-status { font-size: 12px; color: var(--text-faint); }
+
 /* The same chooser on the settings panel, where it sits in a normal field. */
 .aud-setting .aud-body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .aud-setting .aud-body select { width: auto; max-width: 260px; }

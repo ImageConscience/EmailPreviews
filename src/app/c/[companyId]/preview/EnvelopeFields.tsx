@@ -1,7 +1,6 @@
 "use client";
 
-import { AudienceChooser, useAudiences } from "@/components/AudienceChooser";
-import type { AudienceColumns, AudienceSlots, EnvelopeColumns, EnvelopeSlots } from "@/lib/template";
+import type { EnvelopeColumns, EnvelopeSlots } from "@/lib/template";
 
 /**
  * Subject line, preview text and the send date and time, shown above the render.
@@ -26,7 +25,6 @@ const ISO_TIME = /^\d{2}:\d{2}(:\d{2})?$/;
 export function EnvelopeFields({
   slots,
   known,
-  audience,
   values,
   baseline,
   width,
@@ -37,19 +35,6 @@ export function EnvelopeFields({
   slots: EnvelopeSlots;
   /** Which of them the sheet actually had, for the "will be added" note. */
   known: EnvelopeColumns;
-  /**
-   * Who it goes to -- only when the company is connected to Klaviyo. Without an
-   * account there is nowhere for an audience to mean anything, and asking every
-   * company for one would put a required-looking field in front of people whose
-   * work ends at the approval.
-   */
-  audience: {
-    companyId: string;
-    slots: AudienceSlots;
-    known: AudienceColumns;
-    /** The company default, shown where the row names nobody. */
-    fallback: { audience: string; exclude: string };
-  } | null;
   values: Record<string, string>;
   baseline: Record<string, string>;
   /** Match the width of the frame below, so the two read as one object. */
@@ -96,16 +81,9 @@ export function EnvelopeFields({
   };
 
   /** Fields the sheet has no column for yet, named once under the bar. */
-  const newColumns = [
-    ...(Object.keys(slots) as (keyof EnvelopeSlots)[])
-      .filter((slot) => !known[slot] && (values[slots[slot]] ?? "") !== "")
-      .map((slot) => slots[slot]),
-    ...(audience
-      ? (Object.keys(audience.slots) as (keyof AudienceSlots)[])
-          .filter((slot) => !audience.known[slot] && (values[audience.slots[slot]] ?? "") !== "")
-          .map((slot) => audience.slots[slot])
-      : []),
-  ];
+  const newColumns = (Object.keys(slots) as (keyof EnvelopeSlots)[])
+    .filter((slot) => !known[slot] && (values[slots[slot]] ?? "") !== "")
+    .map((slot) => slots[slot]);
 
   return (
     <div className="envelope" style={{ maxWidth: width ? `${width}px` : "100%" }}>
@@ -124,15 +102,6 @@ export function EnvelopeFields({
           })}
         </div>
       </div>
-      {audience && (
-        <AudienceRow
-          companyId={audience.companyId}
-          slots={audience.slots}
-          fallback={audience.fallback}
-          values={values}
-          onChange={onChange}
-        />
-      )}
       {newColumns.length > 0 && (
         <p className="env-note">
           Saving adds {newColumns.length === 1 ? "a new column" : "new columns"} to this sheet:{" "}
@@ -141,64 +110,6 @@ export function EnvelopeFields({
           ))}
         </p>
       )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Audience                                                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Who this row goes to, when there is a Klaviyo account to send it through.
- *
- * Leaving both empty is the ordinary case: the company default covers it, and
- * it is shown greyed here so the answer is visible on the row it applies to.
- * Filling one in is the exception -- one campaign that goes somewhere else.
- */
-function AudienceRow({
-  companyId,
-  slots,
-  fallback,
-  values,
-  onChange,
-}: {
-  companyId: string;
-  slots: AudienceSlots;
-  fallback: { audience: string; exclude: string };
-  values: Record<string, string>;
-  onChange: (key: string, value: string) => void;
-}) {
-  const state = useAudiences(companyId);
-
-  return (
-    <div className="env-row env-audience">
-      <span className="env-label">Audience</span>
-      <div className="aud-fields">
-        <div className="aud-field">
-          <span className="env-label aud-label">To</span>
-          <AudienceChooser
-            state={state}
-            value={values[slots.audience] ?? ""}
-            onChange={(next) => onChange(slots.audience, next)}
-            empty="Nobody yet — a send needs at least one"
-            inherited={fallback.audience || null}
-          />
-        </div>
-        <div className="aud-field">
-          <span className="env-label aud-label">Excluding</span>
-          <AudienceChooser
-            state={state}
-            value={values[slots.exclude] ?? ""}
-            onChange={(next) => onChange(slots.exclude, next)}
-            empty="No exclusions"
-            inherited={fallback.exclude || null}
-          />
-        </div>
-        {state.error && (
-          <p className="env-note" style={{ color: "var(--danger)" }}>{state.error}</p>
-        )}
-      </div>
     </div>
   );
 }

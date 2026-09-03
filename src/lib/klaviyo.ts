@@ -158,7 +158,10 @@ export async function fetchAudiences(apiKey: string): Promise<Audience[]> {
         data: { id: string; attributes: { name: string } }[];
         links?: { next?: string | null };
       }>(apiKey, path, {
-        query: { "fields[list]": "name", "fields[segment]": "name", "page[cursor]": cursor },
+        // Only the fieldset for what this endpoint returns. Klaviyo rejects a
+        // `fields[segment]` on /lists outright rather than ignoring it, which
+        // failed the whole call and left the audience picker empty.
+        query: { [`fields[${kind}]`]: "name", "page[cursor]": cursor },
       });
 
       for (const item of body.data ?? []) {

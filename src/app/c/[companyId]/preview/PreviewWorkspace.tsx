@@ -34,6 +34,7 @@ import { ShareLink } from "@/components/ShareLink";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
 import { NotesFlyout } from "./NotesFlyout";
+import { AudiencePanel } from "./AudiencePanel";
 import { EnvelopeFields } from "./EnvelopeFields";
 import { ImagePicker } from "./ImagePicker";
 import { ProductPicker } from "./ProductPicker";
@@ -1219,7 +1220,6 @@ export function PreviewWorkspace({
                 <EnvelopeFields
                   slots={envelope}
                   known={envelopeColumns}
-                  audience={audienceProps}
                   values={draft}
                   baseline={baseline}
                   width={null}
@@ -1239,110 +1239,28 @@ export function PreviewWorkspace({
 
       {/* ---------- right: content editor ---------- */}
       <aside className="ws-pane">
-        <div className="ws-section">
-          <h3>Coverage</h3>
-          <div className="coverage">
-            <div className="grp">
-              <span className="badge badge-ok">{result.filled.length} filled</span>{" "}
-              {result.blank.length > 0 && (
-                <span className="badge badge-warn">{result.blank.length} blank</span>
-              )}{" "}
-              {result.missing.length > 0 && (
-                <span className="badge badge-danger">{result.missing.length} unmatched</span>
-              )}
-            </div>
-            {result.missing.length > 0 && (
-              <div className="grp">
-                <strong style={{ color: "var(--danger)" }}>No column for</strong>
-                <div className="chiplist">
-                  {result.missing.map((name) => (
-                    <span key={name} className="chip chip-missing">
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {result.blank.length > 0 && (
-              <div className="grp">
-                <strong style={{ color: "var(--warn)" }}>Blank value</strong>
-                <div className="chiplist">
-                  {result.blank.map((name) => (
-                    <span key={name} className="chip chip-blank">
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {unusedColumnNames.length > 0 && (
-              <div className="grp">
-                <strong>Columns this template ignores</strong>
-                <div className="chiplist">
-                  {(showAllUnused ? unusedColumnNames : unusedColumnNames.slice(0, 6)).map(
-                    (name) => (
-                      <span key={name} className="chip chip-unused">
-                        {name}
-                      </span>
-                    ),
-                  )}
-                  {unusedColumnNames.length > 6 && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-ghost"
-                      style={{ padding: "1px 6px", fontSize: 11 }}
-                      onClick={() => setShowAllUnused((open) => !open)}
-                    >
-                      {showAllUnused ? "show fewer" : `+${unusedColumnNames.length - 6} more`}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        {/*
+          Who it goes to, first. It was in the bar above the render, where it
+          pushed the email itself down the page for a field most rows never
+          change. Up here it is the first thing read on the row and the last
+          thing decided before a push, and it costs the render nothing.
+        */}
+        {currentRow && audienceProps && (
+          <AudiencePanel
+            companyId={companyId}
+            slots={audienceProps.slots}
+            known={audienceProps.known}
+            fallback={audienceProps.fallback}
+            values={draft}
+            onChange={(key: string, value: string) =>
+              setDraft((previous) => ({ ...previous, [key]: value }))
+            }
+          />
+        )}
 
         {currentRow ? (
           <>
             <div className="field-editor">
-              {rowTemplate.column && (
-                <div className="fld" style={{ background: "var(--surface-2)" }}>
-                  <div className="fld-head">
-                    <span className="fld-name" title={rowTemplate.column}>
-                      {rowTemplate.column}
-                    </span>
-                    <span className="badge badge-accent">row template</span>
-                    <div className="spacer" />
-                    {(draft[rowTemplate.column] ?? "") !==
-                      (baseline[rowTemplate.column] ?? "") && (
-                      <span className="badge badge-accent">edited</span>
-                    )}
-                  </div>
-                  <select
-                    value={rowTemplate.matched ? rowTemplate.matched.name : rowTemplate.value}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setDraft((previous) => ({ ...previous, [rowTemplate.column!]: value }));
-                      const next = matchTemplateName(value, templates);
-                      if (next) setTemplateId(next.id);
-                    }}
-                  >
-                    <option value="">(none — keep whatever is selected)</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.name}>
-                        {t.name}
-                      </option>
-                    ))}
-                    {rowTemplate.unresolved && (
-                      <option value={rowTemplate.value}>
-                        {rowTemplate.value} (not found)
-                      </option>
-                    )}
-                  </select>
-                  <div className="hint">Which template this row is previewed in by default.</div>
-                </div>
-              )}
-
               {blocks.map((block) =>
                 block.kind === "field" ? (
                   <FieldRow
@@ -1687,6 +1605,44 @@ export function PreviewWorkspace({
               )}
 
               {fields.length === 0 && <div className="ws-section hint">No fields to edit.</div>}
+
+              {rowTemplate.column && (
+                <div className="fld" style={{ background: "var(--surface-2)" }}>
+                  <div className="fld-head">
+                    <span className="fld-name" title={rowTemplate.column}>
+                      {rowTemplate.column}
+                    </span>
+                    <span className="badge badge-accent">row template</span>
+                    <div className="spacer" />
+                    {(draft[rowTemplate.column] ?? "") !==
+                      (baseline[rowTemplate.column] ?? "") && (
+                      <span className="badge badge-accent">edited</span>
+                    )}
+                  </div>
+                  <select
+                    value={rowTemplate.matched ? rowTemplate.matched.name : rowTemplate.value}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setDraft((previous) => ({ ...previous, [rowTemplate.column!]: value }));
+                      const next = matchTemplateName(value, templates);
+                      if (next) setTemplateId(next.id);
+                    }}
+                  >
+                    <option value="">(none — keep whatever is selected)</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.name}>
+                        {t.name}
+                      </option>
+                    ))}
+                    {rowTemplate.unresolved && (
+                      <option value={rowTemplate.value}>
+                        {rowTemplate.value} (not found)
+                      </option>
+                    )}
+                  </select>
+                  <div className="hint">Which template this row is previewed in by default.</div>
+                </div>
+              )}
             </div>
 
             {showHistory && (
@@ -1721,6 +1677,69 @@ export function PreviewWorkspace({
                 )}
               </div>
             )}
+
+        <div className="ws-section">
+          <h3>Coverage</h3>
+          <div className="coverage">
+            <div className="grp">
+              <span className="badge badge-ok">{result.filled.length} filled</span>{" "}
+              {result.blank.length > 0 && (
+                <span className="badge badge-warn">{result.blank.length} blank</span>
+              )}{" "}
+              {result.missing.length > 0 && (
+                <span className="badge badge-danger">{result.missing.length} unmatched</span>
+              )}
+            </div>
+            {result.missing.length > 0 && (
+              <div className="grp">
+                <strong style={{ color: "var(--danger)" }}>No column for</strong>
+                <div className="chiplist">
+                  {result.missing.map((name) => (
+                    <span key={name} className="chip chip-missing">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {result.blank.length > 0 && (
+              <div className="grp">
+                <strong style={{ color: "var(--warn)" }}>Blank value</strong>
+                <div className="chiplist">
+                  {result.blank.map((name) => (
+                    <span key={name} className="chip chip-blank">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {unusedColumnNames.length > 0 && (
+              <div className="grp">
+                <strong>Columns this template ignores</strong>
+                <div className="chiplist">
+                  {(showAllUnused ? unusedColumnNames : unusedColumnNames.slice(0, 6)).map(
+                    (name) => (
+                      <span key={name} className="chip chip-unused">
+                        {name}
+                      </span>
+                    ),
+                  )}
+                  {unusedColumnNames.length > 6 && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ padding: "1px 6px", fontSize: 11 }}
+                      onClick={() => setShowAllUnused((open) => !open)}
+                    >
+                      {showAllUnused ? "show fewer" : `+${unusedColumnNames.length - 6} more`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
             <div className="sticky-actions">
               <button

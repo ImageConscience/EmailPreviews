@@ -12,6 +12,7 @@ import { PrismaClient } from "@prisma/client";
 import { encryptSecret } from "../src/lib/secret.ts";
 import { approvalFingerprint } from "../src/lib/fingerprint.ts";
 import { performPush, performSchedule } from "../src/lib/push-core.ts";
+import { fetchAudiences } from "../src/lib/klaviyo.ts";
 import { checkEligibility } from "../src/lib/push-eligibility.ts";
 import { audienceSlots, findAudienceColumns } from "../src/lib/template.ts";
 import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
@@ -387,6 +388,25 @@ check("...but the date-printing template's sign-off went stale",
 check("...and it said so", (r.notes ?? []).some((n) => /went stale/.test(n)),
   (r.notes ?? []).find((n) => /stale/.test(n)));
 await prisma.template.delete({ where: { id: printing.id } });
+
+// --- reading the account's lists -----------------------------------------
+// Klaviyo rejects a sparse fieldset naming a type the endpoint cannot return,
+// rather than ignoring it. Asking /lists for `fields[segment]` failed the whole
+// call, which is how the audience picker shipped showing nothing at all.
+console.log("\nReading the account's audiences");
+try {
+  const found = await fetchAudiences(KEY);
+  check("lists and segments both come back", found.length === 5, `${found.length}`);
+  check("...lists are labelled as lists",
+    found.filter((a) => a.kind === "list").map((a) => a.name).join(", ") === "Newsletter, Ambiguous",
+    found.filter((a) => a.kind === "list").map((a) => a.name).join(", "));
+  check("...and segments as segments",
+    found.filter((a) => a.kind === "segment").length === 3,
+    `${found.filter((a) => a.kind === "segment").length}`);
+  check("...each with an id to resolve it by", found.every((a) => a.id.length > 0));
+} catch (error) {
+  check("lists and segments both come back", false, (error as Error).message);
+}
 
 // --- naming the audience column ------------------------------------------
 // The preview writes to whichever column the sheet already uses, and the push
