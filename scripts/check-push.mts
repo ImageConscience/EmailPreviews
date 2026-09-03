@@ -12,6 +12,7 @@ import { PrismaClient } from "@prisma/client";
 import { encryptSecret } from "../src/lib/secret.ts";
 import { approvalFingerprint } from "../src/lib/fingerprint.ts";
 import { performPush, performSchedule } from "../src/lib/push-core.ts";
+import { checkEligibility } from "../src/lib/push-eligibility.ts";
 
 const prisma = new PrismaClient();
 const KEY = "pk_live_testkey0000000000000000000000ab";
@@ -178,6 +179,120 @@ check("an unchanged, approved row schedules", r.ok, r.error);
 s = await state();
 check("Klaviyo got exactly one send job", s.sendJobs.length === 1, `${s.sendJobs.length}`);
 check("the campaign is scheduled", s.campaigns[0]?.status === "Scheduled");
+
+// --- what the list offers, and what the push then allows -----------------
+// The list screen and the push read one rule. These check they agree, since
+// the way they would drift is a row the list offers and the push refuses.
+console.log("\nEligibility, as the list sees it");
+const settings = {
+  fromEmail: "hello@pretend.co", baseTemplateId: "BASE01",
+  timezone: "America/New_York", connected: true,
+};
+const columns = JSON.parse(sheet.columns) as string[];
+const forPush = async (over: Record<string, string> = {}, extra: Partial<{ hiddenAt: Date | null }> = {}) => {
+  const fresh = await prisma.sheetRow.findUniqueOrThrow({
+    where: { id: row.id },
+    include: { approvals: { select: { templateId: true, contentHash: true,
+      user: { select: { name: true, email: true } } } } },
+  });
+  const data = JSON.stringify({ ...JSON.parse(fresh.data), ...over });
+  return { data, values: JSON.parse(data), columns,
+    hiddenAt: extra.hiddenAt !== undefined ? extra.hiddenAt : fresh.hiddenAt,
+    approvals: fresh.approvals };
+};
+const tplNow = await prisma.template.findUniqueOrThrow({ where: { id: tpl.id } });
+
+await approve();
+let e = checkEligibility(await forPush(), tplNow, settings);
+check("an approved, complete row is eligible", e.ok && e.blockers.length === 0, e.blockers.join(" "));
+check("...and can be scheduled, since it has a future date", e.canSchedule);
+check("...reading the send time in the company's zone", e.sendAtLabel?.includes("EST") ?? false, e.sendAtLabel ?? "");
+
+// Overriding the row's JSON changes the fingerprint, so the standing approval
+// no longer matches -- which is the staleness rule doing its job.
+e = checkEligibility(await forPush({ subject: "" }), tplNow, settings);
+check("a row with no subject is not offered", !e.ok && e.blockers.some((b) => /no subject/.test(b)));
+e = checkEligibility(await forPush({ audience: "" }), tplNow, settings);
+check("a row with no audience is not offered", !e.ok && e.blockers.some((b) => /audience/.test(b)));
+e = checkEligibility(await forPush({}, { hiddenAt: new Date() }), tplNow, settings);
+check("a hidden row is not offered", !e.ok && e.blockers.some((b) => /hidden/.test(b)));
+
+await approve();
+e = checkEligibility(await forPush({ send_date: "", send_time: "" }), tplNow, settings);
+check("a dateless row can still be drafted", e.blockers.every((b) => !/date/.test(b)));
+check("...but not scheduled", !e.canSchedule);
+
+e = checkEligibility(await forPush({ send_date: "2020-01-01" }), tplNow, settings);
+check("a row dated in the past cannot be scheduled", !e.canSchedule);
+
+e = checkEligibility(await forPush(), tplNow, { ...settings, connected: false });
+check("no rows are offered when the company is not connected",
+  !e.ok && e.blockers.some((b) => /not connected/.test(b)));
+e = checkEligibility(await forPush(), tplNow, { ...settings, baseTemplateId: null });
+check("...or when no base template is set", !e.ok && e.blockers.some((b) => /base template/.test(b)));
+
+// --- pushing straight to scheduled ---------------------------------------
+// The one door that can put a real send in a client's queue in a single act,
+// so its refusals matter more than its successes.
+console.log("\nPush as scheduled, in one step");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+
+const dated = JSON.parse((await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data);
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...dated, send_date: "", send_time: "" }) } });
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled");
+check("a row with no send time cannot be pushed as scheduled",
+  !r.ok && /needs a send date and time/.test(r.error ?? ""), r.error);
+check("...and nothing at all was created in Klaviyo",
+  (await state()).campaigns.length === 0 && (await state()).sendJobs.length === 0);
+
+await prisma.sheetRow.update({ where: { id: row.id },
+  data: { data: JSON.stringify({ ...dated, send_date: "2020-01-01" }) } });
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled");
+check("a row dated in the past cannot be pushed as scheduled",
+  !r.ok && /already passed/.test(r.error ?? ""), r.error);
+check("...and still nothing was created", (await state()).sendJobs.length === 0);
+
+// An unapproved row must not reach the scheduler by this door either.
+await prisma.sheetRow.update({ where: { id: row.id }, data: { data: JSON.stringify(dated) } });
+await prisma.approval.deleteMany({ where: { rowId: row.id } });
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled");
+check("an unapproved row cannot be pushed as scheduled",
+  !r.ok && /Nobody has approved/.test(r.error ?? ""), r.error);
+check("...and no send job was made", (await state()).sendJobs.length === 0);
+
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled");
+check("an approved, dated row pushes and schedules in one step", r.ok, r.error);
+s = await state();
+check("Klaviyo got exactly one send job", s.sendJobs.length === 1, `${s.sendJobs.length}`);
+check("the campaign is scheduled, not a draft", s.campaigns[0]?.status === "Scheduled",
+  s.campaigns[0]?.status);
+check("and we recorded it as scheduled rather than a draft",
+  (await prisma.klaviyoPush.findFirstOrThrow({ where: { rowId: row.id } })).status === "scheduled");
+
+// Klaviyo refuses to edit a campaign that is already in the send queue, so
+// pushing over a scheduled one has to take it out first. Without this the
+// "Push again" button on a scheduled row fails with Klaviyo's own 409.
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+check("pushing over a scheduled campaign succeeds", r.ok, r.error);
+s = await state();
+check("...by taking it out of the send queue", s.campaigns[0]?.status === "Draft", s.campaigns[0]?.status);
+check("...and the send job is gone with it", s.sendJobs.length === 0, `${s.sendJobs.length}`);
+check("...and it says so rather than leaving you to notice",
+  (r.notes ?? []).some((n) => /back to a draft/.test(n)), (r.notes ?? []).join(" | "));
+check("...without making a second campaign", s.campaigns.length === 1, `${s.campaigns.length}`);
+
+r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled");
+s = await state();
+check("and re-scheduling it puts exactly one job back",
+  r.ok && s.sendJobs.length === 1 && s.campaigns[0]?.status === "Scheduled",
+  `${s.sendJobs.length} job(s), ${s.campaigns[0]?.status}`);
+
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
 
 await prisma.contentSheet.delete({ where: { id: sheet.id } });
 await prisma.template.delete({ where: { id: tpl.id } }).catch(() => {});

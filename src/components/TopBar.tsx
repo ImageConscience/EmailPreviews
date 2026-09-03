@@ -13,10 +13,12 @@ interface Props {
   companyName: string;
   userName: string;
   role: string;
+  /** Admin or above on a company that has a Klaviyo key stored. */
+  canPush: boolean;
   otherCompanies: { id: string; name: string }[];
 }
 
-export function TopBar({ companyId, companyName, userName, role, otherCompanies }: Props) {
+export function TopBar({ companyId, companyName, userName, role, canPush, otherCompanies }: Props) {
   const pathname = usePathname();
   const base = `/c/${companyId}`;
 
@@ -31,6 +33,9 @@ export function TopBar({ companyId, companyName, userName, role, otherCompanies 
   const links = [
     { href: `${base}/overview`, label: "Overview" },
     { href: `${base}/preview`, label: "Preview" },
+    // Third only for the people who can push, and only once there is somewhere
+    // to push to.
+    ...(canPush ? [{ href: `${base}/push`, label: "Push" }] : []),
   ];
   const settings = [
     { href: `${base}/profile`, label: "Profile" },

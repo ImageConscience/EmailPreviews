@@ -127,6 +127,12 @@ createServer((req, res) => {
     if (campaignMatch && req.method === "PATCH") {
       const c = campaigns.get(campaignMatch[1]);
       if (!c) return send(404, { errors: [{ detail: "No campaign with that id." }] });
+      // Klaviyo will not let you edit a campaign that is already in the send
+      // queue. Mirroring that here is the point: a mock that accepts it would
+      // let a push-again path pass in testing and fail against the real API.
+      if (c.status === "Scheduled") {
+        return send(409, { errors: [{ detail: "Cannot update a scheduled campaign." }] });
+      }
       Object.assign(c.attributes, json.data.attributes);
       return send(200, { data: { id: c.id } });
     }
@@ -136,12 +142,31 @@ createServer((req, res) => {
     if (p === "/campaign-message-assign-template" && req.method === "POST") {
       const c = [...campaigns.values()].find((x) => x.messageId === json.data.id);
       if (!c) return send(404, { errors: [{ detail: "No message with that id." }] });
+      if (c.status === "Scheduled") {
+        return send(409, { errors: [{ detail: "Cannot change the content of a scheduled campaign." }] });
+      }
       c.templateId = json.data.relationships.template.data.id;
       return send(200, { data: { id: json.data.id } });
+    }
+    const cancelMatch = /^\/campaign-send-jobs\/([^/]+)$/.exec(p);
+    if (cancelMatch && req.method === "PATCH") {
+      const c = campaigns.get(cancelMatch[1]);
+      if (!c) return send(404, { errors: [{ detail: "No campaign with that id." }] });
+      if (json.data.attributes?.action !== "cancel") {
+        return send(400, { errors: [{ detail: "Only cancel is mocked." }] });
+      }
+      c.status = "Draft";
+      for (let i = sendJobs.length - 1; i >= 0; i--) {
+        if (sendJobs[i].campaignId === c.id) sendJobs.splice(i, 1);
+      }
+      return send(200, { data: { id: c.id, attributes: { status: "cancelled" } } });
     }
     if (p === "/campaign-send-jobs" && req.method === "POST") {
       const c = campaigns.get(json.data.id);
       if (!c) return send(404, { errors: [{ detail: "No campaign with that id." }] });
+      if (c.status === "Scheduled") {
+        return send(409, { errors: [{ detail: "That campaign is already scheduled." }] });
+      }
       c.status = "Scheduled";
       sendJobs.push({ campaignId: c.id, at: new Date().toISOString() });
       return send(202, { data: { id: `JOB${nextId++}`, attributes: { status: "queued" } } });

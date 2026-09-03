@@ -1,0 +1,433 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+
+import { pushToKlaviyoAction, type PushMode } from "@/actions/push";
+import { flag, isOn, useViewState, validId } from "@/lib/view-state";
+
+export interface PushedState {
+  campaignId: string;
+  campaignName: string;
+  status: string;
+  scheduledFor: string | null;
+  audienceNames: string;
+  pushedAt: string;
+  pushedBy: string | null;
+  /** The row has been edited since it was pushed, so Klaviyo holds older content. */
+  stale: boolean;
+}
+
+export interface PushItem {
+  rowId: string;
+  sheetId: string;
+  sheetName: string;
+  templateId: string;
+  templateName: string;
+  title: string;
+  subject: string;
+  campaignName: string;
+  audience: string;
+  /** The send instant the row asks for, if it names one. */
+  sendAt: string | null;
+  sendAtLabel: string | null;
+  /** Whether that instant is real and still in the future. */
+  canSchedule: boolean;
+  /** The row names a send time that has already gone by. */
+  past: boolean;
+  warning: string | null;
+  pushed: PushedState | null;
+}
+
+/**
+ * The push queue.
+ *
+ * Everything on this list is already eligible -- the server filtered it -- so
+ * the screen does not spend space explaining why things are missing. What it
+ * does spend space on is the two facts you need before pressing a button that
+ * writes into a client's account: which account, and what has already been
+ * pushed. Rows that are already in Klaviyo stay on the list rather than
+ * vanishing, because "did that go over?" is the question this screen exists to
+ * answer as much as "send this one".
+ */
+export function PushBoard({
+  companyId,
+  items,
+  accountName,
+  fromLabel,
+  timezone,
+  ready,
+}: {
+  companyId: string;
+  items: PushItem[];
+  accountName: string;
+  fromLabel: string;
+  timezone: string;
+  ready: boolean;
+}) {
+  const router = useRouter();
+  const initial = useMemo(
+    () => ({ sheet: "", pushed: flag(true) }),
+    [],
+  );
+  const { state, set } = useViewState(`push:${companyId}`, initial);
+
+  const sheets = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const item of items) seen.set(item.sheetId, item.sheetName);
+    return [...seen].map(([id, name]) => ({ id, name }));
+  }, [items]);
+
+  // A remembered filter can name a sheet that has since been deleted or
+  // re-uploaded, and a filter matching nothing shows an empty screen with no
+  // hint as to why.
+  const sheet = validId(state.sheet, sheets.map((s) => s.id));
+  const showPushed = isOn(state.pushed);
+
+  const visible = items.filter(
+    (item) => (!sheet || item.sheetId === sheet) && (showPushed || !item.pushed),
+  );
+
+  const [open, setOpen] = useState<PushItem | null>(null);
+
+  return (
+    <main className="page page-wide">
+      <div className="page-head">
+        <div>
+          <h1>Push to Klaviyo</h1>
+          <p>
+            Into <strong>{accountName}</strong>, from {fromLabel}. Send times are read as{" "}
+            {timezone.replace("_", " ")}.
+          </p>
+        </div>
+      </div>
+
+      {!ready && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="card-pad">
+            <p className="hint" style={{ margin: 0, color: "var(--danger)" }}>
+              This account still needs a from-address and a base template before anything can be
+              pushed. Set them under{" "}
+              <Link href={`/c/${companyId}/integrations`}>Settings → Integrations</Link>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="row" style={{ gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+        <select
+          value={sheet}
+          onChange={(e) => set({ sheet: e.target.value })}
+          style={{ width: "auto", maxWidth: 260 }}
+          aria-label="Sheet"
+        >
+          <option value="">All sheets</option>
+          {sheets.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        <label className="row" style={{ gap: 6, alignItems: "center", margin: 0 }}>
+          <input
+            type="checkbox"
+            checked={showPushed}
+            onChange={(e) => set({ pushed: flag(e.target.checked) })}
+          />
+          <span className="hint" style={{ margin: 0 }}>Show ones already pushed</span>
+        </label>
+        <div className="spacer" />
+        <span className="hint" style={{ margin: 0 }}>
+          {visible.length} of {items.length} ready
+        </span>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="empty">
+            <h3>Nothing is ready to push</h3>
+            <p>
+              A row appears here once it is approved in its template and has a subject and an{" "}
+              <code>audience</code>. The{" "}
+              <Link href={`/c/${companyId}/overview`}>overview</Link> shows what is still waiting on
+              a sign-off.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="card" style={{ marginTop: 14, overflowX: "auto" }}>
+          <table className="ov-table">
+            <thead>
+              <tr>
+                <th className="tight">Send</th>
+                <th>Campaign</th>
+                <th className="tight">Audience</th>
+                <th className="tight">In Klaviyo</th>
+                <th className="tight" />
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((item) => (
+                <tr key={`${item.rowId}:${item.templateId}`}>
+                  <td className="tight ov-when">
+                    {item.sendAtLabel ? (
+                      <>
+                        <strong>{item.sendAtLabel}</strong>
+                        {item.past && <span className="ov-time">date has passed</span>}
+                      </>
+                    ) : (
+                      <span className="ov-nodate">No date</span>
+                    )}
+                  </td>
+                  <td>
+                    <Link
+                      href={`/c/${companyId}/preview?sheet=${item.sheetId}&row=${item.rowId}`}
+                      className="ov-title"
+                    >
+                      {item.campaignName || item.title}
+                    </Link>
+                    <div className="ov-sub">
+                      {[item.subject, item.templateName, item.sheetName].filter(Boolean).join(" · ")}
+                    </div>
+                  </td>
+                  <td className="tight">
+                    <span className="badge">{item.audience}</span>
+                  </td>
+                  <td className="tight">
+                    <PushedCell item={item} />
+                  </td>
+                  <td className="tight">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      disabled={!ready}
+                      onClick={() => setOpen(item)}
+                    >
+                      {item.pushed ? "Push again" : "Push…"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {open && (
+        <PushDialog
+          companyId={companyId}
+          item={open}
+          accountName={accountName}
+          onClose={() => setOpen(null)}
+          onDone={() => {
+            setOpen(null);
+            router.refresh();
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
+/** What Klaviyo already holds for this row, and whether it is still current. */
+function PushedCell({ item }: { item: PushItem }) {
+  if (!item.pushed) return <span className="hint">—</span>;
+  const { pushed } = item;
+  const label = pushed.status === "scheduled" ? "Scheduled" : "Draft";
+  return (
+    <div>
+      <span className={`badge ${pushed.status === "scheduled" ? "badge-ok" : ""}`}>{label}</span>
+      {pushed.stale && (
+        <div className="ov-sub" style={{ color: "var(--danger)" }}>
+          Edited since — push again
+        </div>
+      )}
+      <div className="ov-sub">
+        {new Date(pushed.pushedAt).toLocaleDateString()}
+        {pushed.pushedBy ? ` · ${pushed.pushedBy}` : ""}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The last thing between a row and a client's customers.
+ *
+ * Draft and Schedule are one dialog rather than two buttons on the row: the
+ * difference between them is the whole decision, and it should be made while
+ * looking at who it goes to and when, not from a table cell. Schedule is only
+ * offered when the row names a time that has not passed, because a scheduled
+ * campaign with no time is not something Klaviyo will accept and not something
+ * this screen should pretend to offer.
+ */
+function PushDialog({
+  companyId,
+  item,
+  accountName,
+  onClose,
+  onDone,
+}: {
+  companyId: string;
+  item: PushItem;
+  accountName: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [mode, setMode] = useState<PushMode>("draft");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<string[] | null>(null);
+  const [done, setDone] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await pushToKlaviyoAction(companyId, item.rowId, item.templateId, mode);
+      if (!result.ok) {
+        setError(result.error ?? "Could not push.");
+        return;
+      }
+      setNotes(result.notes ?? []);
+      setDone(true);
+    } catch {
+      // The push either reached Klaviyo or it did not, and from here there is
+      // no way to tell which -- so say so rather than inviting a second press
+      // that could make a second campaign.
+      setError(
+        "Lost contact with the server part-way through. Check the campaign in Klaviyo before " +
+          "pushing again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-back" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="card-head">
+          <h2 style={{ margin: 0 }}>{done ? "Pushed" : "Push to Klaviyo"}</h2>
+        </div>
+
+        <div className="card-pad">
+          {done ? (
+            <>
+              <p style={{ marginTop: 0 }}>
+                <strong>{item.campaignName || item.title}</strong> is in {accountName} as a{" "}
+                {mode === "scheduled" ? "scheduled campaign" : "draft"}.
+              </p>
+              {notes?.map((note, i) => (
+                <p key={i} className="hint">
+                  {note}
+                </p>
+              ))}
+              <button type="button" className="btn btn-primary" onClick={onDone}>
+                Done
+              </button>
+            </>
+          ) : (
+            <>
+              <dl className="push-facts">
+                <dt>Campaign</dt>
+                <dd>{item.campaignName || item.title}</dd>
+                <dt>Subject</dt>
+                <dd>{item.subject}</dd>
+                <dt>To</dt>
+                <dd>{item.audience}</dd>
+                <dt>Send time</dt>
+                <dd>{item.sendAtLabel ?? "none set"}</dd>
+                <dt>Account</dt>
+                <dd>{accountName}</dd>
+              </dl>
+
+              {item.warning && (
+                <p className="hint" style={{ color: "var(--danger)" }}>{item.warning}</p>
+              )}
+              {item.pushed?.status === "scheduled" ? (
+                <p className="hint" style={{ color: "var(--danger)" }}>
+                  This is already scheduled in Klaviyo. Klaviyo will not let a queued campaign be
+                  edited, so pushing again takes it out of the queue first — choose Schedule if it
+                  should go back in.
+                </p>
+              ) : (
+                item.pushed && (
+                  <p className="hint">
+                    This row is already in Klaviyo as a draft. Pushing again replaces its content
+                    rather than creating a second campaign.
+                  </p>
+                )
+              )}
+
+              <fieldset className="push-modes">
+                <legend className="hint" style={{ margin: 0 }}>What should happen</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="mode"
+                    checked={mode === "draft"}
+                    onChange={() => setMode("draft")}
+                  />
+                  <span>
+                    <strong>Draft</strong>
+                    <span className="hint">
+                      Created in Klaviyo and left alone. It carries its send time if the row has
+                      one, but nothing sends until somebody schedules it.
+                    </span>
+                  </span>
+                </label>
+                <label className={item.canSchedule ? "" : "is-off"}>
+                  <input
+                    type="radio"
+                    name="mode"
+                    checked={mode === "scheduled"}
+                    disabled={!item.canSchedule}
+                    onChange={() => setMode("scheduled")}
+                  />
+                  <span>
+                    <strong>Schedule</strong>
+                    <span className="hint">
+                      {item.canSchedule ? (
+                        <>Klaviyo will send this to {item.audience} at {item.sendAtLabel}.</>
+                      ) : item.sendAt ? (
+                        "That send time has already passed. Change the date in the sheet."
+                      ) : (
+                        "Scheduling needs a send date and time. Add one to the row first."
+                      )}
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
+
+              {mode === "scheduled" && (
+                <p className="hint" style={{ color: "var(--danger)" }}>
+                  This puts a real send in {accountName}&rsquo;s queue.
+                </p>
+              )}
+              {error && <p className="hint" style={{ color: "var(--danger)" }}>{error}</p>}
+
+              <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={() => void run()}
+                >
+                  {busy
+                    ? "Talking to Klaviyo…"
+                    : mode === "scheduled"
+                      ? "Push and schedule"
+                      : "Push as draft"}
+                </button>
+                <button type="button" className="btn" disabled={busy} onClick={onClose}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
