@@ -29,6 +29,7 @@ import { flag, isOn, useViewState, validId } from "@/lib/view-state";
 import { ShareLink } from "@/components/ShareLink";
 import { PreviewFrame } from "./PreviewFrame";
 import { ApprovalBar } from "./ApprovalBar";
+import { NotesFlyout } from "./NotesFlyout";
 import { EnvelopeFields } from "./EnvelopeFields";
 import { ImagePicker } from "./ImagePicker";
 import { ProductPicker } from "./ProductPicker";
@@ -73,6 +74,7 @@ interface SheetPayload {
     updatedAt: string;
     hiddenAt: string | null;
     hiddenBy: string | null;
+    noteCount: number;
     data: Record<string, string>;
     approvals: (ApprovalView & { templateId: string })[];
   }[];
@@ -490,10 +492,31 @@ export function PreviewWorkspace({
   }, [currentRow, rowDefaultTemplate, templates]);
 
   /** Sign-off is per row and template, so only this pair's approvals show. */
+  const [noteOverrides, setNoteOverrides] = useState<Record<string, number>>({});
+
   const rowApprovals = useMemo(
     () => (currentRow?.approvals ?? []).filter((a) => a.templateId === templateId),
     [currentRow, templateId],
   );
+
+  /**
+   * How many notes each row carries, kept beside the sheet rather than in it.
+   *
+   * The count arrives with the sheet and then changes as people post, and the
+   * flyout is the only thing that knows -- so it reports back, and the button
+   * stays right without refetching the whole sheet.
+   */
+  const noteCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const row of sheet?.rows ?? []) counts[row.id] = row.noteCount;
+    return { ...counts, ...noteOverrides };
+  }, [sheet, noteOverrides]);
+
+  const setNoteCount = useCallback((rowId: string, count: number) => {
+    setNoteOverrides((previous) =>
+      previous[rowId] === count ? previous : { ...previous, [rowId]: count },
+    );
+  }, []);
 
   const applyApprovals = useCallback(
     (next: ApprovalView[]) => {
@@ -1072,6 +1095,15 @@ export function PreviewWorkspace({
             approvals={rowApprovals}
             dirty={dirty}
             onChange={applyApprovals}
+          />
+
+          {/* Beside the approval, because the two are the same moment's work:
+              you sign off, or you say why you have not. */}
+          <NotesFlyout
+            companyId={companyId}
+            rowId={currentRow?.id ?? null}
+            count={currentRow ? (noteCounts[currentRow.id] ?? 0) : 0}
+            onCountChange={setNoteCount}
           />
 
           <button

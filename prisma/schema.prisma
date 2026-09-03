@@ -31,6 +31,7 @@ model User {
   hiddenRows  SheetRow[]    @relation("RowHider")
   approvals   Approval[]
   uploads     MediaAsset[]  @relation("MediaUploader")
+  notes       RowNote[]
 }
 
 model Session {
@@ -222,6 +223,7 @@ model SheetRow {
   hiddenBy  User?         @relation("RowHider", fields: [hiddenById], references: [id], onDelete: SetNull)
   revisions RowRevision[]
   approvals Approval[]
+  notes     RowNote[]
 
   @@index([sheetId, position])
 }
@@ -248,6 +250,28 @@ model Approval {
   @@unique([rowId, templateId, userId])
   @@index([rowId])
   @@index([templateId])
+}
+
+/// A message on one row, from one person, to whoever else works on it.
+///
+/// Attached to the row rather than the row-and-template pair that an approval
+/// uses. An approval is a statement about one rendered email; a note is a
+/// conversation about the send, and splitting it per template would scatter one
+/// discussion across as many threads as the sheet has layouts.
+model RowNote {
+  id        String   @id @default(cuid())
+  rowId     String
+  /// Null once the author's account is gone. The note stays: a thread with a
+  /// hole in it is still worth more than a thread that deletes itself when
+  /// someone leaves.
+  userId    String?
+  body      String
+  createdAt DateTime @default(now())
+
+  row  SheetRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  user User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([rowId, createdAt])
 }
 
 /// Immutable snapshot of a row's values, written on every save.

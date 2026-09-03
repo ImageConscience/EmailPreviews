@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { guardCompany } from "@/lib/guard";
 import { parseRecord, parseStringArray } from "@/lib/json";
-import { approvalFingerprint } from "@/lib/approval";
+import { avatarHue, initialsOf } from "@/lib/approval";
+import { approvalFingerprint } from "@/lib/fingerprint";
 import { findEnvelopeColumns, findTemplateColumn, matchTemplateName } from "@/lib/template";
 import { parseSendDate, rowLabel } from "@/lib/campaign";
 import { OverviewBoard, type OverviewItem } from "./OverviewBoard";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function OverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
-  await guardCompany(companyId);
+  const access = await guardCompany(companyId);
 
   const [sheets, templates] = await Promise.all([
     prisma.contentSheet.findMany({
@@ -28,7 +29,16 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
           orderBy: { position: "asc" },
           include: {
             hiddenBy: { select: { name: true, email: true } },
-            approvals: { select: { templateId: true, contentHash: true } },
+            _count: { select: { notes: true } },
+            approvals: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                templateId: true,
+                contentHash: true,
+                userId: true,
+                user: { select: { name: true, email: true } },
+              },
+            },
           },
         },
       },
@@ -59,12 +69,31 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
       // against are both unchanged -- the same rule the preview applies.
       let approvals = 0;
       let staleApprovals = 0;
+      // One entry per person, not per approval: the calendar shows who has
+      // signed off, and somebody who approved the row in two templates is
+      // still one person and should be one dot.
+      const byPerson = new Map<string, { name: string; initials: string; hue: number; stale: boolean }>();
+      let approvedByMe = false;
       for (const approval of row.approvals) {
         const updatedAt = templateUpdatedAt.get(approval.templateId);
-        const current =
-          updatedAt && approval.contentHash === approvalFingerprint(row.data, approval.templateId, updatedAt);
+        const current = Boolean(
+          updatedAt && approval.contentHash === approvalFingerprint(row.data, approval.templateId, updatedAt),
+        );
         if (current) approvals += 1;
         else staleApprovals += 1;
+        if (current && approval.userId === access.user.id) approvedByMe = true;
+
+        const held = byPerson.get(approval.userId);
+        // Current beats stale: having re-approved the latest version is the
+        // fact worth showing, whatever else they signed off earlier.
+        if (!held || (held.stale && current)) {
+          byPerson.set(approval.userId, {
+            name: approval.user.name ?? approval.user.email,
+            initials: initialsOf(approval.user.name, approval.user.email),
+            hue: avatarHue(approval.userId),
+            stale: !current,
+          });
+        }
       }
 
       items.push({
@@ -83,6 +112,9 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
         subject: envelope.subject ? (data[envelope.subject] ?? "").trim() : "",
         approvals,
         staleApprovals,
+        approvers: [...byPerson.values()],
+        approvedByMe,
+        notes: row._count.notes,
         hidden: Boolean(row.hiddenAt),
         hiddenBy: row.hiddenBy?.name ?? row.hiddenBy?.email ?? null,
       });
@@ -93,6 +125,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
     <OverviewBoard
       companyId={companyId}
       items={items}
+      currentUserId={access.user.id}
       templates={templateSummaries}
       sheets={sheets.map((s) => ({ id: s.id, name: s.name }))}
     />

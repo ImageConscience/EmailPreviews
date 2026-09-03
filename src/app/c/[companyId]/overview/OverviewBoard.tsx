@@ -31,9 +31,21 @@ export interface OverviewItem {
   subject: string;
   approvals: number;
   staleApprovals: number;
+  /** One per person who has signed off, however many templates they did it in. */
+  approvers: { name: string; initials: string; hue: number; stale: boolean }[];
+  /** Whether the person looking at this has a current approval on it. */
+  approvedByMe: boolean;
+  notes: number;
   hidden: boolean;
   hiddenBy: string | null;
 }
+
+/**
+ * "What is left for me to do", which is a different question from "what is
+ * approved". Deliberately per-viewer: two people working the same queue should
+ * each see their own remainder.
+ */
+type MineFilter = "" | "todo" | "done";
 
 const UNASSIGNED = "__unassigned__";
 const MONTHS = [
@@ -47,11 +59,13 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export function OverviewBoard({
   companyId,
   items,
+  currentUserId,
   templates,
   sheets,
 }: {
   companyId: string;
   items: OverviewItem[];
+  currentUserId: string;
   templates: { id: string; name: string }[];
   sheets: { id: string; name: string }[];
 }) {
@@ -117,6 +131,36 @@ export function OverviewBoard({
   const setRange = (next: DateRange) =>
     set({ from: next.from, to: next.to, undated: flag(next.includeUndated) });
 
+  /**
+   * The one filter that does not go in the URL.
+   *
+   * Everything else here is shareable because it means the same thing to
+   * whoever opens the link. "Not approved by me" does not: pasted to a
+   * colleague it would quietly re-point at them and show a different list than
+   * the sender saw. So it lives in localStorage only -- it survives a reload
+   * and a break mid-queue, which is what it is for, and a shared link carries
+   * the view without it.
+   */
+  const [mine, setMine] = useState<MineFilter>("");
+  const mineKey = `emailpreviews:mine:${companyId}:${currentUserId}`;
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(mineKey);
+      if (stored === "todo" || stored === "done") setMine(stored);
+    } catch {
+      // Storage unavailable costs the convenience, not the page.
+    }
+  }, [mineKey]);
+  const setMineFilter = (next: MineFilter) => {
+    setMine(next);
+    try {
+      if (next) window.localStorage.setItem(mineKey, next);
+      else window.localStorage.removeItem(mineKey);
+    } catch {
+      /* as above */
+    }
+  };
+
   const hiddenCount = useMemo(() => items.filter((i) => i.hidden).length, [items]);
 
   /**
@@ -128,6 +172,8 @@ export function OverviewBoard({
     const needle = search.trim().toLowerCase();
     return items.filter((item) => {
       if (item.hidden && !showHidden) return false;
+      if (mine === "todo" && item.approvedByMe) return false;
+      if (mine === "done" && !item.approvedByMe) return false;
       if (sheetFilter && item.sheetId !== sheetFilter) return false;
       if (templateFilter) {
         if (templateFilter === UNASSIGNED ? item.templateId !== null : item.templateId !== templateFilter) {
@@ -138,7 +184,7 @@ export function OverviewBoard({
       return [item.title, item.subject, item.campaign, item.theme, item.templateName]
         .some((value) => value.toLowerCase().includes(needle));
     });
-  }, [items, search, showHidden, sheetFilter, templateFilter]);
+  }, [items, mine, search, showHidden, sheetFilter, templateFilter]);
 
   const listed = useMemo(() => {
     const rows = matchesExceptDate.filter((item) => inRange(item.sendDate, range));
@@ -252,6 +298,17 @@ export function OverviewBoard({
               </option>
             ))}
             <option value={UNASSIGNED}>Unassigned</option>
+          </select>
+        </label>
+
+        {/* Personal, and labelled so: it filters by whoever is logged in, and
+            it is the one control that a shared link does not carry. */}
+        <label className="field" style={{ marginBottom: 0, flex: "1 1 170px" }}>
+          <span>My sign-off</span>
+          <select value={mine} onChange={(e) => setMineFilter(e.target.value as MineFilter)}>
+            <option value="">Everything</option>
+            <option value="todo">Not approved by me</option>
+            <option value="done">Approved by me</option>
           </select>
         </label>
 
@@ -534,10 +591,11 @@ function CalendarView({
                     key={item.rowId}
                     href={href(item)}
                     className={`cal-item${item.hidden ? " is-hidden" : ""}${item.approvals > 0 ? " is-approved" : ""}`}
-                    title={`${item.title}${item.templateName ? ` — ${item.templateName}` : ""}`}
+                    title={calendarTitle(item)}
                   >
                     {item.sendTime && <span className="cal-time">{item.sendTime}</span>}
                     {item.title}
+                    <Marks item={item} />
                   </Link>
                 ))}
               </div>
@@ -563,8 +621,10 @@ function CalendarView({
                   href={href(item)}
                   className={`cal-item${item.hidden ? " is-hidden" : ""}`}
                   style={{ maxWidth: 260 }}
+                  title={calendarTitle(item)}
                 >
                   {item.title}
+                  <Marks item={item} />
                 </Link>
               ))}
             </div>
@@ -573,4 +633,58 @@ function CalendarView({
       )}
     </>
   );
+}
+
+
+/** The colour of a person, matched to the bubble the preview gives them. */
+const MAX_DOTS = 4;
+
+/**
+ * Who has approved, and whether anyone has said anything.
+ *
+ * Two corners with two different jobs. Approvals go bottom-right, one dot per
+ * person in that person's own colour, so a glance answers "how many, and who"
+ * rather than only "somebody". Notes go top-right in a fixed blue, because
+ * that one is a yes-or-no question.
+ *
+ * A stale approval is drawn hollow rather than dropped: it says this person has
+ * looked at the row, which is worth knowing, while making clear they have not
+ * signed off on what it says now.
+ */
+function Marks({ item }: { item: OverviewItem }) {
+  const shown = item.approvers.slice(0, MAX_DOTS);
+  const extra = item.approvers.length - shown.length;
+  if (shown.length === 0 && item.notes === 0) return null;
+  return (
+    <>
+      {item.notes > 0 && <span className="mark-note" aria-hidden />}
+      {shown.length > 0 && (
+        <span className="mark-dots" aria-hidden>
+          {shown.map((person, i) => (
+            <span
+              key={`${person.initials}-${i}`}
+              className={`mark-dot${person.stale ? " is-stale" : ""}`}
+              style={{ background: `hsl(${person.hue} 58% 42%)` }}
+            />
+          ))}
+          {extra > 0 && <span className="mark-more">+{extra}</span>}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Everything the dots stand for, spelled out for the hover and for a reader. */
+function calendarTitle(item: OverviewItem): string {
+  const lines = [item.title];
+  if (item.templateName) lines.push(item.templateName);
+  if (item.approvers.length > 0) {
+    lines.push(
+      `Approved by ${item.approvers
+        .map((a) => (a.stale ? `${a.name} (earlier version)` : a.name))
+        .join(", ")}`,
+    );
+  }
+  if (item.notes > 0) lines.push(`${item.notes} ${item.notes === 1 ? "note" : "notes"}`);
+  return lines.join(" — ");
 }

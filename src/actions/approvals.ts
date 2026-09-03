@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db";
 import { AuthError, requireCompanyAccess } from "@/lib/auth";
-import { approvalFingerprint, presentApprovals, type ApprovalView } from "@/lib/approval";
+import { presentApprovals, type ApprovalView } from "@/lib/approval";
+import { approvalFingerprint } from "@/lib/fingerprint";
 
 interface ToggleResult {
   ok: boolean;

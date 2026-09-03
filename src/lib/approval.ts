@@ -1,26 +1,13 @@
-import { createHash } from "node:crypto";
-
 /**
- * Fingerprint of exactly what a person saw when they approved.
+ * How a person is drawn, and what their approvals mean.
  *
- * Both halves matter: editing the row's copy and editing the template each
- * change the email that would go out, so both must invalidate the sign-off.
- * Comparing this against a stored value is what makes an approval mean "this
- * version was approved" rather than just "someone once clicked approve".
+ * Deliberately free of node-only imports: the notes flyout and the calendar
+ * both need `avatarHue` and `initialsOf` so a person looks like themselves
+ * everywhere, and those are client components. The hashing that decides whether
+ * an approval is still current lives in `fingerprint.ts` instead -- it is a
+ * server concern, and importing it here would drag `node:crypto` into the
+ * browser bundle and fail the build.
  */
-export function approvalFingerprint(
-  rowData: string,
-  templateId: string,
-  templateUpdatedAt: Date,
-): string {
-  return createHash("sha256")
-    .update(rowData)
-    .update(" ")
-    .update(templateId)
-    .update(" ")
-    .update(templateUpdatedAt.toISOString())
-    .digest("hex");
-}
 
 /** "Dana Whitfield" becomes "DW"; falls back to the email when there is no name. */
 export function initialsOf(name: string | null, email: string): string {

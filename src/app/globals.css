@@ -696,6 +696,130 @@ input:focus, select:focus, textarea:focus {
 .cal-item.is-hidden { opacity: 0.55; border-left-color: var(--text-faint); background: var(--surface-2); text-decoration: line-through; }
 .cal-time { display: block; font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
+/* The calendar entry has to hold its marks without the title running under
+   them, so it becomes the positioning context and reserves the room. */
+.cal-item { position: relative; padding-right: 18px; padding-bottom: 10px; }
+
+/* Notes: one corner, one colour, a yes-or-no answer. */
+.mark-note {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+
+/* Approvals: the other corner, one dot per person, in that person's colour. */
+.mark-dots {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.mark-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+/* Looked at it, but not at this version of it. */
+.mark-dot.is-stale { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--text-faint); }
+.mark-more { font-size: 9px; line-height: 1; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Notes flyout ---------- */
+
+.notes-wrap { position: relative; display: inline-flex; }
+.notes-wrap .btn.has-notes { border-color: var(--accent); color: var(--accent); }
+
+.notes-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  /* Opens rightwards from the button. Anchoring the far edge instead would
+     push a 380px panel back across the toolbar and under the left rail, where
+     the first two words of every note are lost behind it. */
+  left: 0;
+  z-index: 40;
+  width: min(380px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg, var(--shadow));
+}
+
+.notes-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 12px 12px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.note { display: flex; gap: 8px; align-items: flex-start; }
+.note .av {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.note-body { min-width: 0; flex: 1; }
+.note-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.note-meta strong { font-size: 12px; color: var(--text); }
+.note-remove {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.note-remove:hover { color: var(--danger); }
+/* Someone's line breaks are part of what they wrote. */
+.note-body p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notes-compose { border-top: 1px solid var(--border); padding: 10px 12px 12px; }
+.notes-compose textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+.notes-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.notes-actions .hint { margin: 0; }
+.note-error { font-size: 12px; color: var(--danger); }
+
 /* ---------- Settings menu in the top bar ---------- */
 
 .menu { position: relative; }

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireCompanyAccess } from "@/lib/auth";
 import { parseRecord, parseStringArray } from "@/lib/json";
-import { approvalFingerprint, presentApprovals } from "@/lib/approval";
+import { presentApprovals } from "@/lib/approval";
+import { approvalFingerprint } from "@/lib/fingerprint";
 import { apiError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,9 @@ export async function GET(
           take: ROW_LIMIT,
           include: {
             hiddenBy: { select: { name: true, email: true } },
+            // Just the number: the thread itself is fetched when someone opens
+            // it, but the button has to be able to say whether there is one.
+            _count: { select: { notes: true } },
             approvals: {
               orderBy: { createdAt: "asc" },
               include: { user: { select: { name: true, email: true } } },
@@ -58,6 +62,7 @@ export async function GET(
         updatedAt: row.updatedAt.toISOString(),
         hiddenAt: row.hiddenAt?.toISOString() ?? null,
         hiddenBy: row.hiddenBy?.name ?? row.hiddenBy?.email ?? null,
+        noteCount: row._count.notes,
         data: parseRecord(row.data),
         approvals: row.approvals.map((approval) => {
           const updatedAt = templateUpdatedAt.get(approval.templateId);
