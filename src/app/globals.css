@@ -1194,3 +1194,7 @@ input:focus, select:focus, textarea:focus {
    would still fail. Not a pass. */
 .tpl-report.is-warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .tpl-report .hint { color: inherit; opacity: 0.75; margin: 0; }
+/* What the revision search tried. A list, because the useful answer is which
+   one worked, and the useful diagnosis is what the others said. */
+.tpl-tried { margin: 8px 0 0; padding-left: 18px; font-size: 11.5px; opacity: 0.85; }
+.tpl-tried li { margin-top: 2px; }

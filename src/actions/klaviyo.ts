@@ -206,6 +206,8 @@ export interface BaseTemplateReport {
   worksAt?: string;
   /** Which way of asking produced the definition. */
   readBy?: string;
+  /** Every revision the search tried, and what came of it. */
+  tried?: { revision: string; answeredAs?: string | null; result: string }[];
   name?: string;
   editorType?: string;
   /** How many HTML blocks the template has, and whether ours was identifiable. */
@@ -243,26 +245,37 @@ export async function checkBaseTemplateAction(companyId: string): Promise<BaseTe
     // and answering it is a handful of reads of one template.
     let template: TemplateDetail;
     let worksAt: string | undefined;
+    const tried: NonNullable<BaseTemplateReport["tried"]> = [];
     try {
       template = await fetchTemplate(key, id);
     } catch (error) {
       if (!(error instanceof KlaviyoError)) throw error;
+      tried.push({ revision: used, result: shorten(error.detail) });
+
       let rescued: TemplateDetail | null = null;
       for (const candidate of CANDIDATE_REVISIONS) {
         if (candidate === used) continue;
         try {
           const attempt = await fetchTemplate(key, id, candidate);
+          tried.push({
+            revision: candidate,
+            answeredAs: attempt.answeredRevision,
+            result: attempt.definition ? `read it via ${attempt.readBy}` : "no definition",
+          });
           if (attempt.definition) {
             rescued = attempt;
             worksAt = candidate;
             break;
           }
-        } catch {
-          // That revision will not do it either; try the next.
+        } catch (why) {
+          tried.push({
+            revision: candidate,
+            result: why instanceof KlaviyoError ? shorten(why.detail) : "failed",
+          });
         }
       }
       if (!rescued || !worksAt) {
-        return { ok: false, revision: used, error: error.detail };
+        return { ok: false, revision: used, error: error.detail, tried };
       }
       template = rescued;
     }
@@ -300,6 +313,7 @@ export async function checkBaseTemplateAction(companyId: string): Promise<BaseTe
     return {
       ok: true, revision: used, name: template.name, editorType: template.editorType,
       htmlBlocks, marked, worksAt, readBy: template.readBy,
+      tried: tried.length ? tried : undefined,
       note: marked
         ? "The marked block is the one that will be filled."
         : "No marker, but there is only one HTML block, so that is the one that will be filled.",
@@ -308,4 +322,10 @@ export async function checkBaseTemplateAction(companyId: string): Promise<BaseTe
     const failed = failure(error);
     return { ok: false, revision: used, error: failed.error };
   }
+}
+
+/** Klaviyo's sentences are long; the search's table wants the gist of each. */
+function shorten(detail: string): string {
+  const first = detail.split(". ")[0] ?? detail;
+  return first.length > 90 ? `${first.slice(0, 90)}…` : first;
 }

@@ -233,16 +233,33 @@ export function KlaviyoPanel({
                     <>{report.error}</>
                   )}
                   <div className="hint" style={{ marginTop: 4 }}>
-                    Read using Klaviyo API revision <code>{report.revision}</code>
+                    {/* Name the revision that actually produced this, which is
+                        not the configured one when the search had to rescue it. */}
+                    Read using Klaviyo API revision{" "}
+                    <code>{report.worksAt ?? report.revision}</code>
                     {report.readBy ? <> (asked via <code>{report.readBy}</code>)</> : null}.
                     {report.worksAt && (
                       <>
-                        {" "}That revision could not read the definition, but{" "}
-                        <code>{report.worksAt}</code> can. Set{" "}
-                        <code>KLAVIYO_API_REVISION</code> to it, or pushes will keep failing.
+                        {" "}This deployment is set to <code>{report.revision}</code>, which cannot
+                        read the definition. Set <code>KLAVIYO_API_REVISION</code> to{" "}
+                        <code>{report.worksAt}</code>, or pushes will keep failing.
                       </>
                     )}
                   </div>
+                  {report.tried && report.tried.length > 0 && (
+                    <ul className="tpl-tried">
+                      {report.tried.map((attempt, i) => (
+                        <li key={`${attempt.revision}-${i}`}>
+                          <code>{attempt.revision}</code>
+                          {attempt.answeredAs && attempt.answeredAs !== attempt.revision && (
+                            <> (answered as <code>{attempt.answeredAs}</code>)</>
+                          )}
+                          {" — "}
+                          {attempt.result}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
             </div>

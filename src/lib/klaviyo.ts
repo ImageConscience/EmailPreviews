@@ -20,13 +20,15 @@
  * support, which is a confusing way to find out you mistyped -- an endpoint
  * simply behaves as it did years ago.
  *
- * 2024-10-15 predates `additional-fields[template]`, so it answered a push with
- * "additional-fields must be in []" and left no block to fill. The override
- * exists so a deployment can move this without waiting on a code change, which
- * is the difference between testing a revision in a minute and in a day.
+ * A template's `definition` is not offered at every revision -- at 2025-07-15 it
+ * is not in the field list at all -- and the push cannot fill a block it cannot
+ * see. So this wants to be recent. The override exists so a deployment can move
+ * it without waiting on a code change, which is the difference between testing
+ * a revision in a minute and in a day; and a revision Klaviyo does not publish
+ * now announces itself rather than quietly behaving like 2024.
  */
 export function revision(): string {
-  return process.env.KLAVIYO_API_REVISION?.trim() || "2025-07-15";
+  return process.env.KLAVIYO_API_REVISION?.trim() || "2026-04-15";
 }
 /**
  * Klaviyo, unless a test says otherwise.
@@ -58,6 +60,14 @@ interface RequestOptions {
   query?: Record<string, string | undefined>;
   /** Override the pinned revision. Only the setup check has cause to. */
   revision?: string;
+  /**
+   * Filled in with the revision Klaviyo says it answered as.
+   *
+   * A revision Klaviyo does not publish is not refused -- it is answered as the
+   * oldest one still supported, which looks exactly like the endpoint simply
+   * not having the field you asked for. This is how to tell those apart.
+   */
+  answered?: { revision: string | null };
 }
 
 async function call<T>(apiKey: string, path: string, options: RequestOptions = {}): Promise<T> {
@@ -78,6 +88,8 @@ async function call<T>(apiKey: string, path: string, options: RequestOptions = {
     // A client's account should not be kept waiting on us, nor us on it.
     signal: AbortSignal.timeout(30_000),
   });
+
+  if (options.answered) options.answered.revision = response.headers.get("revision");
 
   if (response.status === 204) return undefined as T;
 
@@ -238,6 +250,8 @@ export interface TemplateDetail {
   definition: unknown;
   /** Which of TEMPLATE_READS produced it, for the setup check to report. */
   readBy?: string;
+  /** The revision Klaviyo said it answered as, which is not always the one asked. */
+  answeredRevision?: string | null;
 }
 
 /** A drag-and-drop template is the only kind that has a definition to miss. */
@@ -261,6 +275,7 @@ export async function fetchTemplate(
 
   let lastError: unknown = null;
   let lastBody: { body: Body; readBy: string } | null = null;
+  const answered: { revision: string | null } = { revision: null };
 
   for (const attempt of TEMPLATE_READS) {
     let body: Body;
@@ -268,6 +283,7 @@ export async function fetchTemplate(
       body = await call<Body>(apiKey, `/templates/${templateId}`, {
         query: attempt.query,
         revision: as,
+        answered,
       });
     } catch (error) {
       // A refusal of one way of asking is not a refusal of the template.
@@ -286,6 +302,7 @@ export async function fetchTemplate(
         editorType: attributes.editor_type,
         definition: attributes.definition ?? null,
         readBy: attempt.id,
+        answeredRevision: answered.revision,
       };
     }
     lastBody = { body, readBy: attempt.id };
@@ -304,10 +321,19 @@ export async function fetchTemplate(
       : "Klaviyo returned the template without its definition.";
   const status = lastError instanceof KlaviyoError ? lastError.status : 400;
   const name = lastBody ? `“${lastBody.body.data.attributes.name}” ` : "";
+  const sent = as ?? revision();
+  // A revision Klaviyo does not publish comes back answered as the oldest one
+  // it still supports, which otherwise looks identical to the field not
+  // existing. Saying which it was turns a guess into a fact.
+  const mismatch =
+    answered.revision && answered.revision !== sent
+      ? ` Klaviyo answered as revision ${answered.revision}, not the ${sent} it was asked for, ` +
+        "which means it does not publish that one."
+      : "";
   throw new KlaviyoError(
     status,
     `${refused} This app asked for ${name}template's structure three ways using API revision ` +
-      `${as ?? revision()}, and got it from none of them. Set KLAVIYO_API_REVISION to one that ` +
+      `${sent}, and got it from none of them.${mismatch} Set KLAVIYO_API_REVISION to one that ` +
       "works — the base template check on the integrations screen will find one.",
   );
 }

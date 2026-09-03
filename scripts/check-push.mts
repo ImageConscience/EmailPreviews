@@ -447,7 +447,7 @@ try {
 } catch (error) {
   const detail = (error as Error).message;
   check("a revision that hands over the definition no way at all fails",
-    /additional-fields/.test(detail), detail.slice(0, 60));
+    /must be in/.test(detail), detail.slice(0, 60));
   check("...and the error names the revision that was used, not just the symptom",
     detail.includes("2024-10-15"), detail.slice(-90));
   check("...and says which knob changes it", /KLAVIYO_API_REVISION/.test(detail));
@@ -471,6 +471,20 @@ for (const candidate of CANDIDATE_REVISIONS) {
   } catch { /* not this one */ }
 }
 check("a working revision can be found by trying the candidates", worked !== null, worked ?? "none");
+
+// A revision Klaviyo does not publish is answered as the oldest one it does,
+// which reads exactly like the field not existing. Telling those apart is the
+// difference between changing one setting and changing it three times.
+try {
+  await fetchTemplate(KEY, "BASE01", "2099-01-15");
+  check("an unpublished revision is called out as such", false, "it succeeded");
+} catch (error) {
+  const detail = (error as Error).message;
+  check("an unpublished revision is called out as such",
+    /does not publish that one/.test(detail), detail.slice(-120));
+  check("...naming what Klaviyo answered as instead",
+    /answered as revision 2024-10-15/.test(detail));
+}
 if (asked === undefined) delete process.env.KLAVIYO_API_REVISION;
 else process.env.KLAVIYO_API_REVISION = asked;
 

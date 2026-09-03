@@ -33,8 +33,17 @@ const campaigns = new Map();
 const sendJobs = [];
 let nextId = 1;
 
-/** The revision from which GET /templates/{id} accepts additional-fields. */
-const DEFINITION_REVISION = "2025-01-15";
+/**
+ * The revisions this pretend Klaviyo publishes, and the one from which a
+ * template hands over its definition at all.
+ *
+ * Anything else is not refused: it is answered as the oldest published one, the
+ * way the real API does. That silent fallback is what made a mistyped revision
+ * indistinguishable from a missing field, so the mock has to do it too.
+ */
+const PUBLISHED = ["2024-10-15", "2025-01-15", "2025-04-15", "2025-07-15", "2025-10-15",
+  "2026-01-15", "2026-04-15"];
+const DEFINITION_REVISION = "2026-01-15";
 
 /**
  * How this Klaviyo hands over a template definition.
@@ -76,9 +85,13 @@ createServer((req, res) => {
 
   // Any dated revision, the way Klaviyo takes any it still supports. Pinning
   // one here made the mock a test of the constant rather than of the calls.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(req.headers.revision ?? "")) {
+  const wanted = req.headers.revision ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(wanted)) {
     return send(400, { errors: [{ detail: "missing or malformed revision header" }] });
   }
+  // Unpublished dates fall back to the oldest, and the response says so.
+  const honoured = PUBLISHED.includes(wanted) ? wanted : PUBLISHED[0];
+  res.setHeader("revision", honoured);
   if ((req.headers.authorization ?? "") !== `Klaviyo-API-Key ${GOOD}`) {
     return send(401, { errors: [{ detail: "The API key you supplied is invalid." }] });
   }
@@ -133,15 +146,32 @@ createServer((req, res) => {
       // it outright with an empty allowed-list -- which is what a first real
       // push hit, so the mock reproduces it.
       const asked = url.searchParams.get("additional-fields[template]");
-      const revision = req.headers["revision"] ?? "";
-      const gated = templateMode === "additional-fields" && revision >= DEFINITION_REVISION;
-      if (asked && !gated) {
+      const picked = url.searchParams.get("fields[template]");
+      const hasDefinition = honoured >= DEFINITION_REVISION;
+
+      // Below the revision that introduced it, the definition is not a field
+      // this endpoint has at all -- so neither way of asking for it is allowed,
+      // and the error lists what is.
+      if (asked && (!hasDefinition || templateMode !== "additional-fields")) {
         return send(400, { errors: [{ detail: `additional-fields must be in []: (got ${asked})` }] });
       }
+      const FIELDS = ["amp", "created", "editor_type", "html", "id", "name", "text", "updated"];
+      const allowed = hasDefinition ? [...FIELDS, "definition"] : FIELDS;
+      if (picked) {
+        const got = picked.split(",").map((f) => f.trim());
+        const bad = got.filter((f) => !allowed.includes(f));
+        if (bad.length) {
+          return send(400, { errors: [{ detail:
+            `fields must be in ${JSON.stringify(allowed).replace(/"/g, "'")}: ` +
+            `(got ${JSON.stringify(got).replace(/"/g, "'")})` }] });
+        }
+      }
+
       const attributes = { ...t };
-      // Gated: only handed over when asked for. Otherwise it is an ordinary
-      // field and comes back like any other.
-      if (templateMode === "additional-fields" && !asked) delete attributes.definition;
+      if (!hasDefinition) delete attributes.definition;
+      else if (templateMode === "additional-fields" && !asked && !picked?.includes("definition")) {
+        delete attributes.definition;
+      }
       return send(200, { data: { id: t.id, attributes } });
     }
     if (templateMatch && req.method === "PATCH") {
