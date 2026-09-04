@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { createEmailAction } from "@/actions/content";
 import type { MineFilter } from "@/lib/view-state";
 import {
   defaultRange,
@@ -188,6 +190,11 @@ export function OverviewBoard({
     [matchesExceptDate],
   );
 
+  // Starting an email is a page-head action rather than a row action: it
+  // belongs to the list, not to anything in it, and it has to be reachable
+  // from the calendar too.
+  const [creating, setCreating] = useState(false);
+
   const href = (item: OverviewItem) => {
     const params = new URLSearchParams({ sheet: item.sheetId, row: item.rowId });
     if (item.templateId) params.set("template", item.templateId);
@@ -202,16 +209,28 @@ export function OverviewBoard({
             <h1>Overview</h1>
             <p>Everything this company has planned, in one place.</p>
           </div>
+          <div className="spacer" />
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>
+            + New
+          </button>
         </div>
         <div className="card">
           <div className="empty">
             <h3>Nothing to show yet</h3>
             <p>
-              Upload a content sheet under <Link href={`/c/${companyId}/sheets`}>Content</Link> and
-              every row will appear here.
+              Start one with <strong>+ New</strong>, or upload a content sheet under{" "}
+              <Link href={`/c/${companyId}/sheets`}>Content</Link> and every row will appear here.
             </p>
           </div>
         </div>
+      {creating && (
+        <NewEmailDialog
+          companyId={companyId}
+          templates={templates}
+          sheets={sheets}
+          onClose={() => setCreating(false)}
+        />
+      )}
       </main>
     );
   }
@@ -228,6 +247,10 @@ export function OverviewBoard({
         </div>
         <div className="spacer" />
         <div className="row" style={{ gap: 4 }}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>
+            + New
+          </button>
+          <span style={{ width: 6 }} />
           <ShareLink />
           <span style={{ width: 6 }} />
           <button
@@ -380,6 +403,15 @@ export function OverviewBoard({
           href={href}
         />
       )}
+
+      {creating && (
+        <NewEmailDialog
+          companyId={companyId}
+          templates={templates}
+          sheets={sheets}
+          onClose={() => setCreating(false)}
+        />
+      )}
     </main>
   );
 }
@@ -466,6 +498,198 @@ function ListView({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* New email                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Start an email without leaving the overview.
+ *
+ * It asks only for what decides what a row *is*: which template it is written
+ * against, what it is called, what it says in an inbox, and when it goes. The
+ * copy is left for the preview, where you can see what you are typing into.
+ *
+ * Audience is deliberately absent. It has a company default, and its own
+ * picker at the head of the preview rail, so asking for it here would be a
+ * third place to set one thing.
+ */
+function NewEmailDialog({
+  companyId,
+  templates,
+  sheets,
+  onClose,
+}: {
+  companyId: string;
+  templates: { id: string; name: string }[];
+  sheets: { id: string; name: string }[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  const [sheetId, setSheetId] = useState(sheets[0]?.id ?? "");
+  const [campaign, setCampaign] = useState("");
+  const [subject, setSubject] = useState("");
+  const [preheader, setPreheader] = useState("");
+  const [sendDate, setSendDate] = useState("");
+  const [sendTime, setSendTime] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await createEmailAction(companyId, {
+        sheetId,
+        templateId,
+        campaign,
+        subject,
+        preheader,
+        sendDate,
+        sendTime,
+      });
+      if (!result.ok || !result.rowId) {
+        setError(result.error ?? "That could not be saved.");
+        setBusy(false);
+        return;
+      }
+      // Straight into the preview it was made for: the point of the dialog is
+      // to get to the editing, not to add a line to a list.
+      const params = new URLSearchParams({
+        sheet: result.sheetId ?? sheetId,
+        row: result.rowId,
+        template: templateId,
+      });
+      router.push(`/c/${companyId}/preview?${params.toString()}`);
+    } catch {
+      setError("That could not be saved. Try again.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-back" role="dialog" aria-modal="true" onClick={busy ? undefined : onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="card-head">
+          <h2 style={{ margin: 0 }}>New email</h2>
+        </div>
+
+        {templates.length === 0 ? (
+          <div className="card-pad">
+            <p style={{ marginTop: 0 }}>
+              An email is written against a template, and this company has none yet. Add one under{" "}
+              <Link href={`/c/${companyId}/templates`}>Templates</Link> first.
+            </p>
+            <button type="button" className="btn" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        ) : (
+          <form className="card-pad" onSubmit={submit}>
+            <label className="field">
+              <span>Template</span>
+              <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Campaign name</span>
+              <input
+                type="text"
+                value={campaign}
+                onChange={(e) => setCampaign(e.target.value)}
+                placeholder="What this is called internally"
+                required
+                autoFocus
+              />
+            </label>
+
+            <label className="field">
+              <span>Subject</span>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="What it says in an inbox"
+              />
+            </label>
+
+            <label className="field">
+              <span>Preview text</span>
+              <input
+                type="text"
+                value={preheader}
+                onChange={(e) => setPreheader(e.target.value)}
+                placeholder="The line beside the subject"
+              />
+            </label>
+
+            <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
+              <label className="field" style={{ flex: "1 1 160px" }}>
+                <span>Send date</span>
+                <input type="date" value={sendDate} onChange={(e) => setSendDate(e.target.value)} />
+              </label>
+              <label className="field" style={{ flex: "1 1 140px" }}>
+                <span>Time</span>
+                <input type="time" value={sendTime} onChange={(e) => setSendTime(e.target.value)} />
+              </label>
+            </div>
+
+            {/* Only worth asking when there is a choice to make. */}
+            {sheets.length > 1 && (
+              <label className="field">
+                <span>Add to sheet</span>
+                <select value={sheetId} onChange={(e) => setSheetId(e.target.value)}>
+                  {sheets.map((sheet) => (
+                    <option key={sheet.id} value={sheet.id}>
+                      {sheet.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <p className="hint">
+              This makes the row and opens it in the preview. Everything else — the copy, the
+              images, who it goes to — is edited there.
+            </p>
+
+            {error && (
+              <p className="hint" style={{ color: "var(--danger)" }}>
+                {error}
+              </p>
+            )}
+
+            <div className="row" style={{ gap: 8 }}>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? "Creating…" : "Create and edit"}
+              </button>
+              <button type="button" className="btn" onClick={onClose} disabled={busy}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

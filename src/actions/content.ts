@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { AuthError, requireCompanyAccess } from "@/lib/auth";
-import { extractPlaceholders } from "@/lib/template";
+import {
+  envelopeSlots,
+  extractPlaceholders,
+  findEnvelopeColumns,
+  findTemplateColumn,
+  normalizeKey,
+} from "@/lib/template";
 import { parseSheetFile } from "@/lib/sheet";
 import { takeHiddenFlags } from "@/lib/sheet-export";
 import { parseRecord, parseStringArray } from "@/lib/json";
@@ -248,6 +254,125 @@ export async function addRowAction(companyId: string, sheetId: string): Promise<
     },
   });
   revalidatePath(`/c/${companyId}/sheets/${sheetId}`);
+}
+
+export interface NewEmail {
+  /** An existing sheet, or empty to start one. */
+  sheetId: string;
+  templateId: string;
+  campaign: string;
+  subject: string;
+  preheader: string;
+  sendDate: string;
+  sendTime: string;
+}
+
+export interface NewEmailResult {
+  ok: boolean;
+  error?: string;
+  sheetId?: string;
+  rowId?: string;
+}
+
+/**
+ * Start an email from nothing, already pointed at a template.
+ *
+ * The alternative was to add a blank row on the sheets screen, work out which
+ * column names the template, and type the name of one exactly. This asks the
+ * few things that decide what a row *is* -- which layout, what it is called,
+ * what it says in an inbox, when it goes -- and leaves the copy for the
+ * preview, where you can see it.
+ *
+ * Every value is written to whichever column that sheet already uses for it, so
+ * a new email lands beside the imported ones rather than in a parallel set of
+ * columns that only this dialog knows about.
+ */
+export async function createEmailAction(
+  companyId: string,
+  input: NewEmail,
+): Promise<NewEmailResult> {
+  try {
+    const access = await requireCompanyAccess(companyId, "member");
+
+    const template = await prisma.template.findFirst({
+      where: { id: input.templateId, companyId },
+      select: { id: true, name: true },
+    });
+    if (!template) return { ok: false, error: "Choose a template." };
+
+    // A row with no name is a blank line in every list that shows it, and the
+    // one thing that cannot be worked out later from the template.
+    const campaign = input.campaign.trim();
+    if (!campaign) return { ok: false, error: "Give it a name." };
+
+    const time = input.sendTime.trim();
+    const date = input.sendDate.trim();
+    if (time && !date) return { ok: false, error: "A send time needs a date to go with it." };
+
+    // A company with no sheet yet still has to be able to start: one is made
+    // rather than sending somebody to another screen to make it first.
+    let sheet = input.sheetId
+      ? await prisma.contentSheet.findFirst({ where: { id: input.sheetId, companyId } })
+      : await prisma.contentSheet.findFirst({ where: { companyId }, orderBy: { createdAt: "asc" } });
+    if (!sheet) {
+      sheet = await prisma.contentSheet.create({
+        data: {
+          companyId,
+          name: "Added in app",
+          columns: JSON.stringify(["template", "campaign", "subject", "preheader", "send_date", "send_time"]),
+        },
+      });
+    }
+
+    const columns = parseStringArray(sheet.columns);
+    const envelope = envelopeSlots(findEnvelopeColumns(columns));
+    const templateColumn = findTemplateColumn(columns) ?? "template";
+    const campaignColumn =
+      columns.find((c) => ["campaign", "campaign_name"].includes(normalizeKey(c))) ?? "campaign";
+
+    // Start from the sheet's shape so the row has every column the others have,
+    // then fill in what was asked for.
+    const values: Record<string, string> = Object.fromEntries(columns.map((c) => [c, ""]));
+    values[templateColumn] = template.name;
+    values[campaignColumn] = campaign;
+    values[envelope.subject] = input.subject.trim();
+    values[envelope.preheader] = input.preheader.trim();
+    values[envelope.sendDate] = date;
+    values[envelope.sendTime] = time;
+
+    const lowered = new Set(columns.map((c) => c.toLowerCase()));
+    const added = Object.keys(values).filter((k) => !lowered.has(k.toLowerCase()));
+
+    const last = await prisma.sheetRow.findFirst({
+      where: { sheetId: sheet.id },
+      orderBy: { position: "desc" },
+    });
+
+    const [row] = await prisma.$transaction([
+      prisma.sheetRow.create({
+        data: {
+          sheetId: sheet.id,
+          position: (last?.position ?? -1) + 1,
+          data: JSON.stringify(values),
+          createdById: access.user.id,
+        },
+      }),
+      ...(added.length > 0
+        ? [
+            prisma.contentSheet.update({
+              where: { id: sheet.id },
+              data: { columns: JSON.stringify([...columns, ...added]) },
+            }),
+          ]
+        : []),
+    ]);
+
+    revalidatePath(`/c/${companyId}/overview`);
+    revalidatePath(`/c/${companyId}/sheets/${sheet.id}`);
+    return { ok: true, sheetId: sheet.id, rowId: row.id };
+  } catch (error) {
+    return { ok: false, error: fail(error).error };
+  }
 }
 
 /** Duplicate a row -- the common way to start a new email from an existing one. */
