@@ -1198,3 +1198,44 @@ input:focus, select:focus, textarea:focus {
    one worked, and the useful diagnosis is what the others said. */
 .tpl-tried { margin: 8px 0 0; padding-left: 18px; font-size: 11.5px; opacity: 0.85; }
 .tpl-tried li { margin-top: 2px; }
+
+/* Bulk push. The bar appears only with a selection, so it never occupies space
+   for a state most visits are not in. */
+.push-bulk {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+}
+.push-bulk .spacer { flex: 1; }
+.ov-table tr.is-ticked { background: var(--accent-soft); }
+
+.modal-wide { max-width: 720px; }
+
+/* One line per campaign, because "push 11" is not something to agree to
+   without seeing which eleven and where each is going. */
+.bulk-list {
+  margin: 14px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.bulk-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) minmax(0, 1.3fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 11px;
+  font-size: 12.5px;
+}
+.bulk-row + .bulk-row { border-top: 1px solid var(--border); }
+.bulk-row.is-skipped { opacity: 0.5; }
+.bulk-name { font-weight: 600; overflow-wrap: anywhere; }
+.bulk-when, .bulk-to { color: var(--text-muted); overflow-wrap: anywhere; }
+.bulk-state { color: var(--text-faint); text-align: right; white-space: nowrap; }
+.bulk-state.is-bad { color: var(--danger); white-space: normal; text-align: left; }

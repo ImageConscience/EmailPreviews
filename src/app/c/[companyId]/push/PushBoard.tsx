@@ -99,6 +99,29 @@ export function PushBoard({
 
   const [open, setOpen] = useState<PushItem | null>(null);
 
+  /**
+   * What is ticked, by row and template.
+   *
+   * Keyed rather than held as objects so a refresh of the list -- after a push,
+   * say -- does not silently keep a selection pointing at a row that has since
+   * stopped being eligible.
+   */
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState(false);
+  const keyOf = (item: PushItem) => `${item.rowId}:${item.templateId}`;
+  const shown = new Set(visible.map(keyOf));
+  const chosen = visible.filter((item) => ticked.has(keyOf(item)));
+  const allShown = visible.length > 0 && chosen.length === visible.length;
+
+  const tick = (item: PushItem, on: boolean) => {
+    setTicked((held) => {
+      const next = new Set(held);
+      if (on) next.add(keyOf(item));
+      else next.delete(keyOf(item));
+      return next;
+    });
+  };
+
   return (
     <main className="page page-wide">
       <div className="page-head">
@@ -151,6 +174,22 @@ export function PushBoard({
         </span>
       </div>
 
+      {chosen.length > 0 && (
+        <div className="push-bulk">
+          <strong>{chosen.length} selected</strong>
+          <span className="hint" style={{ margin: 0 }}>
+            Each keeps its own audience and send time.
+          </span>
+          <div className="spacer" />
+          <button type="button" className="btn btn-sm" onClick={() => setTicked(new Set())}>
+            Clear
+          </button>
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => setBulk(true)}>
+            Push {chosen.length}…
+          </button>
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="empty">
@@ -168,6 +207,28 @@ export function PushBoard({
           <table className="ov-table">
             <thead>
               <tr>
+                <th className="tight">
+                  <input
+                    type="checkbox"
+                    aria-label="Select every row shown"
+                    checked={allShown}
+                    // Some but not all: the box says "there is a selection"
+                    // rather than claiming either state.
+                    ref={(box) => {
+                      if (box) box.indeterminate = chosen.length > 0 && !allShown;
+                    }}
+                    onChange={(e) =>
+                      setTicked((held) => {
+                        const next = new Set(held);
+                        for (const item of visible) {
+                          if (e.target.checked) next.add(keyOf(item));
+                          else next.delete(keyOf(item));
+                        }
+                        return next;
+                      })
+                    }
+                  />
+                </th>
                 <th className="tight">Send</th>
                 <th>Campaign</th>
                 <th className="tight">Sign-off</th>
@@ -178,7 +239,15 @@ export function PushBoard({
             </thead>
             <tbody>
               {visible.map((item) => (
-                <tr key={`${item.rowId}:${item.templateId}`}>
+                <tr key={keyOf(item)} className={ticked.has(keyOf(item)) ? "is-ticked" : ""}>
+                  <td className="tight">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${item.campaignName || item.title}`}
+                      checked={ticked.has(keyOf(item))}
+                      onChange={(e) => tick(item, e.target.checked)}
+                    />
+                  </td>
                   <td className="tight ov-when">
                     {item.sendAtLabel ? (
                       <>
@@ -226,6 +295,22 @@ export function PushBoard({
         </div>
       )}
 
+      {bulk && chosen.length > 0 && (
+        <BulkDialog
+          companyId={companyId}
+          items={chosen}
+          accountName={accountName}
+          onClose={() => setBulk(false)}
+          onDone={(pushed) => {
+            setBulk(false);
+            // Keep anything that did not go, so a partial failure leaves the
+            // rows that still need attention ticked rather than lost.
+            setTicked((held) => new Set([...held].filter((k) => shown.has(k) && !pushed.has(k))));
+            router.refresh();
+          }}
+        />
+      )}
+
       {open && (
         <PushDialog
           companyId={companyId}
@@ -240,6 +325,179 @@ export function PushBoard({
         />
       )}
     </main>
+  );
+}
+
+/**
+ * Pushing a selection, one after another.
+ *
+ * The mode is the only thing chosen for the batch. Everything that decides who
+ * a campaign goes to and when stays on the row, because that is where somebody
+ * set it and had it approved -- a bulk action that quietly reinterpreted those
+ * would be a way to send the wrong thing to the wrong people at speed.
+ *
+ * Run in sequence rather than at once: it is somebody's live account, the
+ * progress is worth watching, and a failure half way through should leave a
+ * legible trail rather than a pile of simultaneous errors.
+ */
+function BulkDialog({
+  companyId,
+  items,
+  accountName,
+  onClose,
+  onDone,
+}: {
+  companyId: string;
+  items: PushItem[];
+  accountName: string;
+  onClose: () => void;
+  onDone: (pushed: Set<string>) => void;
+}) {
+  const [mode, setMode] = useState<PushMode>("draft");
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(false);
+  const [result, setResult] = useState<Record<string, { ok: boolean; note: string }>>({});
+
+  const keyOf = (item: PushItem) => `${item.rowId}:${item.templateId}`;
+  // Scheduling needs a time that has not passed; drafting does not care.
+  const schedulable = items.filter((item) => item.canSchedule);
+  const unschedulable = items.filter((item) => !item.canSchedule);
+  const going = mode === "scheduled" ? schedulable : items;
+  const effectiveMode: PushMode = schedulable.length === 0 ? "draft" : mode;
+  const queue = effectiveMode === "scheduled" ? schedulable : items;
+
+  const run = async () => {
+    setRunning(true);
+    const collected: Record<string, { ok: boolean; note: string }> = {};
+    for (const item of queue) {
+      setResult({ ...collected, [keyOf(item)]: { ok: true, note: "…" } });
+      try {
+        const outcome = await pushToKlaviyoAction(
+          companyId, item.rowId, item.templateId, effectiveMode,
+        );
+        collected[keyOf(item)] = outcome.ok
+          ? { ok: true, note: effectiveMode === "scheduled" ? "scheduled" : "drafted" }
+          : { ok: false, note: outcome.error ?? "could not push" };
+      } catch {
+        collected[keyOf(item)] = { ok: false, note: "lost contact with the server" };
+      }
+      setResult({ ...collected });
+    }
+    setRunning(false);
+    setDone(true);
+  };
+
+  const succeeded = new Set(
+    Object.entries(result).filter(([, r]) => r.ok && r.note !== "…").map(([k]) => k),
+  );
+  const failed = Object.values(result).filter((r) => !r.ok).length;
+
+  return (
+    <div className="modal-back" role="dialog" aria-modal="true" onClick={running ? undefined : onClose}>
+      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="card-head">
+          <h2 style={{ margin: 0 }}>
+            {done ? "Pushed" : `Push ${items.length} to ${accountName}`}
+          </h2>
+        </div>
+
+        <div className="card-pad">
+          {!done && (
+            <fieldset className="push-modes">
+              <legend className="hint" style={{ margin: 0 }}>What should happen to all of them</legend>
+              <label>
+                <input type="radio" name="bulk-mode" checked={effectiveMode === "draft"}
+                  onChange={() => setMode("draft")} disabled={running} />
+                <span>
+                  <strong>Draft</strong>
+                  <span className="hint">
+                    All {items.length} created in Klaviyo and left alone. Nothing sends.
+                  </span>
+                </span>
+              </label>
+              <label className={schedulable.length === 0 ? "is-off" : ""}>
+                <input type="radio" name="bulk-mode" checked={effectiveMode === "scheduled"}
+                  disabled={running || schedulable.length === 0}
+                  onChange={() => setMode("scheduled")} />
+                <span>
+                  <strong>Schedule</strong>
+                  <span className="hint">
+                    {schedulable.length === 0
+                      ? "None of these name a send time still in the future."
+                      : `Klaviyo will send ${schedulable.length} of them, each at its own time, ` +
+                        "to its own audience."}
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+          )}
+
+          {!done && effectiveMode === "scheduled" && unschedulable.length > 0 && (
+            <p className="hint" style={{ color: "var(--warn)" }}>
+              {unschedulable.length} of the {items.length} selected{" "}
+              {unschedulable.length === 1 ? "has no send time still ahead and will be left" : "have no send time still ahead and will be left"}{" "}
+              untouched. Push those as drafts separately.
+            </p>
+          )}
+
+          {/* Named individually, because "push 11" is not something anybody
+              should agree to without seeing which eleven and where they go. */}
+          <div className="bulk-list">
+            {items.map((item) => {
+              const state = result[keyOf(item)];
+              const skipped = effectiveMode === "scheduled" && !item.canSchedule;
+              return (
+                <div key={keyOf(item)} className={`bulk-row${skipped ? " is-skipped" : ""}`}>
+                  <div className="bulk-name">{item.campaignName || item.title}</div>
+                  <div className="bulk-when">{item.sendAtLabel ?? "no send time"}</div>
+                  <div className="bulk-to" title={item.audience}>{item.audience}</div>
+                  <div className={`bulk-state${state && !state.ok ? " is-bad" : ""}`}>
+                    {skipped ? "skipped" : (state?.note ?? "")}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!done && effectiveMode === "scheduled" && (
+            <p className="hint" style={{ color: "var(--danger)" }}>
+              This puts {queue.length} real {queue.length === 1 ? "send" : "sends"} in{" "}
+              {accountName}&rsquo;s queue.
+            </p>
+          )}
+          {done && (
+            <p className="hint" style={{ color: failed > 0 ? "var(--danger)" : "var(--ok)" }}>
+              {succeeded.size} of {queue.length} went through
+              {failed > 0
+                ? `; ${failed} did not, and ${failed === 1 ? "stays" : "stay"} selected.`
+                : "."}
+            </p>
+          )}
+
+          <div className="row" style={{ gap: 8, marginTop: 12 }}>
+            {done ? (
+              <button type="button" className="btn btn-primary" onClick={() => onDone(succeeded)}>
+                Done
+              </button>
+            ) : (
+              <>
+                <button type="button" className="btn btn-primary" disabled={running || queue.length === 0}
+                  onClick={() => void run()}>
+                  {running
+                    ? `Pushing ${Object.keys(result).length} of ${queue.length}…`
+                    : effectiveMode === "scheduled"
+                      ? `Push and schedule ${queue.length}`
+                      : `Push ${queue.length} as drafts`}
+                </button>
+                <button type="button" className="btn" disabled={running} onClick={onClose}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
