@@ -509,7 +509,17 @@ export async function performPush(
     // so there is nothing to repoint.
     stripIdentifiers(definition);
 
-    const cloneId = await createDndTemplate(apiKey, ready.templateName, definition);
+    const created = await createDndTemplate(apiKey, ready.templateName, definition);
+    const cloneId = created.id;
+    if (created.alsoRemoved.length > 0) {
+      // Worth saying out loud: it means this app's idea of what Klaviyo will
+      // not accept is out of date, and somebody should widen the list rather
+      // than rely on the retry every send.
+      ready.notes.push(
+        `Klaviyo also refused ${created.alsoRemoved.join(", ")} on the new template; it was ` +
+          `created without ${created.alsoRemoved.length === 1 ? "it" : "them"}.`,
+      );
+    }
 
     // --- the campaign -----------------------------------------------------
     const existing = await prisma.klaviyoPush.findUnique({

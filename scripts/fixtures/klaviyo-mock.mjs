@@ -5,6 +5,15 @@ import { createServer } from "node:http";
 const GOOD = "pk_live_testkey0000000000000000000000ab";
 const MARKER = "EMAILPREVIEWS:CONTENT";
 
+/**
+ * Identifiers this pretend Klaviyo will not be told on a create.
+ *
+ * Settable at runtime, because the client is not supposed to know the list --
+ * it strips what it knows and takes the rest from the error. Adding one here is
+ * how that recovery gets exercised.
+ */
+let REFUSED_ON_CREATE = ["id", "template_id", "data_id"];
+
 let idSeq = 0;
 const nextIdent = () => `01M1M12YEY${(idSeq += 1).toString().padStart(4, "0")}`;
 
@@ -90,6 +99,11 @@ const calls = [];
 
 createServer((req, res) => {
   const url = new URL(req.url, "http://x");
+  if (url.pathname === "/__refuse-on-create") {
+    REFUSED_ON_CREATE = (url.searchParams.get("keys") ?? "id,template_id,data_id").split(",");
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ REFUSED_ON_CREATE }));
+  }
   if (url.pathname === "/__assign-mode") {
     assignMode = url.searchParams.get("mode") ?? "copy";
     res.writeHead(200, { "content-type": "application/json" });
@@ -255,14 +269,19 @@ createServer((req, res) => {
         if (Array.isArray(node)) return node.forEach(findIds);
         if (!node || typeof node !== "object") return;
         for (const [k, v] of Object.entries(node)) {
-          if (k === "id" || k === "template_id") asserted.push(k);
+          if (REFUSED_ON_CREATE.includes(k)) asserted.push(k);
           else findIds(v);
         }
       };
+      // A refusal with nothing to learn from: the client cannot parse a key out
+      // of it, so it must give up rather than retry blindly.
+      if (REFUSED_ON_CREATE.includes("__opaque")) {
+        return send(400, { errors: [{ detail: "That definition is not acceptable." }] });
+      }
       findIds(attributes.definition ?? {});
       if (asserted.length) {
-        return send(400, { errors: asserted.map(() => ({
-          detail: "id is not allowed to be specified on create." })) });
+        return send(400, { errors: asserted.map((k) => ({
+          detail: `${k} is not allowed to be specified on create.` })) });
       }
       const id = `TPL${nextId++}`;
       templates.set(id, {

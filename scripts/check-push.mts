@@ -560,14 +560,14 @@ console.log("\nUniversal blocks in the base template");
     styles: [{ style_type: "base-styles", id: "st1", styles: { margin_top: 50 } }],
   };
   const gone = stripIdentifiers(withIds);
-  // Nine: the template, its template_id, the body, the body's properties.id,
-  // the section, row, column and block, and the one style entry.
-  check("every identifier is taken off, at every level", gone === 9, `${gone}`);
+  // Eleven: the template, its template_id, the body, the body's properties.id,
+  // the section, row, column and block, the one style entry, and two data_ids.
+  check("every identifier is taken off, at every level", gone === 11, `${gone}`);
   check("...leaving none behind anywhere",
-    !JSON.stringify(withIds).includes('"id"') && !JSON.stringify(withIds).includes('"template_id"'),
+    !/"(id|template_id|data_id)":/.test(JSON.stringify(withIds)),
     JSON.stringify(withIds));
-  check("...but keeping data_id, which relates elements to each other",
-    JSON.stringify(withIds).includes('"data_id":"d2"'));
+  check("...data_id included, which Klaviyo also refuses",
+    !JSON.stringify(withIds).includes("data_id"), JSON.stringify(withIds));
   check("...and the content, which is the point of the whole exercise",
     JSON.stringify(withIds).includes("keep me"));
   check("...and the styling hooks beside the stripped id",
@@ -580,6 +580,50 @@ console.log("\nUniversal blocks in the base template");
     !JSON.stringify(made?.definition ?? {}).match(/"(id|template_id|universal_id)":/),
     (JSON.stringify(made?.definition ?? {}).match(/"(id|template_id|universal_id)":/) ?? [])[0] ?? "none");
 }
+
+// --- an identifier this app has not heard of ------------------------------
+// Which keys Klaviyo refuses on a create has been guessed wrong twice, each
+// time costing a round trip through a real account. So the push no longer only
+// guesses: it strips what it knows, and takes the rest from the error. Here the
+// account refuses something the client has no idea about.
+console.log("\nWhen Klaviyo refuses a key this app does not know");
+await fetch("http://127.0.0.1:4599/__refuse-on-create?keys=id,template_id,data_id,content_type");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await approve();
+
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+check("the push still goes through", r.ok, r.error);
+check("...saying which key it had to be told about",
+  (r.notes ?? []).some((n) => /also refused content_type/.test(n)),
+  (r.notes ?? []).find((n) => /also refused/.test(n)) ?? "(no note)");
+
+{
+  const after = await state();
+  const made = after.templates.find((t) => t.id === (after.campaigns[0]?.templateId ?? ""));
+  check("...and the template it made has the content in it",
+    JSON.stringify(made?.definition ?? {}).includes("<table"),
+    made?.id ?? "none");
+  // One retry, not a loop that keeps deleting whatever is complained about.
+  const creates = after.calls.filter((c) => c === "POST /templates").length;
+  check("...having tried exactly twice", creates === 2, `${creates}`);
+}
+
+// A refusal it cannot learn from is still a refusal, not a blind retry.
+await fetch("http://127.0.0.1:4599/__refuse-on-create?keys=__opaque");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await approve();
+r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+check("a refusal it cannot read is passed on, not worked around",
+  !r.ok && /not acceptable/.test(r.error ?? ""), r.error?.slice(0, 70));
+check("...without a second attempt, since there is nothing to change",
+  (await state()).calls.filter((c) => c === "POST /templates").length === 1,
+  `${(await state()).calls.filter((c) => c === "POST /templates").length}`);
+
+await fetch("http://127.0.0.1:4599/__refuse-on-create");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
 
 // --- the API revision ----------------------------------------------------
 // A revision Klaviyo does not publish is not an error: it is treated as the

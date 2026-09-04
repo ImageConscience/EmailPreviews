@@ -57,6 +57,8 @@ function base(): string {
   return process.env.KLAVIYO_API_BASE?.trim() || "https://a.klaviyo.com/api";
 }
 
+import { stripIdentifiers } from "@/lib/block-content";
+
 export class KlaviyoError extends Error {
   readonly status: number;
   /** Klaviyo's own error objects, when it returned any. */
@@ -382,17 +384,44 @@ export async function createDndTemplate(
   apiKey: string,
   name: string,
   definition: unknown,
-): Promise<string> {
-  const body = await call<{ data: { id: string } }>(apiKey, "/templates", {
-    method: "POST",
-    body: {
-      data: {
-        type: "template",
-        attributes: { name, editor_type: "SYSTEM_DRAGGABLE", definition },
+): Promise<{ id: string; alsoRemoved: string[] }> {
+  const post = async () => {
+    const body = await call<{ data: { id: string } }>(apiKey, "/templates", {
+      method: "POST",
+      body: {
+        data: {
+          type: "template",
+          attributes: { name, editor_type: "SYSTEM_DRAGGABLE", definition },
+        },
       },
-    },
-  });
-  return body.data.id;
+    });
+    return body.data.id;
+  };
+
+  try {
+    return { id: await post(), alsoRemoved: [] };
+  } catch (error) {
+    /*
+     * Klaviyo names the field it would not be told. Guessing that set from the
+     * outside has now been wrong twice -- first `id`, then `data_id`, each
+     * costing a round trip through a real account -- so take the answer from
+     * the error rather than from another theory, and try once more.
+     *
+     * Bounded to one retry, and only for this refusal: a create that fails
+     * leaves nothing behind, so retrying it is cheap, but a loop that keeps
+     * deleting whatever Klaviyo complains about could strip a definition to
+     * nothing.
+     */
+    if (!(error instanceof KlaviyoError) || error.status !== 400) throw error;
+    const named = [...new Set(
+      [...error.detail.matchAll(/`?(\w+)`? is not allowed to be specified on create/gi)]
+        .map((match) => match[1]),
+    )];
+    if (named.length === 0) throw error;
+
+    stripIdentifiers(definition, named);
+    return { id: await post(), alsoRemoved: named };
+  }
 }
 
 

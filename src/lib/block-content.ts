@@ -176,20 +176,27 @@ export function detachUniversalBlocks(definition: unknown): number {
 }
 
 /**
+ * Klaviyo's own identifiers, which it refuses to be told on a create.
+ *
+ * Self-identity only. `asset_id`, `product_id`, `coupon_id` and their like name
+ * something else that exists and have to survive -- they are references, not
+ * claims about who this element is.
+ */
+export const CREATE_FORBIDDEN_KEYS = ["id", "template_id", "data_id"];
+
+/**
  * Take the identifiers off a definition so Klaviyo can assign its own.
  *
  * A definition read from an existing template names itself at every level --
  * the template, the body, each section, row, column, block and style entry --
  * and a create is refused once per identifier it finds.
  *
- * Every `id`, including the one inside a `properties` object that is a
- * rendering hook rather than an identity. Keeping that one was a theory about
- * which ids Klaviyo minds, and the error does not distinguish; the whole cost
- * of removing it is an HTML id attribute Klaviyo writes for itself anyway,
- * against another refused push for being clever. `data_id`, which is how the
- * editor relates elements to each other, is a different key and is left alone.
+ * Which keys those are has been guessed wrong twice, so it is no longer only
+ * guessed: this removes the ones known to be refused, and the caller retries on
+ * whatever else Klaviyo names in the error. Nothing in a definition refers to
+ * another part of it by these, so there is nothing to repoint.
  */
-export function stripIdentifiers(definition: unknown): number {
+export function stripIdentifiers(definition: unknown, keys = CREATE_FORBIDDEN_KEYS): number {
   let removed = 0;
 
   const walk = (node: unknown): void => {
@@ -200,7 +207,7 @@ export function stripIdentifiers(definition: unknown): number {
     if (!node || typeof node !== "object") return;
     const record = node as Record<string, unknown>;
 
-    for (const key of ["id", "template_id"]) {
+    for (const key of keys) {
       if (key in record) {
         delete record[key];
         removed += 1;
