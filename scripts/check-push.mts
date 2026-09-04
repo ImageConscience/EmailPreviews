@@ -453,6 +453,13 @@ try {
   check("...and says which knob changes it", /KLAVIYO_API_REVISION/.test(detail));
   check("...rather than claiming the template has no blocks",
     !/no blocks to fill/.test(detail));
+  // An error naming a revision the code does not ship with leaves an override
+  // and a stale deployment looking identical.
+  check("...and says where that revision came from",
+    /KLAVIYO_API_REVISION setting on this deployment/.test(detail), detail.slice(0, 200));
+  // The remedy, not the errand.
+  check("...and names a revision that does work", /set KLAVIYO_API_REVISION to 2026-04-15/.test(detail),
+    detail.slice(-80));
 }
 // Assigning undefined stores the string "undefined", which is not a date and
 // so is not a revision Klaviyo would take.

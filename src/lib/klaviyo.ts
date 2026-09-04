@@ -27,8 +27,24 @@
  * a revision in a minute and in a day; and a revision Klaviyo does not publish
  * now announces itself rather than quietly behaving like 2024.
  */
+const DEFAULT_REVISION = "2026-04-15";
+
 export function revision(): string {
-  return process.env.KLAVIYO_API_REVISION?.trim() || "2026-04-15";
+  return process.env.KLAVIYO_API_REVISION?.trim() || DEFAULT_REVISION;
+}
+
+/**
+ * Where the revision in use came from.
+ *
+ * An error naming a revision that is not the one the code ships with leaves two
+ * very different situations looking identical: an override set in the
+ * environment, or a deployment still running the old build. Saying which turns
+ * that into a five-second answer.
+ */
+export function revisionSource(): string {
+  return process.env.KLAVIYO_API_REVISION?.trim()
+    ? "the KLAVIYO_API_REVISION setting on this deployment"
+    : `this build's default (${DEFAULT_REVISION})`;
 }
 /**
  * Klaviyo, unless a test says otherwise.
@@ -330,11 +346,26 @@ export async function fetchTemplate(
       ? ` Klaviyo answered as revision ${answered.revision}, not the ${sent} it was asked for, ` +
         "which means it does not publish that one."
       : "";
+
+  /*
+   * The remedy is a few more reads away, so find it rather than describing the
+   * errand. Only on a failure that has already stopped the push -- and not when
+   * the caller named the revision itself, since it is then already searching
+   * and would have this recurse through the whole list per candidate.
+   */
+  let advice = "";
+  if (!as) {
+    const working = await workingRevision(apiKey, templateId, sent);
+    advice = working
+      ? ` Revision ${working} can read it: set KLAVIYO_API_REVISION to ${working}.`
+      : " No revision this app knows of could read it — check the base template on the " +
+        "integrations screen, which lists what each one said.";
+  }
+
   throw new KlaviyoError(
     status,
     `${refused} This app asked for ${name}template's structure three ways using API revision ` +
-      `${sent}, and got it from none of them.${mismatch} Set KLAVIYO_API_REVISION to one that ` +
-      "works — the base template check on the integrations screen will find one.",
+      `${sent}, from ${revisionSource()}, and got it from none of them.${mismatch}${advice}`,
   );
 }
 
@@ -550,4 +581,27 @@ export async function cancelCampaign(apiKey: string, campaignId: string): Promis
     method: "PATCH",
     body: { data: { type: "campaign-send-job", id: campaignId, attributes: { action: "cancel" } } },
   });
+}
+
+/**
+ * The newest revision that can actually read this template's structure.
+ *
+ * A read, and only on the path where a push has already failed: an error that
+ * says which setting to change is worth a handful of GETs, where an error that
+ * says "find one that works" costs somebody an afternoon.
+ */
+async function workingRevision(
+  apiKey: string,
+  templateId: string,
+  skip: string,
+): Promise<string | null> {
+  for (const candidate of CANDIDATE_REVISIONS) {
+    if (candidate === skip) continue;
+    try {
+      if ((await fetchTemplate(apiKey, templateId, candidate)).definition) return candidate;
+    } catch {
+      // Not this one either.
+    }
+  }
+  return null;
 }
