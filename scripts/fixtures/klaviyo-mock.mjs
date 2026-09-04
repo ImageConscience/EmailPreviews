@@ -5,7 +5,10 @@ import { createServer } from "node:http";
 const GOOD = "pk_live_testkey0000000000000000000000ab";
 const MARKER = "EMAILPREVIEWS:CONTENT";
 
-const htmlBlock = (content) => ({ content_type: "block", type: "html", data: { content } });
+const htmlBlock = (content, universalId) => ({
+  content_type: "block", type: "html", data: { content },
+  ...(universalId ? { universal_id: universalId } : {}),
+});
 
 // A base template shaped like the one a person would build: chrome, an HTML
 // block for the content carrying the marker, and a second HTML block that is
@@ -18,7 +21,9 @@ const baseDefinition = () => ({
         htmlBlock(`<!-- ${MARKER} -->`),
       ] }] }] } },
       { content_type: "section", data: { rows: [{ columns: [{ blocks: [
-        htmlBlock('<p>Legal small print, {% unsubscribe %}</p>'),
+        // Reusable content shared with other templates, the way a real footer
+        // often is. Klaviyo refuses to update a template that contains one.
+        htmlBlock('<p>Legal small print, {% unsubscribe %}</p>', "36798d44a3e34090"),
       ] }] }] } },
     ],
   },
@@ -177,6 +182,14 @@ createServer((req, res) => {
     if (templateMatch && req.method === "PATCH") {
       const t = templates.get(templateMatch[1]);
       if (!t) return send(404, { errors: [{ detail: "No template with that id." }] });
+      // A template holding reusable blocks cannot be written back: the blocks
+      // belong to every template that shares them, so Klaviyo will not take an
+      // update that could redefine them from one campaign's copy.
+      if (JSON.stringify(json.data.attributes?.definition ?? {}).includes('"universal_id"')) {
+        return send(400, { errors: [{ detail:
+          `Template ${t.id} contains universal blocks and cannot be updated. ` +
+          "Universal blocks are reusable components shared across multiple templates." }] });
+      }
       Object.assign(t, json.data.attributes);
       return send(200, { data: { id: t.id, attributes: t } });
     }

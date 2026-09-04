@@ -16,6 +16,7 @@ import { CANDIDATE_REVISIONS, fetchAudiences, fetchTemplate, revision } from "..
 import { checkEligibility, type ApprovalForPush } from "../src/lib/push-eligibility.ts";
 import { audienceSlots, findAudienceColumns } from "../src/lib/template.ts";
 import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
+import { detachUniversalBlocks } from "../src/lib/block-content.ts";
 
 const prisma = new PrismaClient();
 const KEY = "pk_live_testkey0000000000000000000000ab";
@@ -431,6 +432,37 @@ check("...but the date-printing template's sign-off went stale",
 check("...and it said so", (r.notes ?? []).some((n) => /went stale/.test(n)),
   (r.notes ?? []).find((n) => /stale/.test(n)));
 await prisma.template.delete({ where: { id: printing.id } });
+
+// --- templates holding shared blocks -------------------------------------
+// Klaviyo refuses to write back a template containing universal blocks, and a
+// clone inherits every one of them from the base. The base template here has a
+// shared footer, so the ordinary push above already proves the detaching works;
+// these check it kept what it was supposed to and gave up only the link.
+console.log("\nUniversal blocks in the base template");
+{
+  const base = (await state()).templates.find((t) => t.id === "BASE01");
+  check("the base template still has its shared footer",
+    JSON.stringify(base?.definition).includes('"universal_id"'));
+
+  const clone = (await state()).templates.find((t) => t.id.startsWith("TPL"));
+  check("...and a clone was written despite it", Boolean(clone));
+  check("...with the shared link dropped, which is why it could be written",
+    !JSON.stringify(clone?.definition ?? {}).includes('"universal_id"'));
+  check("...but the footer's content kept",
+    JSON.stringify(clone?.definition).includes("{% unsubscribe %}"));
+
+  // The detaching is a copy, not an edit: the same content, minus the link.
+  const before = JSON.parse(JSON.stringify({
+    a: { universal_id: "u1", data: { content: "keep me" } },
+    b: [{ universal_id: "u2" }, { plain: true }],
+  }));
+  const count = detachUniversalBlocks(before);
+  check("detaching reports how many it cut loose", count === 2, `${count}`);
+  check("...and leaves everything else alone",
+    JSON.stringify(before) === JSON.stringify({ a: { data: { content: "keep me" } }, b: [{}, { plain: true }] }),
+    JSON.stringify(before));
+  check("a definition with none is untouched", detachUniversalBlocks({ x: 1 }) === 0);
+}
 
 // --- the API revision ----------------------------------------------------
 // A revision Klaviyo does not publish is not an error: it is treated as the

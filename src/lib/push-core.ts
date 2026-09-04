@@ -7,7 +7,7 @@ import { KlaviyoError, assignTemplate, cancelCampaign, cloneTemplate, createCamp
   type Audience, type CampaignContent } from "@/lib/klaviyo";
 import { klaviyoKeyForCompany } from "@/lib/klaviyo-key";
 import { renderRow } from "@/lib/render-row";
-import { findContentBlock, toBlockContent } from "@/lib/block-content";
+import { detachUniversalBlocks, findContentBlock, toBlockContent } from "@/lib/block-content";
 import { audienceSlots, envelopeSlots, extractPlaceholders, findAudienceColumns,
   findEnvelopeColumns, normalizeKey } from "@/lib/template";
 import { DEFAULT_TIMEZONE, zonedToUtc } from "@/lib/zone";
@@ -483,6 +483,19 @@ export async function performPush(
     if ("error" in target) return { ok: false, error: target.error };
 
     target.block.data = { ...(target.block.data ?? {}), content: ready.html };
+
+    // Klaviyo will not write back a template holding blocks shared with other
+    // templates, and the clone inherits every such reference from the base. The
+    // clone is a frozen copy of one approved campaign, so the reference is the
+    // part to give up; the content stays, and the base template keeps its own.
+    const detached = detachUniversalBlocks(clone.definition);
+    if (detached > 0) {
+      ready.notes.push(
+        `${detached} reusable ${detached === 1 ? "block was" : "blocks were"} copied into this ` +
+          "campaign rather than linked, so later edits to them in Klaviyo will not change it.",
+      );
+    }
+
     await updateDndTemplate(apiKey, cloneId, ready.templateName, clone.definition);
 
     // --- the campaign -----------------------------------------------------

@@ -138,3 +138,39 @@ export function findContentBlock(definition: unknown): { block: HtmlBlock } | { 
       `there is no way to tell which one to fill. Put \`<!-- ${CONTENT_MARKER} -->\` inside the right one.`,
   };
 }
+
+/**
+ * Cut a cloned template's blocks loose from the universal content they came from.
+ *
+ * A universal block is one piece of content shared by every template using it,
+ * so Klaviyo refuses to write back a template that contains one -- an update
+ * from a single campaign's copy could redefine a footer everywhere it appears.
+ * That is the right rule, and it stops a push dead: the clone inherits the
+ * reference, and the clone is what has to be written.
+ *
+ * Dropping the reference keeps the content and gives up only the link. That is
+ * what a clone is for. Each campaign is meant to be a frozen copy of what was
+ * approved, so a footer that changes underneath a scheduled send is a thing to
+ * avoid rather than to preserve; and the base template, which is where the
+ * universal blocks actually live, is never written to at all.
+ */
+export function detachUniversalBlocks(definition: unknown): number {
+  let detached = 0;
+
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const record = node as Record<string, unknown>;
+    if (typeof record.universal_id === "string") {
+      delete record.universal_id;
+      detached += 1;
+    }
+    Object.values(record).forEach(walk);
+  };
+
+  walk(definition);
+  return detached;
+}
