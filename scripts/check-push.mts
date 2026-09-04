@@ -16,7 +16,7 @@ import { CANDIDATE_REVISIONS, fetchAudiences, fetchTemplate, revision } from "..
 import { checkEligibility, type ApprovalForPush } from "../src/lib/push-eligibility.ts";
 import { audienceSlots, findAudienceColumns } from "../src/lib/template.ts";
 import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
-import { detachUniversalBlocks } from "../src/lib/block-content.ts";
+import { detachUniversalBlocks, stripIdentifiers } from "../src/lib/block-content.ts";
 
 const prisma = new PrismaClient();
 const KEY = "pk_live_testkey0000000000000000000000ab";
@@ -546,6 +546,39 @@ console.log("\nUniversal blocks in the base template");
     JSON.stringify(before) === JSON.stringify({ a: { data: { content: "keep me" } }, b: [{}, { plain: true }] }),
     JSON.stringify(before));
   check("a definition with none is untouched", detachUniversalBlocks({ x: 1 }) === 0);
+
+  // Klaviyo assigns its own identifiers and refuses a create that asserts any,
+  // once per element -- a definition read from a real template names itself at
+  // every level, so this is a dozen refusals rather than one.
+  const withIds = {
+    id: "t1", template_id: "BASE01",
+    body: { id: "b1", properties: { id: "bodyTable", css_class: "root" }, sections: [
+      { id: "s1", data_id: "d1", rows: [{ id: "r1", columns: [{ id: "c1", blocks: [
+        { id: "bl1", data_id: "d2", data: { content: "keep me" } },
+      ] }] }] },
+    ] },
+    styles: [{ style_type: "base-styles", id: "st1", styles: { margin_top: 50 } }],
+  };
+  const gone = stripIdentifiers(withIds);
+  // Nine: the template, its template_id, the body, the body's properties.id,
+  // the section, row, column and block, and the one style entry.
+  check("every identifier is taken off, at every level", gone === 9, `${gone}`);
+  check("...leaving none behind anywhere",
+    !JSON.stringify(withIds).includes('"id"') && !JSON.stringify(withIds).includes('"template_id"'),
+    JSON.stringify(withIds));
+  check("...but keeping data_id, which relates elements to each other",
+    JSON.stringify(withIds).includes('"data_id":"d2"'));
+  check("...and the content, which is the point of the whole exercise",
+    JSON.stringify(withIds).includes("keep me"));
+  check("...and the styling hooks beside the stripped id",
+    JSON.stringify(withIds).includes('"css_class":"root"'));
+  check("a definition with no identifiers is untouched", stripIdentifiers({ x: 1 }) === 0);
+
+  // The one the push actually made: filled, and free of both.
+  const made = live.templates.find((t) => t.id === (live.campaigns[0]?.templateId ?? ""));
+  check("the template the push created carries neither",
+    !JSON.stringify(made?.definition ?? {}).match(/"(id|template_id|universal_id)":/),
+    (JSON.stringify(made?.definition ?? {}).match(/"(id|template_id|universal_id)":/) ?? [])[0] ?? "none");
 }
 
 // --- the API revision ----------------------------------------------------

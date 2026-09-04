@@ -5,8 +5,14 @@ import { createServer } from "node:http";
 const GOOD = "pk_live_testkey0000000000000000000000ab";
 const MARKER = "EMAILPREVIEWS:CONTENT";
 
+let idSeq = 0;
+const nextIdent = () => `01M1M12YEY${(idSeq += 1).toString().padStart(4, "0")}`;
+
 const htmlBlock = (content, universalId) => ({
   content_type: "block", type: "html", data: { content },
+  // Real definitions carry an identifier on every element, and Klaviyo refuses
+  // a create that asserts any of them.
+  id: nextIdent(), data_id: nextIdent(),
   ...(universalId ? { universal_id: universalId } : {}),
 });
 
@@ -14,20 +20,26 @@ const htmlBlock = (content, universalId) => ({
 // block for the content carrying the marker, and a second HTML block that is
 // not ours.
 const baseDefinition = () => ({
+  id: "82878156433742b4",
+  template_id: "BASE01",
   body: {
+    id: nextIdent(),
+    properties: { id: "bodyTable", css_class: "root-container" },
     sections: [
-      { content_type: "section", data: { rows: [{ columns: [{ blocks: [
-        { content_type: "block", type: "image", data: {} },
-        htmlBlock(`<!-- ${MARKER} -->`),
-      ] }] }] } },
-      { content_type: "section", data: { rows: [{ columns: [{ blocks: [
-        // Reusable content shared with other templates, the way a real footer
-        // often is. Klaviyo refuses to update a template that contains one.
-        htmlBlock('<p>Legal small print, {% unsubscribe %}</p>', "36798d44a3e34090"),
-      ] }] }] } },
+      { content_type: "section", id: nextIdent(), data_id: nextIdent(),
+        data: { rows: [{ id: nextIdent(), columns: [{ id: nextIdent(), blocks: [
+          { content_type: "block", type: "image", id: nextIdent(), data: {} },
+          htmlBlock(`<!-- ${MARKER} -->`),
+        ] }] }] } },
+      { content_type: "section", id: nextIdent(), data_id: nextIdent(),
+        data: { rows: [{ id: nextIdent(), columns: [{ id: nextIdent(), blocks: [
+          // Reusable content shared with other templates, the way a real footer
+          // often is. Klaviyo refuses to update a template that contains one.
+          htmlBlock('<p>Legal small print, {% unsubscribe %}</p>', "36798d44a3e34090"),
+        ] }] }] } },
     ],
   },
-  styles: [],
+  styles: [{ style_type: "base-styles", id: nextIdent(), styles: { margin_top: 50 } }],
 });
 
 const templates = new Map([
@@ -235,6 +247,22 @@ createServer((req, res) => {
       if (JSON.stringify(attributes.definition ?? {}).includes('"universal_id"')) {
         return send(400, { errors: [{ detail:
           "A template cannot be created containing universal blocks." }] });
+      }
+      // Klaviyo assigns its own identifiers, and refuses a create that asserts
+      // any -- once per offending element, which is how the real one answered.
+      const asserted = [];
+      const findIds = (node) => {
+        if (Array.isArray(node)) return node.forEach(findIds);
+        if (!node || typeof node !== "object") return;
+        for (const [k, v] of Object.entries(node)) {
+          if (k === "id" || k === "template_id") asserted.push(k);
+          else findIds(v);
+        }
+      };
+      findIds(attributes.definition ?? {});
+      if (asserted.length) {
+        return send(400, { errors: asserted.map(() => ({
+          detail: "id is not allowed to be specified on create." })) });
       }
       const id = `TPL${nextId++}`;
       templates.set(id, {

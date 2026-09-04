@@ -8,7 +8,7 @@ import { KlaviyoError, assignTemplate, cancelCampaign, createCampaign, createDnd
   type Audience, type CampaignContent } from "@/lib/klaviyo";
 import { klaviyoKeyForCompany } from "@/lib/klaviyo-key";
 import { renderRow } from "@/lib/render-row";
-import { detachUniversalBlocks, findContentBlock, toBlockContent } from "@/lib/block-content";
+import { detachUniversalBlocks, findContentBlock, stripIdentifiers, toBlockContent } from "@/lib/block-content";
 import { audienceSlots, envelopeSlots, extractPlaceholders, findAudienceColumns,
   findEnvelopeColumns, normalizeKey } from "@/lib/template";
 import { DEFAULT_TIMEZONE, zonedToUtc } from "@/lib/zone";
@@ -503,9 +503,11 @@ export async function performPush(
       );
     }
 
-    // These name the template it was read from; a new one gets its own.
-    delete definition.id;
-    delete definition.template_id;
+    // The definition names itself at every level, and Klaviyo assigns its own
+    // identifiers to anything created; asserting the old ones is refused once
+    // per element. Nothing in a definition refers to another part of it by id,
+    // so there is nothing to repoint.
+    stripIdentifiers(definition);
 
     const cloneId = await createDndTemplate(apiKey, ready.templateName, definition);
 

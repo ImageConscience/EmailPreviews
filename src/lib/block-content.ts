@@ -174,3 +174,41 @@ export function detachUniversalBlocks(definition: unknown): number {
   walk(definition);
   return detached;
 }
+
+/**
+ * Take the identifiers off a definition so Klaviyo can assign its own.
+ *
+ * A definition read from an existing template names itself at every level --
+ * the template, the body, each section, row, column, block and style entry --
+ * and a create is refused once per identifier it finds.
+ *
+ * Every `id`, including the one inside a `properties` object that is a
+ * rendering hook rather than an identity. Keeping that one was a theory about
+ * which ids Klaviyo minds, and the error does not distinguish; the whole cost
+ * of removing it is an HTML id attribute Klaviyo writes for itself anyway,
+ * against another refused push for being clever. `data_id`, which is how the
+ * editor relates elements to each other, is a different key and is left alone.
+ */
+export function stripIdentifiers(definition: unknown): number {
+  let removed = 0;
+
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const record = node as Record<string, unknown>;
+
+    for (const key of ["id", "template_id"]) {
+      if (key in record) {
+        delete record[key];
+        removed += 1;
+      }
+    }
+    Object.values(record).forEach(walk);
+  };
+
+  walk(definition);
+  return removed;
+}
