@@ -370,39 +370,32 @@ export async function fetchTemplate(
 }
 
 /**
- * Copy the base template, chrome and all.
+ * Build the per-send template outright, from a definition already filled in.
  *
- * A clone per send rather than one template edited over and over: each campaign
- * then holds the content it was approved with, and editing next week's send
- * cannot change what last week's already sent. Klaviyo's clone carries the
- * drag-and-drop definition, which is the part that matters here.
+ * Replaces cloning and then editing the clone. Klaviyo refuses to update a
+ * template that contains universal blocks -- and it checks the template as
+ * stored, not the payload, so a clone of a base that has one can never be
+ * written to however the update is phrased. Creating the finished article in a
+ * single call sidesteps that entirely, and costs one request instead of three.
  */
-export async function cloneTemplate(apiKey: string, templateId: string, name: string): Promise<string> {
-  const made = await call<{ data: { id: string } }>(apiKey, "/template-clone", {
-    method: "POST",
-    body: { data: { type: "template", id: templateId, attributes: { name } } },
-  });
-  return made.data.id;
-}
-
-/**
- * Write a drag-and-drop definition back.
- *
- * Klaviyo replaces the definition wholesale -- there is no way to patch one
- * block -- so the caller reads it, changes the block it owns, and returns the
- * rest untouched.
- */
-export async function updateDndTemplate(
+export async function createDndTemplate(
   apiKey: string,
-  templateId: string,
   name: string,
   definition: unknown,
-): Promise<void> {
-  await call(apiKey, `/templates/${templateId}`, {
-    method: "PATCH",
-    body: { data: { type: "template", id: templateId, attributes: { name, definition } } },
+): Promise<string> {
+  const body = await call<{ data: { id: string } }>(apiKey, "/templates", {
+    method: "POST",
+    body: {
+      data: {
+        type: "template",
+        attributes: { name, editor_type: "SYSTEM_DRAGGABLE", definition },
+      },
+    },
   });
+  return body.data.id;
 }
+
+
 
 export interface CampaignContent {
   name: string;

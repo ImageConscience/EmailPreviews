@@ -73,6 +73,9 @@ let templateMode = "additional-fields";
  */
 let assignMode = "copy";
 
+/** Every request, so a check can assert what the client no longer does. */
+const calls = [];
+
 createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname === "/__assign-mode") {
@@ -92,6 +95,7 @@ createServer((req, res) => {
 
   if (url.pathname === "/__state") {
     return send(200, {
+      calls,
       templates: [...templates.values()],
       campaigns: [...campaigns.values()],
       sendJobs,
@@ -100,6 +104,7 @@ createServer((req, res) => {
   if (url.pathname === "/__reset") {
     campaigns.clear();
     sendJobs.length = 0;
+    calls.length = 0;
     for (const id of [...templates.keys()]) if (id !== "BASE01" && id !== "CODEONLY") templates.delete(id);
     templates.set("BASE01", { id: "BASE01", name: "Burju base", editor_type: "SYSTEM_DRAGGABLE", definition: baseDefinition() });
     return send(200, { ok: true });
@@ -114,6 +119,7 @@ createServer((req, res) => {
   // Unpublished dates fall back to the oldest, and the response says so.
   const honoured = PUBLISHED.includes(wanted) ? wanted : PUBLISHED[0];
   res.setHeader("revision", honoured);
+  calls.push(`${req.method} ${url.pathname.replace(/^\/api/, "")}`);
   if ((req.headers.authorization ?? "") !== `Klaviyo-API-Key ${GOOD}`) {
     return send(401, { errors: [{ detail: "The API key you supplied is invalid." }] });
   }
@@ -217,6 +223,25 @@ createServer((req, res) => {
       }
       Object.assign(t, json.data.attributes);
       return send(200, { data: { id: t.id, attributes: t } });
+    }
+    if (p === "/templates" && req.method === "POST") {
+      const attributes = json.data?.attributes ?? {};
+      if (attributes.editor_type !== "SYSTEM_DRAGGABLE") {
+        return send(400, { errors: [{ detail: "editor_type must be SYSTEM_DRAGGABLE." }] });
+      }
+      // The whole point of building it here rather than cloning: a template
+      // created with shared blocks in it would be unwritable from birth, and
+      // Klaviyo would rather it did not exist.
+      if (JSON.stringify(attributes.definition ?? {}).includes('"universal_id"')) {
+        return send(400, { errors: [{ detail:
+          "A template cannot be created containing universal blocks." }] });
+      }
+      const id = `TPL${nextId++}`;
+      templates.set(id, {
+        id, name: attributes.name, editor_type: "SYSTEM_DRAGGABLE",
+        definition: attributes.definition ?? null,
+      });
+      return send(201, { data: { id, attributes: templates.get(id) } });
     }
     if (p === "/template-clone" && req.method === "POST") {
       const source = templates.get(json.data.id);

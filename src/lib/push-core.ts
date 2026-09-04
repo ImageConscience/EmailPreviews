@@ -2,9 +2,9 @@ import { prisma } from "@/lib/db";
 import { AuthError } from "@/lib/auth";
 import { approvalFingerprint } from "@/lib/fingerprint";
 import { SecretError } from "@/lib/secret";
-import { KlaviyoError, assignTemplate, cancelCampaign, cloneTemplate, createCampaign,
+import { KlaviyoError, assignTemplate, cancelCampaign, createCampaign, createDndTemplate,
   deleteTemplate, fetchAudiences, fetchCampaign, fetchMessageTemplate, fetchTemplate,
-  scheduleCampaign, updateCampaign, updateDndTemplate,
+  scheduleCampaign, updateCampaign,
   type Audience, type CampaignContent } from "@/lib/klaviyo";
 import { klaviyoKeyForCompany } from "@/lib/klaviyo-key";
 import { renderRow } from "@/lib/render-row";
@@ -473,23 +473,27 @@ export async function performPush(
           "The base template has to be a drag-and-drop one.",
       };
     }
-    // Check the base before cloning: a refusal after the clone leaves a stray
-    // template in the client's library for someone to clear up.
-    const probe = findContentBlock(base.definition);
-    if ("error" in probe) return { ok: false, error: probe.error };
-
-    const cloneId = await cloneTemplate(apiKey, ready.baseTemplateId, ready.templateName);
-    const clone = await fetchTemplate(apiKey, cloneId);
-    const target = findContentBlock(clone.definition);
+    /*
+     * Build the send's template from the base's structure, filled in, in one
+     * create -- rather than cloning it and then editing the clone.
+     *
+     * Klaviyo will not update a template that holds blocks shared with other
+     * templates, and it judges that by the template as stored: a clone of a
+     * base with a shared footer can never be written to, however the update is
+     * phrased. Assembling the finished definition here and posting it once
+     * avoids the question, and leaves nothing half-made behind if it fails.
+     */
+    const definition = JSON.parse(JSON.stringify(base.definition)) as Record<string, unknown>;
+    const target = findContentBlock(definition);
     if ("error" in target) return { ok: false, error: target.error };
 
     target.block.data = { ...(target.block.data ?? {}), content: ready.html };
 
-    // Klaviyo will not write back a template holding blocks shared with other
-    // templates, and the clone inherits every such reference from the base. The
-    // clone is a frozen copy of one approved campaign, so the reference is the
-    // part to give up; the content stays, and the base template keeps its own.
-    const detached = detachUniversalBlocks(clone.definition);
+    // The shared blocks come across as ordinary ones. The content is kept; only
+    // the link to the original is given up, which is what makes this template
+    // writable and what keeps a later edit in Klaviyo from changing a send that
+    // has already been approved.
+    const detached = detachUniversalBlocks(definition);
     if (detached > 0) {
       const one = detached === 1;
       ready.notes.push(
@@ -499,7 +503,11 @@ export async function performPush(
       );
     }
 
-    await updateDndTemplate(apiKey, cloneId, ready.templateName, clone.definition);
+    // These name the template it was read from; a new one gets its own.
+    delete definition.id;
+    delete definition.template_id;
+
+    const cloneId = await createDndTemplate(apiKey, ready.templateName, definition);
 
     // --- the campaign -----------------------------------------------------
     const existing = await prisma.klaviyoPush.findUnique({

@@ -43,6 +43,7 @@ const state = async () => (await fetch("http://127.0.0.1:4599/__state")).json() 
   templates: { id: string; name: string; definition: unknown }[];
   campaigns: { id: string; attributes: Record<string, unknown>; templateId: string | null; status: string }[];
   sendJobs: unknown[];
+  calls: string[];
 }>;
 
 await fetch("http://127.0.0.1:4599/__reset");
@@ -508,6 +509,16 @@ console.log("\nUniversal blocks in the base template");
   await approve();
   const pushed = await performPush(company.id, row.id, tpl.id, user.id, "draft");
   check("a base template with a shared block can still be pushed", pushed.ok, pushed.error);
+
+  const seen = (await state()).calls;
+  check("the send's template is created outright, not cloned",
+    seen.some((c) => c === "POST /templates") && !seen.some((c) => c.includes("template-clone")),
+    seen.filter((c) => c.includes("template")).join(", "));
+  // The step Klaviyo refuses on a template with shared blocks. Not doing it at
+  // all is what makes the shared footer a non-issue rather than a workaround.
+  check("...and never edited afterwards",
+    !seen.some((c) => /^PATCH \/templates\//.test(c)),
+    seen.filter((c) => c.startsWith("PATCH")).join(", "));
 
   const base = (await state()).templates.find((t) => t.id === "BASE01");
   check("the base template still has its shared footer",
