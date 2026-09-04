@@ -605,3 +605,27 @@ async function workingRevision(
   }
   return null;
 }
+
+/**
+ * Which template the campaign message actually points at.
+ *
+ * Assignment is a relationship, and Klaviyo may or may not put its own copy on
+ * the other end of it. That difference decides whether the template this app
+ * cloned is still load-bearing or is now litter, and it is not a thing to
+ * assume: deleting a template a scheduled campaign depends on would empty an
+ * email on its way to a client's customers. So it is read back and compared.
+ */
+export async function fetchMessageTemplate(
+  apiKey: string,
+  messageId: string,
+): Promise<string | null> {
+  const body = await call<{
+    data: { relationships?: { template?: { data?: { id?: string } | null } } };
+  }>(apiKey, `/campaign-messages/${messageId}`, { query: { include: "template" } });
+  return body.data?.relationships?.template?.data?.id ?? null;
+}
+
+/** Remove a template. Used only on a clone nothing points at any more. */
+export async function deleteTemplate(apiKey: string, templateId: string): Promise<void> {
+  await call(apiKey, `/templates/${templateId}`, { method: "DELETE" });
+}

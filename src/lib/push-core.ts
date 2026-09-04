@@ -3,7 +3,8 @@ import { AuthError } from "@/lib/auth";
 import { approvalFingerprint } from "@/lib/fingerprint";
 import { SecretError } from "@/lib/secret";
 import { KlaviyoError, assignTemplate, cancelCampaign, cloneTemplate, createCampaign,
-  fetchAudiences, fetchCampaign, fetchTemplate, scheduleCampaign, updateCampaign, updateDndTemplate,
+  deleteTemplate, fetchAudiences, fetchCampaign, fetchMessageTemplate, fetchTemplate,
+  scheduleCampaign, updateCampaign, updateDndTemplate,
   type Audience, type CampaignContent } from "@/lib/klaviyo";
 import { klaviyoKeyForCompany } from "@/lib/klaviyo-key";
 import { renderRow } from "@/lib/render-row";
@@ -490,9 +491,11 @@ export async function performPush(
     // part to give up; the content stays, and the base template keeps its own.
     const detached = detachUniversalBlocks(clone.definition);
     if (detached > 0) {
+      const one = detached === 1;
       ready.notes.push(
-        `${detached} reusable ${detached === 1 ? "block was" : "blocks were"} copied into this ` +
-          "campaign rather than linked, so later edits to them in Klaviyo will not change it.",
+        `${detached} reusable ${one ? "block was" : "blocks were"} copied into this campaign ` +
+          `rather than linked, so later edits to ${one ? "it" : "them"} in Klaviyo will not ` +
+          "change this send.",
       );
     }
 
@@ -525,6 +528,31 @@ export async function performPush(
 
     await assignTemplate(apiKey, refs.messageId, cloneId);
 
+    /*
+     * Tidy up the clone, but only once it is provably not the thing the
+     * campaign is made of.
+     *
+     * Assignment is a relationship, and if Klaviyo took its own copy then the
+     * message points at that and this clone is litter -- a template per send,
+     * piling up in the client's library forever. If instead the message points
+     * straight at this clone, deleting it would empty a campaign that may
+     * already be scheduled. So read back which it is rather than believing
+     * either story, and delete only in the first case.
+     */
+    const held = await fetchMessageTemplate(apiKey, refs.messageId).catch(() => cloneId);
+    const orphans = [cloneId, existing?.klaviyoTemplateId]
+      .filter((id): id is string => Boolean(id) && id !== held);
+    let tidied = 0;
+    for (const id of [...new Set(orphans)]) {
+      try {
+        await deleteTemplate(apiKey, id);
+        tidied += 1;
+      } catch {
+        // Cleanup is not worth failing a push that has otherwise worked; the
+        // stray template is untidy, not broken.
+      }
+    }
+
     const audienceNames = [
       ...included.names,
       ...excluded.names.map((n) => `excluding ${n}`),
@@ -538,13 +566,13 @@ export async function performPush(
       where: { rowId_templateId: { rowId, templateId } },
       create: {
         rowId, templateId,
-        campaignId: refs.campaignId, messageId: refs.messageId, klaviyoTemplateId: cloneId,
+        campaignId: refs.campaignId, messageId: refs.messageId, klaviyoTemplateId: held ?? cloneId,
         contentHash: ready.contentHash, status: mode,
         scheduledFor: content.sendAt, campaignName: content.name,
         audienceNames, pushedById: userId,
       },
       update: {
-        campaignId: refs.campaignId, messageId: refs.messageId, klaviyoTemplateId: cloneId,
+        campaignId: refs.campaignId, messageId: refs.messageId, klaviyoTemplateId: held ?? cloneId,
         contentHash: ready.contentHash, status: mode,
         scheduledFor: content.sendAt, campaignName: content.name,
         audienceNames, pushedById: userId, pushedAt: new Date(),
@@ -560,6 +588,10 @@ export async function performPush(
           : `Draft created in Klaviyo. Sending to ${audienceNames} when scheduled.`,
         ...(unscheduled && mode !== "scheduled"
           ? ["It was scheduled in Klaviyo before this push, and is now back to a draft."]
+          : []),
+        ...(tidied > 0
+          ? [`Tidied up ${tidied} one-off ${tidied === 1 ? "template" : "templates"} Klaviyo no ` +
+             "longer needs."]
           : []),
         ...overrideNotes,
         ...ready.notes,

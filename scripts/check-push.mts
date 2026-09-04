@@ -26,6 +26,19 @@ const check = (name: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "  ok  " : "  FAIL"}  ${name}${detail ? "  — " + detail : ""}`);
   if (!ok) bad++;
 };
+/**
+ * The template the campaign is actually made of.
+ *
+ * Not "the clone": once the clone has been tidied away, what the campaign holds
+ * is Klaviyo's own copy of it. Checks about the filled content want whichever
+ * one the campaign points at.
+ */
+const filledTemplate = async () => {
+  const live = await state();
+  const id = live.campaigns[0]?.templateId ?? "";
+  return live.templates.find((t) => t.id === id) ?? null;
+};
+
 const state = async () => (await fetch("http://127.0.0.1:4599/__state")).json() as Promise<{
   templates: { id: string; name: string; definition: unknown }[];
   campaigns: { id: string; attributes: Record<string, unknown>; templateId: string | null; status: string }[];
@@ -169,9 +182,9 @@ check("an approved row pushes", r.ok, r.error);
 r.notes?.forEach((n) => console.log("        note:", n));
 
 let s = await state();
-const clone = s.templates.find((t) => t.id.startsWith("TPL"));
-check("the base template was cloned", !!clone, clone?.name);
-check("the clone is named for the campaign", clone?.name?.startsWith("Winter Edit") ?? false);
+const clone = await filledTemplate();
+check("the base template was cloned and filled", !!clone, clone?.name);
+check("the clone is named for the campaign", (clone?.name ?? "").startsWith("Winter Edit"));
 
 const blocks: { type?: string; data?: { content?: string } }[] = [];
 JSON.stringify(clone?.definition, (k, v) => {
@@ -433,6 +446,58 @@ check("...and it said so", (r.notes ?? []).some((n) => /went stale/.test(n)),
   (r.notes ?? []).find((n) => /stale/.test(n)));
 await prisma.template.delete({ where: { id: printing.id } });
 
+// --- tidying up the one-off templates ------------------------------------
+// A clone per send piles up in a client's library forever, so it should go once
+// it is not needed. Whether it IS needed depends on what Klaviyo does with an
+// assignment, which this app does not get to assume: if the message points at
+// the clone, deleting it empties a campaign that may already be scheduled. So
+// the mock plays both, and the client has to get it right without being told.
+console.log("\nTidying up the per-send clones");
+for (const [mode, why] of [
+  ["copy", "Klaviyo takes its own copy"],
+  ["reference", "the message points at ours"],
+] as const) {
+  await fetch(`http://127.0.0.1:4599/__assign-mode?mode=${mode}`);
+  await fetch("http://127.0.0.1:4599/__reset");
+  await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+  await approve();
+
+  r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+  check(`it pushes when ${why}`, r.ok, r.error);
+
+  s = await state();
+  const message = s.campaigns[0];
+  const held = message?.templateId ?? "";
+  const survives = s.templates.some((t) => t.id === held);
+  check(`...and what the campaign points at still exists (${mode})`, survives, held);
+
+  const clones = s.templates.filter((t) => t.id.startsWith("TPL"));
+  if (mode === "copy") {
+    check("...the clone is gone, since nothing points at it", clones.length === 0,
+      clones.map((t) => t.id).join(", "));
+    check("...and the push says it tidied up",
+      (r.notes ?? []).some((n) => /Tidied up/.test(n)), (r.notes ?? []).join(" | "));
+  } else {
+    check("...the clone is kept, because deleting it would empty the campaign",
+      clones.length === 1, `${clones.length}`);
+    check("...and the push does not claim to have tidied anything",
+      !(r.notes ?? []).some((n) => /Tidied up/.test(n)));
+  }
+
+  // Pushing again must not leave the previous one behind either.
+  const before = (await state()).templates.length;
+  r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+  s = await state();
+  check(`...and a second push does not grow the library (${mode})`,
+    r.ok && s.templates.length <= before, `${before} -> ${s.templates.length}`);
+  check("...with the campaign still pointing at something real",
+    s.templates.some((t) => t.id === (s.campaigns[0]?.templateId ?? "")),
+    s.campaigns[0]?.templateId ?? "none");
+}
+await fetch("http://127.0.0.1:4599/__assign-mode?mode=copy");
+await fetch("http://127.0.0.1:4599/__reset");
+await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+
 // --- templates holding shared blocks -------------------------------------
 // Klaviyo refuses to write back a template containing universal blocks, and a
 // clone inherits every one of them from the base. The base template here has a
@@ -440,12 +505,20 @@ await prisma.template.delete({ where: { id: printing.id } });
 // these check it kept what it was supposed to and gave up only the link.
 console.log("\nUniversal blocks in the base template");
 {
+  await approve();
+  const pushed = await performPush(company.id, row.id, tpl.id, user.id, "draft");
+  check("a base template with a shared block can still be pushed", pushed.ok, pushed.error);
+
   const base = (await state()).templates.find((t) => t.id === "BASE01");
   check("the base template still has its shared footer",
     JSON.stringify(base?.definition).includes('"universal_id"'));
 
-  const clone = (await state()).templates.find((t) => t.id.startsWith("TPL"));
-  check("...and a clone was written despite it", Boolean(clone));
+  // Whatever the campaign ended up holding -- the clone, or Klaviyo's copy of
+  // it once the clone has been tidied away.
+  const live = await state();
+  const clone = live.templates.find((t) => t.id === (live.campaigns[0]?.templateId ?? ""));
+  check("...and a filled template was written despite it", Boolean(clone),
+    live.campaigns[0]?.templateId ?? "none");
   check("...with the shared link dropped, which is why it could be written",
     !JSON.stringify(clone?.definition ?? {}).includes('"universal_id"'));
   check("...but the footer's content kept",
@@ -550,8 +623,8 @@ await approve();
 r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
 check("and a push works against such an account", r.ok, r.error);
 s = await state();
-const filledPlain = (() => {
-  const clone = s.templates.find((t) => t.id.startsWith("TPL"));
+const filledPlain = await (async () => {
+  const clone = await filledTemplate();
   const out: string[] = [];
   JSON.stringify(clone?.definition, (k, v) => {
     if (v && typeof v === "object" && (v as { type?: string }).type === "html") {

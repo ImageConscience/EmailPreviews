@@ -61,8 +61,25 @@ const DEFINITION_REVISION = "2026-01-15";
  */
 let templateMode = "additional-fields";
 
+/**
+ * What assigning a template to a campaign message leaves behind.
+ *
+ * "copy" -- Klaviyo takes its own non-reusable copy and the message points at
+ * that, so the template that was assigned is now litter. "reference" -- the
+ * message points at the assigned template itself, and deleting it would empty
+ * the campaign. Which of these the real API does decides whether tidying up is
+ * housekeeping or destruction, so the mock plays both and the client is
+ * required to get it right without being told which.
+ */
+let assignMode = "copy";
+
 createServer((req, res) => {
   const url = new URL(req.url, "http://x");
+  if (url.pathname === "/__assign-mode") {
+    assignMode = url.searchParams.get("mode") ?? "copy";
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ assignMode }));
+  }
   if (url.pathname === "/__template-mode") {
     templateMode = url.searchParams.get("mode") ?? "additional-fields";
     res.writeHead(200, { "content-type": "application/json" });
@@ -179,6 +196,14 @@ createServer((req, res) => {
       }
       return send(200, { data: { id: t.id, attributes } });
     }
+    if (templateMatch && req.method === "DELETE") {
+      if (!templates.has(templateMatch[1])) {
+        return send(404, { errors: [{ detail: "No template with that id." }] });
+      }
+      templates.delete(templateMatch[1]);
+      res.writeHead(204);
+      return res.end();
+    }
     if (templateMatch && req.method === "PATCH") {
       const t = templates.get(templateMatch[1]);
       if (!t) return send(404, { errors: [{ detail: "No template with that id." }] });
@@ -243,8 +268,25 @@ createServer((req, res) => {
       if (c.status === "Scheduled") {
         return send(409, { errors: [{ detail: "Cannot change the content of a scheduled campaign." }] });
       }
-      c.templateId = json.data.relationships.template.data.id;
+      const assigned = json.data.relationships.template.data.id;
+      if (assignMode === "copy") {
+        // Klaviyo's own non-reusable version, which is what the message ends up
+        // holding; the template that was handed over is then unreferenced.
+        const source = templates.get(assigned);
+        const copyId = `MSGTPL${nextId++}`;
+        templates.set(copyId, { ...source, id: copyId, name: `${source?.name ?? ""} (message copy)` });
+        c.templateId = copyId;
+      } else {
+        c.templateId = assigned;
+      }
       return send(200, { data: { id: json.data.id } });
+    }
+    const messageMatch = /^\/campaign-messages\/([^/]+)$/.exec(p);
+    if (messageMatch && req.method === "GET") {
+      const c = [...campaigns.values()].find((x) => x.messageId === messageMatch[1]);
+      if (!c) return send(404, { errors: [{ detail: "No message with that id." }] });
+      return send(200, { data: { id: c.messageId, type: "campaign-message",
+        relationships: { template: { data: c.templateId ? { type: "template", id: c.templateId } : null } } } });
     }
     const cancelMatch = /^\/campaign-send-jobs\/([^/]+)$/.exec(p);
     if (cancelMatch && req.method === "PATCH") {
