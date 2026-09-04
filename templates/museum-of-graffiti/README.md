@@ -213,7 +213,7 @@ Name it `Tee Membership` when pasting it in.
 
 ## Prices are worked out, not typed
 
-`retail_price` and `member_price` are placeholders in both tee templates, but
+`retail_price` and `member_price` are placeholders in `03` and `04`, but
 neither has to be filled in. When they are blank the app derives them:
 
 - **`retail_price`** takes the featured product's own price, so it is whatever
@@ -299,3 +299,42 @@ products, so each block has a **Skip** box: set the second to skip what the
 first took — 4, usually — and the collection reads straight through the email.
 It is the fourth field of the cell (`handle | order | count | skip`) for anyone
 typing it rather than clicking.
+
+## 06-single-product-focus (35)
+
+`04` with the membership taken out of it. Same masthead, same one-product hero,
+same closing grid — for the send that is about a product rather than about the
+club. Three things differ, and the third follows from the second:
+
+- **One price, not two.** `04` shows a member figure beside a struck-through
+  retail one; here there is a single `product_1_price`, plain. That drops
+  `member_price` and `retail_price` from the set, so nothing has to be derived
+  and nothing has to be typed — the number is whatever the shop says. An empty
+  cell collapses the line rather than leaving a gap, on the same `p:empty` rule
+  the other paragraphs use.
+- **No Meet the Artist block.** With it go `artist_name`, `artist_image` and
+  `artist_bio` — and `cta_url`, which that block's button was the only user of.
+  `cta_text` stays: the hero button still carries it, pointed at
+  `product_1_url`, exactly as in `04`.
+- **The More section is reversed out on black.** Meet the Artist was this
+  email's second dark beat, and without it everything below the masthead ran
+  pale into a black footer. The grid takes the beat over: section label, tile
+  titles and prices go white, the *Shop >* links stay `#f35a48`, and each
+  picture keeps its light `#f6f6f4` plate — the treatment `05` already uses for
+  a product on black. Badges are unchanged; an accent chip reads on black as
+  well as on white.
+
+The closing button moved with the ground. In the sister templates it is black
+on white; left that way it punched a white strip through the black between the
+grid and the footer and read as a fault, so it is white on black here. Same
+relationship, inverted.
+
+`accent_color` `masthead_overline` `masthead_title` `masthead_body`
+`hero_cta_url` `hero_cta_text`
+`product_1_{image,title,description,price,url}` `cta_text` `more_label`
+`product_5…8_{image,title,price,url,badge}` `footer_cta_url` `footer_cta_text`.
+
+`masthead_title` and `masthead_body` are still raw (`{{{ }}}`), so the `<br>`
+that splits the display title across two lines works as it does in `04`.
+
+Name it `Single Product Focus` when pasting it in.
