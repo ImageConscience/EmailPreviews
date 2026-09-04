@@ -619,6 +619,97 @@ CHROME = [
 # so it is checked here rather than left to be noticed in a preview.
 COLLAPSING = ("swatch", "badge")
 
+# Text elements whose alignment a mail platform is liable to have an opinion
+# about. Anything that carries words and can be targeted by a bare tag selector.
+ALIGNABLE = ("h1", "h2", "h3", "h4", "p")
+
+
+def pin_text_alignment(html: str) -> str:
+    """Write each cell's alignment onto the text inside it.
+
+    A heading centred by its parent cell is centred by inheritance, and
+    inheritance is the weakest thing in CSS. Klaviyo's drag-and-drop templates
+    carry their own heading and paragraph styles -- typically `text-align: left`
+    -- and a rule that matches the element beats alignment inherited from its
+    parent. So a hero that is centred in the preview arrives left-aligned, which
+    is what happened, and happened equally to templates pasted in by hand.
+
+    Saying it on the element itself settles it: an inline style outranks any
+    stylesheet the platform wraps around the content.
+    """
+    from html.parser import HTMLParser
+
+    class Pin(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=False)
+            self.out: list[str] = []
+            self.cells: list[str | None] = []
+
+        def _alignment(self, attrs: dict[str, str]) -> str | None:
+            style = attrs.get("style", "")
+            found = re.search(r"text-align\s*:\s*(left|center|right)", style)
+            if found:
+                return found.group(1)
+            align = attrs.get("align", "").lower()
+            return align if align in ("left", "center", "right") else None
+
+        def handle_starttag(self, tag: str, attrs_list) -> None:
+            attrs = {k: (v or "") for k, v in attrs_list}
+            if tag in ("td", "th"):
+                self.cells.append(self._alignment(attrs))
+            elif tag in ALIGNABLE and self.cells:
+                inherited = self.cells[-1]
+                if inherited and not re.search(r"text-align\s*:", attrs.get("style", "")):
+                    attrs["style"] = f"text-align:{inherited}; " + attrs.get("style", "")
+            rendered = "".join(f' {k}="{v}"' if v != "" else f" {k}" for k, v in attrs.items())
+            self.out.append(f"<{tag}{rendered}>")
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag in ("td", "th") and self.cells:
+                self.cells.pop()
+            self.out.append(f"</{tag}>")
+
+        def handle_startendtag(self, tag: str, attrs_list) -> None:
+            rendered = "".join(f' {k}="{v}"' if (v or "") != "" else f" {k}" for k, v in attrs_list)
+            self.out.append(f"<{tag}{rendered}>")
+
+        def handle_data(self, data: str) -> None:
+            self.out.append(data)
+
+        def handle_entityref(self, name: str) -> None:
+            self.out.append(f"&{name};")
+
+        def handle_charref(self, name: str) -> None:
+            self.out.append(f"&#{name};")
+
+        def handle_comment(self, data: str) -> None:
+            self.out.append(f"<!--{data}-->")
+
+        def handle_decl(self, decl: str) -> None:
+            self.out.append(f"<!{decl}>")
+
+    pin = Pin()
+    pin.feed(html)
+    return "".join(pin.out)
+
+
+def alignment_faults(html: str) -> list[str]:
+    """Any text element left relying on inheritance inside an aligned cell."""
+    faults = []
+    cell = None
+    for token in re.finditer(r"<(/?)(td|th|h1|h2|h3|h4|p)\b([^>]*)>", html):
+        closing, tag, attrs = token.groups()
+        if tag in ("td", "th"):
+            if closing:
+                cell = None
+            else:
+                found = re.search(r"text-align\s*:\s*(left|center|right)", attrs)
+                align = re.search(r'align="(left|center|right)"', attrs)
+                cell = found.group(1) if found else (align.group(1) if align else None)
+        elif not closing and cell and not re.search(r"text-align\s*:", attrs):
+            faults.append(f"<{tag}> inherits its alignment from a {cell} cell")
+    return faults
+
 
 def collapse_faults(html: str) -> list[str]:
     faults = []
@@ -631,7 +722,7 @@ def collapse_faults(html: str) -> list[str]:
 if __name__ == "__main__":
     failed = False
     for filename, (name, fn) in TEMPLATES.items():
-        html = fn()
+        html = pin_text_alignment(fn())
         (OUT / filename).write_text(html, encoding="utf-8")
         ph = sorted(set(re.findall(r"\{\{\{?\s*([a-zA-Z0-9_]+)\s*\}?\}\}", html)))
         checks = []
@@ -646,7 +737,7 @@ if __name__ == "__main__":
             if got != want:
                 failed = True
                 checks.append(f"{label} {got}/{want} MISSING")
-        for fault in dict.fromkeys(collapse_faults(html)):
+        for fault in dict.fromkeys(collapse_faults(html) + alignment_faults(html)):
             failed = True
             checks.append(fault)
         print(f"{filename:28} {name:18} {len(ph):3} placeholders   {' · '.join(checks)}")
