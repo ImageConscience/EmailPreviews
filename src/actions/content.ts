@@ -15,6 +15,9 @@ import {
 import { parseSheetFile } from "@/lib/sheet";
 import { takeHiddenFlags } from "@/lib/sheet-export";
 import { parseRecord, parseStringArray } from "@/lib/json";
+import { applyFields, createEmail, type NewEmail } from "@/lib/compose";
+
+export type { NewEmail };
 
 export interface FormState {
   error?: string;
@@ -256,17 +259,6 @@ export async function addRowAction(companyId: string, sheetId: string): Promise<
   revalidatePath(`/c/${companyId}/sheets/${sheetId}`);
 }
 
-export interface NewEmail {
-  /** An existing sheet, or empty to start one. */
-  sheetId: string;
-  templateId: string;
-  campaign: string;
-  subject: string;
-  preheader: string;
-  sendDate: string;
-  sendTime: string;
-}
-
 export interface NewEmailResult {
   ok: boolean;
   error?: string;
@@ -294,82 +286,11 @@ export async function createEmailAction(
   try {
     const access = await requireCompanyAccess(companyId, "member");
 
-    const template = await prisma.template.findFirst({
-      where: { id: input.templateId, companyId },
-      select: { id: true, name: true },
-    });
-    if (!template) return { ok: false, error: "Choose a template." };
-
-    // A row with no name is a blank line in every list that shows it, and the
-    // one thing that cannot be worked out later from the template.
-    const campaign = input.campaign.trim();
-    if (!campaign) return { ok: false, error: "Give it a name." };
-
-    const time = input.sendTime.trim();
-    const date = input.sendDate.trim();
-    if (time && !date) return { ok: false, error: "A send time needs a date to go with it." };
-
-    // A company with no sheet yet still has to be able to start: one is made
-    // rather than sending somebody to another screen to make it first.
-    let sheet = input.sheetId
-      ? await prisma.contentSheet.findFirst({ where: { id: input.sheetId, companyId } })
-      : await prisma.contentSheet.findFirst({ where: { companyId }, orderBy: { createdAt: "asc" } });
-    if (!sheet) {
-      sheet = await prisma.contentSheet.create({
-        data: {
-          companyId,
-          name: "Added in app",
-          columns: JSON.stringify(["template", "campaign", "subject", "preheader", "send_date", "send_time"]),
-        },
-      });
-    }
-
-    const columns = parseStringArray(sheet.columns);
-    const envelope = envelopeSlots(findEnvelopeColumns(columns));
-    const templateColumn = findTemplateColumn(columns) ?? "template";
-    const campaignColumn =
-      columns.find((c) => ["campaign", "campaign_name"].includes(normalizeKey(c))) ?? "campaign";
-
-    // Start from the sheet's shape so the row has every column the others have,
-    // then fill in what was asked for.
-    const values: Record<string, string> = Object.fromEntries(columns.map((c) => [c, ""]));
-    values[templateColumn] = template.name;
-    values[campaignColumn] = campaign;
-    values[envelope.subject] = input.subject.trim();
-    values[envelope.preheader] = input.preheader.trim();
-    values[envelope.sendDate] = date;
-    values[envelope.sendTime] = time;
-
-    const lowered = new Set(columns.map((c) => c.toLowerCase()));
-    const added = Object.keys(values).filter((k) => !lowered.has(k.toLowerCase()));
-
-    const last = await prisma.sheetRow.findFirst({
-      where: { sheetId: sheet.id },
-      orderBy: { position: "desc" },
-    });
-
-    const [row] = await prisma.$transaction([
-      prisma.sheetRow.create({
-        data: {
-          sheetId: sheet.id,
-          position: (last?.position ?? -1) + 1,
-          data: JSON.stringify(values),
-          createdById: access.user.id,
-        },
-      }),
-      ...(added.length > 0
-        ? [
-            prisma.contentSheet.update({
-              where: { id: sheet.id },
-              data: { columns: JSON.stringify([...columns, ...added]) },
-            }),
-          ]
-        : []),
-    ]);
+    const made = await createEmail(access.user.id, companyId, input);
 
     revalidatePath(`/c/${companyId}/overview`);
-    revalidatePath(`/c/${companyId}/sheets/${sheet.id}`);
-    return { ok: true, sheetId: sheet.id, rowId: row.id };
+    revalidatePath(`/c/${companyId}/sheets/${made.sheetId}`);
+    return { ok: true, sheetId: made.sheetId, rowId: made.rowId };
   } catch (error) {
     return { ok: false, error: fail(error).error };
   }
@@ -433,43 +354,13 @@ export async function saveRowAction(
     });
     if (!row) return { ok: false, error: "Row not found." };
 
-    const previous = parseRecord(row.data);
-    const next: Record<string, string> = { ...previous };
-    for (const [key, value] of Object.entries(values)) {
-      next[key] = value == null ? "" : String(value);
-    }
-
-    if (JSON.stringify(previous) === JSON.stringify(next)) {
-      return { ok: true, updatedAt: row.updatedAt.toISOString() };
-    }
-
-    // Any header the preview introduced becomes a real column on the sheet.
-    const columns = parseStringArray(row.sheet.columns);
-    const lowered = new Set(columns.map((c) => c.toLowerCase()));
-    const added = Object.keys(next).filter((k) => !lowered.has(k.toLowerCase()));
-
-    const [, updated] = await prisma.$transaction([
-      prisma.rowRevision.create({
-        data: {
-          rowId: row.id,
-          data: JSON.stringify(previous),
-          changedById: access.user.id,
-          note: note || null,
-        },
-      }),
-      prisma.sheetRow.update({ where: { id: row.id }, data: { data: JSON.stringify(next) } }),
-      ...(added.length > 0
-        ? [
-            prisma.contentSheet.update({
-              where: { id: row.sheetId },
-              data: { columns: JSON.stringify([...columns, ...added]) },
-            }),
-          ]
-        : []),
-    ]);
+    // The connector writes rows too, through this same function -- two copies
+    // of "save a row" would drift, and the half that drifted would be the one
+    // nobody was looking at.
+    const applied = await applyFields(access.user.id, row.id, values, note);
 
     revalidatePath(`/c/${companyId}/sheets/${row.sheetId}`);
-    return { ok: true, updatedAt: updated.updatedAt.toISOString() };
+    return { ok: true, updatedAt: applied.updatedAt };
   } catch (error) {
     const message = fail(error).error;
     return { ok: false, error: message };

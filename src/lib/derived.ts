@@ -149,6 +149,20 @@ const PACKED: PackedField[] = [
 /** The cells a sheet can carry instead of the fields they expand into. */
 export const PACKED_FIELDS = PACKED.map((p) => p.cell);
 
+/**
+ * Which fields each packed cell fills, worked out by running the expander
+ * rather than by listing them again here.
+ *
+ * The keys a packed cell produces are fixed whatever the value, so a probe
+ * value is enough to name them -- and a list written out by hand would be one
+ * more thing to forget when an expander changes.
+ */
+export function packedExpansions(): Record<string, string[]> {
+  return Object.fromEntries(
+    PACKED.map((p) => [p.cell, Object.keys(p.expand("probe"))]),
+  );
+}
+
 /** Blank, or whitespace only. */
 function empty(values: Record<string, string>, key: string): boolean {
   return (values[key] ?? "").trim() === "";

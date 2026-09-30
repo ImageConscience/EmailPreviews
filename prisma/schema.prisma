@@ -33,6 +33,42 @@ model User {
   uploads     MediaAsset[]  @relation("MediaUploader")
   notes       RowNote[]
   pushes      KlaviyoPush[]
+  apiTokens   ApiToken[]
+}
+
+/**
+ * A long-lived credential for reaching this company's content from outside the
+ * browser -- the MCP connector, a script, anything with no cookie to send.
+ *
+ * Stored as a hash rather than in the clear, unlike Session. A session cookie is
+ * short-lived, httpOnly and never leaves the browser; an API token is long-lived
+ * and gets pasted into third-party configuration, so it is kept the way a
+ * password is: shown once at creation and never recoverable afterwards.
+ *
+ * SHA-256 rather than bcrypt, deliberately. Bcrypt's cost exists to slow down
+ * guessing a human-chosen secret; this one is 32 random bytes, which no amount
+ * of guessing reaches. What the request path actually needs is to find the token
+ * by what was sent, and a salted hash cannot be looked up -- it would mean
+ * scanning every row on every call.
+ */
+model ApiToken {
+  id     String @id @default(cuid())
+  userId String
+  /// Free text, so a token can be recognised in the list before it is revoked.
+  label  String
+  hash   String @unique
+  /// The opening characters, kept in the clear so the list can say which is which.
+  prefix String
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  /// Set rather than deleted: a revoked token stays visible in the list, so
+  /// somebody who revoked one can see that they did.
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Session {
@@ -207,6 +243,11 @@ model Template {
   companyId    String
   name         String
   description  String?
+  /// Notes for whoever fills this template in, including an agent reaching it
+  /// over the connector. Judgement only -- which fields exist, which are raw
+  /// HTML and which the app derives are all computed from `html`, so writing
+  /// them here would only create something to go stale.
+  guidance     String?
   html         String
   /// JSON array of placeholder names discovered in `html`, cached on write.
   placeholders String   @default("[]")
