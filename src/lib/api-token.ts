@@ -55,19 +55,46 @@ export function hashToken(token: string): string {
 }
 
 /**
+ * Pull the token out of whichever header carries it.
+ *
+ * `Authorization: Bearer <token>` is the usual one. `X-Api-Key` is here because
+ * a client that sets its own headers does not always let you set that one --
+ * some reserve it for their own sign-in flow -- and being turned away by a
+ * client's header rules is a miserable thing to debug from this end, where all
+ * you see is a request with no credential.
+ *
+ * The `Bearer ` prefix is optional on both, since it is exactly the sort of
+ * thing that gets left off or doubled up when pasting into a form.
+ */
+function presentedToken(request: Request): string | null {
+  const candidates = [
+    request.headers.get("authorization"),
+    request.headers.get("x-api-key"),
+  ];
+  for (const raw of candidates) {
+    const value = (raw ?? "").trim();
+    if (!value) continue;
+    const token = /^Bearer\s+(.+)$/i.exec(value)?.[1]?.trim() ?? value;
+    if (token) return token;
+  }
+  return null;
+}
+
+/**
  * The token a request carries, if it carries one this app issued.
  *
- * `Authorization: Bearer <token>` is what every MCP client sends, so that is
- * what is read. The lookup is by hash, and the hash is compared again in
- * constant time -- the index lookup already decided the answer, but a unique
- * index is not a promise about timing.
+ * The lookup is by hash, and the hash is compared again in constant time --
+ * the index lookup already decided the answer, but a unique index is not a
+ * promise about timing.
  */
 export async function bearerFrom(request: Request): Promise<TokenBearer> {
-  const header = request.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  if (!match) throw new TokenError("Send an API token as `Authorization: Bearer <token>`.");
+  const presented = presentedToken(request);
+  if (!presented) {
+    throw new TokenError(
+      "Send an API token as `Authorization: Bearer <token>`, or as `X-Api-Key: <token>`.",
+    );
+  }
 
-  const presented = match[1].trim();
   const record = await prisma.apiToken.findUnique({
     where: { hash: hashToken(presented) },
     include: { user: { select: { id: true, email: true, name: true } } },

@@ -76,9 +76,18 @@ export function ConnectorPanel({
           <span>Server URL</span>
           <input type="text" value={url} readOnly onFocus={(e) => e.target.select()} />
         </label>
+        {/*
+          The dialog offers OAuth first and detects that this server wants *a*
+          credential, which reads as "it speaks OAuth" and sends people down a
+          flow that cannot work. Worth saying here rather than leaving them to
+          find out.
+        */}
         <p className="hint">
-          Add this as a custom connector in Claude, then paste a token below when it asks
-          you to sign in.
+          In Claude, add this as a custom connector and choose{" "}
+          <strong>No sign-in</strong> — this server uses an API key rather than OAuth.
+          Then add a request header of <code>Authorization</code> set to{" "}
+          <code>Bearer</code> followed by a token from below. (If it will not let you set
+          that header, use <code>X-Api-Key</code> with just the token.)
         </p>
 
         <hr style={{ margin: "22px 0", border: 0, borderTop: "1px solid var(--border)" }} />

@@ -107,6 +107,26 @@ async function callTool(name: string, args: Record<string, unknown>) {
 check("a request with no token is refused", (await rpc("initialize", {}, "")).status === 401);
 check("a made-up token is refused", (await rpc("initialize", {}, "ep_nope")).status === 401);
 
+// A client that sets its own headers may not let you set Authorization, so the
+// token is accepted three ways. All three are checked, because "works when
+// pasted the obvious way" is exactly the assumption that costs a round trip.
+async function headerAuth(headers: Record<string, string>) {
+  const response = await fetch(`${BASE}/api/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 9999, method: "initialize",
+      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "1" } },
+    }),
+  });
+  const body = await response.json().catch(() => null);
+  return body?.result?.serverInfo?.name === "email-previews";
+}
+
+check("Authorization: Bearer <token> works", await headerAuth({ authorization: `Bearer ${token}` }));
+check("X-Api-Key: <token> works, for clients that reserve Authorization", await headerAuth({ "x-api-key": token }));
+check("a bare token with no Bearer prefix works too", await headerAuth({ authorization: token }));
+
 const init = await rpc("initialize", {
   protocolVersion: "2025-06-18",
   capabilities: {},

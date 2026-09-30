@@ -18,6 +18,19 @@ Your name in the top bar → **Claude connector**.
 Both of those go into Claude, where you add a custom connector — not back into
 this app.
 
+### What to choose in Claude's dialog
+
+This server authenticates with an API key, not OAuth, so:
+
+- **Authentication → No sign-in.** Its own description covers this case:
+  *"for servers that use an API key instead of OAuth"*. The "Detected" badge on
+  *Sign in now* means Claude noticed the server wants a credential, not that it
+  speaks OAuth — choosing it will fail.
+- **Request headers → Add header**, `Authorization` = `Bearer ep_…`.
+
+If the client will not let you set `Authorization` — some reserve it — use
+`X-Api-Key` = `ep_…` instead. The `Bearer ` prefix is optional on both.
+
 The token is shown once. Only its SHA-256 is stored, so nobody — including this
 app — can read it back; lose it and you make another. Revoking one takes effect
 on the next request.
