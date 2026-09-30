@@ -37,6 +37,7 @@ function fail(error: unknown): FormState {
 const templateSchema = z.object({
   name: z.string().trim().min(1, "Give the template a name."),
   description: z.string().trim().optional(),
+  guidance: z.string().trim().optional(),
   html: z.string().min(1, "Paste the template HTML."),
 });
 
@@ -51,6 +52,7 @@ export async function createTemplateAction(
     const parsed = templateSchema.safeParse({
       name: formData.get("name"),
       description: formData.get("description"),
+      guidance: formData.get("guidance"),
       html: formData.get("html"),
     });
     if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -60,6 +62,7 @@ export async function createTemplateAction(
         companyId,
         name: parsed.data.name,
         description: parsed.data.description || null,
+        guidance: parsed.data.guidance || null,
         html: parsed.data.html,
         placeholders: JSON.stringify(extractPlaceholders(parsed.data.html)),
       },
@@ -83,6 +86,7 @@ export async function updateTemplateAction(
     const parsed = templateSchema.safeParse({
       name: formData.get("name"),
       description: formData.get("description"),
+      guidance: formData.get("guidance"),
       html: formData.get("html"),
     });
     if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -93,6 +97,7 @@ export async function updateTemplateAction(
       data: {
         name: parsed.data.name,
         description: parsed.data.description || null,
+        guidance: parsed.data.guidance || null,
         html: parsed.data.html,
         placeholders: JSON.stringify(extractPlaceholders(parsed.data.html)),
       },

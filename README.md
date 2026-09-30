@@ -154,6 +154,14 @@ means "this version was approved".
   edit shows the sign-off as stale instead of carrying it forward. Approving
   is blocked while there are unsaved changes, for the same reason.
 
+- **Content gets written elsewhere, and has to land here.** Claude connects over
+  MCP (`Settings -> Integrations -> Claude connector`) and writes rows directly,
+  rather than going through an export-generate-upload round trip that makes a
+  new sheet every time. What it is told about each template is *computed from
+  the template*, never written down: a hand-kept rules list goes stale the first
+  time somebody adds a template, and a stale rule gets believed. See
+  [docs/connector.md](docs/connector.md).
+
 ---
 
 ## Running it
@@ -232,6 +240,11 @@ src/lib/approval.ts      approval fingerprinting and reviewer initials
 src/lib/media.ts         image types and formatting (shared with the browser)
 src/lib/media-server.ts  byte-level validation of uploads
 src/app/i/[file]/        public, unauthenticated image serving
+src/app/api/mcp/         the Claude connector (MCP over streamable HTTP)
+src/lib/mcp-server.ts    the connector's tools
+src/lib/field-guide.ts   template rules, computed from the template rather than listed
+src/lib/api-token.ts     bearer tokens for callers with no browser session
+src/lib/compose.ts       creating and writing rows, shared by the app and the connector
 src/app/c/[companyId]/   the signed-in app; preview/ is the workspace
 scripts/start.mjs        production start: check database, migrate, serve
 scripts/db-export.ts     dump every table to JSON (portable backup)
@@ -240,7 +253,10 @@ railway.json             build and start commands for Railway
 ```
 
 Every company-scoped read and write goes through `requireCompanyAccess`, which
-is the one place tenancy is enforced.
+is the one place tenancy is enforced. The connector has its own door into the
+same room -- `tokenCompanyAccess` -- which applies the identical rule to a
+bearer token, so a token opens nothing its owner could not already walk
+through.
 
 ---
 

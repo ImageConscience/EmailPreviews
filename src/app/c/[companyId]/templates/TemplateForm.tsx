@@ -15,7 +15,7 @@ export function TemplateForm({
   submitLabel,
 }: {
   action: Action;
-  defaults?: { name: string; description: string; html: string };
+  defaults?: { name: string; description: string; guidance: string; html: string };
   submitLabel: string;
 }) {
   const [state, dispatch] = useActionState(action, initial);
@@ -45,6 +45,32 @@ export function TemplateForm({
           />
         </label>
       </div>
+
+      {/*
+        Notes for whoever fills this in, including Claude over the connector.
+        Judgement only: which fields exist, which take raw HTML and which the
+        app derives are all worked out from the HTML below every time they are
+        asked for, so repeating them here would only create something to go
+        stale and be believed.
+      */}
+      <label className="field">
+        <span>Notes for whoever fills this in (optional)</span>
+        <textarea
+          name="guidance"
+          rows={4}
+          defaultValue={defaults?.guidance}
+          placeholder={
+            "House rules this template needs and nobody could guess — \n" +
+            "“product 1–4 are the featured items, 5–8 the closing grid”, \n" +
+            "“no .webp: Outlook shows a gap”."
+          }
+        />
+        <span className="hint">
+          Shown to anyone writing against this template, and sent to Claude over the
+          connector. The field list is worked out automatically — this is for the things
+          that are judgement.
+        </span>
+      </label>
 
       <label className="field">
         <span>HTML</span>

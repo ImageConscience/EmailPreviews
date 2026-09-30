@@ -43,6 +43,7 @@ export default async function TemplatePage({
           defaults={{
             name: template.name,
             description: template.description ?? "",
+            guidance: template.guidance ?? "",
             html: template.html,
           }}
           submitLabel="Save changes"

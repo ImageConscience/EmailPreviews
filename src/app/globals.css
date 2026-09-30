@@ -1239,3 +1239,49 @@ input:focus, select:focus, textarea:focus {
 .bulk-when, .bulk-to { color: var(--text-muted); overflow-wrap: anywhere; }
 .bulk-state { color: var(--text-faint); text-align: right; white-space: nowrap; }
 .bulk-state.is-bad { color: var(--danger); white-space: normal; text-align: left; }
+
+/* ---- Connector tokens ------------------------------------------------- */
+
+/* Shown once, so it is given the weight of something you have to act on now
+   rather than a line of output to scroll past. */
+.tok-new {
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.tok-value {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--rail);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  /* A token is long and has no spaces; without this it runs off the card. */
+  word-break: break-all;
+  user-select: all;
+}
+.tok-table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+}
+.tok-table th,
+.tok-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 13px;
+}
+.tok-table th {
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tok-table code {
+  font-size: 12px;
+  color: var(--muted);
+}

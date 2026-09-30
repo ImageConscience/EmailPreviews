@@ -17,7 +17,8 @@
     "klaviyo:mock": "node scripts/fixtures/klaviyo-mock.mjs",
     "check:push": "tsx scripts/check-push.mts",
     "check": "npm run check:roundtrip && npm run check:secrets && npm run check:zone && npm run check:blocks",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "check:mcp": "tsx scripts/check-mcp.mts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
@@ -37,6 +38,7 @@
     "@types/papaparse": "^5.3.15",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "playwright": "^1.63.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },

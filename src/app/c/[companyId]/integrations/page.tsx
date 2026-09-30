@@ -2,8 +2,10 @@ import { prisma } from "@/lib/db";
 import { guardCompany } from "@/lib/guard";
 import { IntegrationsPanel } from "./IntegrationsPanel";
 import { KlaviyoPanel } from "./KlaviyoPanel";
+import { ConnectorPanel } from "./ConnectorPanel";
 import { secretsAvailable } from "@/lib/secret";
 import { DEFAULT_TIMEZONE } from "@/lib/zone";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +17,7 @@ export default async function IntegrationsPage({
   const { companyId } = await params;
   const access = await guardCompany(companyId);
 
-  const [company, productCount, sample] = await Promise.all([
+  const [company, productCount, sample, tokens] = await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
       select: {
@@ -42,6 +44,10 @@ export default async function IntegrationsPage({
       take: 6,
       select: { id: true, title: true, price: true, imageUrl: true, available: true },
     }),
+    prisma.apiToken.findMany({
+      where: { userId: access.user.id },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   return (
@@ -60,6 +66,21 @@ export default async function IntegrationsPage({
         syncedAt={company?.catalogSyncedAt?.toISOString() ?? null}
         productCount={productCount}
         sample={sample}
+      />
+
+      {/* The connector is the one panel here that belongs to a person rather
+          than to the company, so it sits after the company's own settings. */}
+      <ConnectorPanel
+        companyId={companyId}
+        origin={await selfOrigin()}
+        tokens={tokens.map((t) => ({
+          id: t.id,
+          label: t.label,
+          prefix: t.prefix,
+          createdAt: t.createdAt.toISOString(),
+          lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
+          revokedAt: t.revokedAt?.toISOString() ?? null,
+        }))}
       />
 
       <KlaviyoPanel
@@ -85,4 +106,17 @@ export default async function IntegrationsPage({
       />
     </main>
   );
+}
+
+/**
+ * Where this app is being served from, so the panel can show a URL that
+ * actually works rather than one typed into an environment variable and
+ * forgotten. Behind Railway's proxy the forwarded headers are the only
+ * honest answer.
+ */
+async function selfOrigin(): Promise<string> {
+  const head = await headers();
+  const host = head.get("x-forwarded-host") ?? head.get("host") ?? "localhost:3000";
+  const proto = head.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
 }
