@@ -14,10 +14,13 @@ import { mintTokenAction, revokeTokenAction, type TokenSummary } from "@/actions
 export function ConnectorPanel({
   companyId,
   origin,
+  reaches,
   tokens,
 }: {
   companyId: string;
   origin: string;
+  /** Every company this person belongs to, which is exactly what a token reaches. */
+  reaches: { name: string; role: string }[];
   tokens: TokenSummary[];
 }) {
   const router = useRouter();
@@ -62,15 +65,11 @@ export function ConnectorPanel({
 
   return (
     <div className="card">
-      <div className="card-head">
-        <h2 style={{ margin: 0 }}>Claude connector</h2>
-      </div>
       <div className="card-pad">
         <p style={{ marginTop: 0 }}>
-          Write campaign content in a Claude project and have it land here, instead of
-          exporting a sheet and uploading the result. Claude reads each template&rsquo;s real
-          field list before it writes, so it knows which fields take HTML and which ones this
-          app works out for itself.
+          Instead of exporting a sheet and uploading the result, Claude reads each
+          template&rsquo;s real field list before it writes — so it knows which fields take
+          HTML and which ones this app works out for itself.
         </p>
 
         <label className="field">
@@ -85,10 +84,25 @@ export function ConnectorPanel({
         <hr style={{ margin: "22px 0", border: 0, borderTop: "1px solid var(--border)" }} />
 
         <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Your tokens</h3>
+        {/*
+          Naming the companies rather than describing them. "It reaches every
+          company you belong to" is a sentence you have to take on trust and
+          then work out the consequences of; a list is the answer itself.
+        */}
         <p className="hint" style={{ marginTop: 0 }}>
-          A token is yours, not this company&rsquo;s: it reaches every company you belong to,
-          with exactly the permissions you already have. It can never do anything you
-          could not do yourself.
+          A token is yours rather than any one company&rsquo;s. Each one reaches everything
+          you belong to, with exactly the role you already have there:
+        </p>
+        <ul className="tok-reach">
+          {reaches.map((company) => (
+            <li key={company.name}>
+              {company.name} <span className="hint">({company.role})</span>
+            </li>
+          ))}
+        </ul>
+        <p className="hint">
+          A token can never do anything you could not do yourself, and a company you are
+          not a member of is not reachable with one.
         </p>
 
         {minted && (

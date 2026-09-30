@@ -38,8 +38,9 @@ export function TopBar({ companyId, companyName, userName, role, canPush, otherC
     // to push to.
     ...(canPush ? [{ href: `${base}/push`, label: "Push" }] : []),
   ];
+  // Settings is how this *company* is configured. Anything about the person
+  // looking at it lives under their own name instead, on the right.
   const settings = [
-    { href: `${base}/profile`, label: "Profile" },
     { href: `${base}/templates`, label: "Templates" },
     { href: `${base}/sheets`, label: "Content" },
     { href: `${base}/media`, label: "Images" },
@@ -47,20 +48,32 @@ export function TopBar({ companyId, companyName, userName, role, canPush, otherC
     { href: `${base}/members`, label: "Team" },
   ];
 
-  const [open, setOpen] = useState(false);
+  const mine = [
+    { href: `${base}/profile`, label: "Profile" },
+    { href: `${base}/connector`, label: "Claude connector" },
+  ];
+
+  // Which menu is open, rather than whether one is: opening either should
+  // close the other, and two booleans drift into both being true.
+  const [open, setOpen] = useState<"settings" | "mine" | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const mineRef = useRef<HTMLDivElement>(null);
   const settingsActive = settings.some((link) => pathname.startsWith(link.href));
+  const mineActive = mine.some((link) => pathname.startsWith(link.href));
 
   // The menu closes on anything that means "I am done here": a click elsewhere,
   // Escape, or arriving on a new page.
-  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => setOpen(null), [pathname]);
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+      const inside =
+        menuRef.current?.contains(event.target as Node) ||
+        mineRef.current?.contains(event.target as Node);
+      if (!inside) setOpen(null);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") setOpen(null);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -90,13 +103,13 @@ export function TopBar({ companyId, companyName, userName, role, canPush, otherC
           <button
             type="button"
             className={`menu-trigger${settingsActive ? " active" : ""}`}
-            aria-expanded={open}
+            aria-expanded={open === "settings"}
             aria-haspopup="true"
-            onClick={() => setOpen((previous) => !previous)}
+            onClick={() => setOpen((previous) => (previous === "settings" ? null : "settings"))}
           >
             Settings <span aria-hidden="true">▾</span>
           </button>
-          {open && (
+          {open === "settings" && (
             <div className="menu-list" role="menu">
               {settings.map((link) => (
                 <Link
@@ -138,14 +151,43 @@ export function TopBar({ companyId, companyName, userName, role, canPush, otherC
           <option disabled>──────────</option>
           <option value={NEW_COMPANY}>+ New company…</option>
         </select>
-        <span className="hint" title={role} style={{ marginTop: 0 }}>
-          {userName}
-        </span>
-        <form action={logoutAction}>
-          <button type="submit" className="btn btn-ghost btn-sm">
-            Sign out
+        {/*
+          Your own name is where you look for your own things. Signing out
+          lives here too rather than beside it: it is the last item of a menu
+          about you, not a button competing with the company switcher.
+        */}
+        <div className="menu" ref={mineRef}>
+          <button
+            type="button"
+            className={`menu-trigger${mineActive ? " active" : ""}`}
+            aria-expanded={open === "mine"}
+            aria-haspopup="true"
+            title={role}
+            onClick={() => setOpen((previous) => (previous === "mine" ? null : "mine"))}
+          >
+            {userName} <span aria-hidden="true">▾</span>
           </button>
-        </form>
+          {open === "mine" && (
+            <div className="menu-list menu-right" role="menu">
+              {mine.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  role="menuitem"
+                  className={pathname.startsWith(link.href) ? "active" : ""}
+                >
+                  {link.label}
+                </Link>
+              ))}
+              <div className="menu-rule" />
+              <form action={logoutAction}>
+                <button type="submit" className="menu-signout" role="menuitem">
+                  Sign out
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

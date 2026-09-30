@@ -8,7 +8,7 @@ direction: Claude reads the templates and writes the rows.
 
 ## Setting it up
 
-Settings → Integrations → **Claude connector**.
+Your name in the top bar → **Claude connector**.
 
 1. **Server URL** — your own Email Previews address with `/api/mcp` on the end.
    The box has it filled in already; click it and copy.

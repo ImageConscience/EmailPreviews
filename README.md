@@ -155,7 +155,7 @@ means "this version was approved".
   is blocked while there are unsaved changes, for the same reason.
 
 - **Content gets written elsewhere, and has to land here.** Claude connects over
-  MCP (`Settings -> Integrations -> Claude connector`) and writes rows directly,
+  MCP (your name in the top bar -> `Claude connector`) and writes rows directly,
   rather than going through an export-generate-upload round trip that makes a
   new sheet every time. What it is told about each template is *computed from
   the template*, never written down: a hand-kept rules list goes stale the first
