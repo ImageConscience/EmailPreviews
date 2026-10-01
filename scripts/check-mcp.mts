@@ -124,6 +124,38 @@ async function headerAuth(headers: Record<string, string>) {
 }
 
 check("Authorization: Bearer <token> works", await headerAuth({ authorization: `Bearer ${token}` }));
+
+// A protocol version this SDK has not heard of used to be a 400, which a
+// client reads as a dead connection and recovers from by re-handshaking --
+// losing the connector mid-conversation. Speaking an older dialect beats
+// dropping the connection.
+check(
+  "a newer protocol version than this SDK knows is tolerated, not refused",
+  await headerAuth({ authorization: `Bearer ${token}`, "mcp-protocol-version": "2099-01-01" }),
+);
+check(
+  "a protocol version it does know still works",
+  await headerAuth({ authorization: `Bearer ${token}`, "mcp-protocol-version": "2025-06-18" }),
+);
+
+// There is no server-to-client channel here, and holding one open looks from
+// the client's end exactly like a connection that died.
+const stream = await fetch(`${BASE}/api/mcp`, {
+  method: "GET",
+  headers: { authorization: `Bearer ${token}`, accept: "text/event-stream" },
+});
+check("GET is refused rather than left hanging", stream.status === 405, `got ${stream.status}`);
+check("and it says which method to use", stream.headers.get("allow") === "POST");
+await stream.body?.cancel();
+
+// WWW-Authenticate reads as an offer of OAuth, and a client that takes it up
+// goes hunting for discovery documents this server does not have.
+const anon = await fetch(`${BASE}/api/mcp`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: "{}",
+});
+check("the 401 does not advertise an OAuth flow that does not exist", anon.headers.get("www-authenticate") === null);
 check("X-Api-Key: <token> works, for clients that reserve Authorization", await headerAuth({ "x-api-key": token }));
 check("a bare token with no Bearer prefix works too", await headerAuth({ authorization: token }));
 
