@@ -52,8 +52,8 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-/** Monday-first, because a send calendar is a working week. */
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** Sunday-first, as a US wall calendar reads. */
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function OverviewBoard({
   companyId,
@@ -737,10 +737,11 @@ function CalendarView({
   const [year, monthNumber] = month.split("-").map(Number);
   const today = todayIso();
 
-  /** Six weeks of cells starting on the Monday on or before the 1st. */
+  /** Six weeks of cells starting on the Sunday on or before the 1st. */
   const cells = useMemo(() => {
     const first = new Date(year, monthNumber - 1, 1);
-    const weekday = (first.getDay() + 6) % 7; // Sunday is 0; we want Monday 0
+    // getDay() is already Sunday-indexed, so it is the offset as it stands.
+    const weekday = first.getDay();
     const start = todayIso(new Date(year, monthNumber - 1, 1 - weekday));
     return Array.from({ length: 42 }, (_, i) => shiftIso(start, i));
   }, [year, monthNumber]);
