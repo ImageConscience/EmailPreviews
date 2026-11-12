@@ -15,7 +15,7 @@ import {
 import { parseSheetFile } from "@/lib/sheet";
 import { takeHiddenFlags } from "@/lib/sheet-export";
 import { parseRecord, parseStringArray } from "@/lib/json";
-import { applyFields, createEmail, type NewEmail } from "@/lib/compose";
+import { applyFields, createEmail, setHidden, type NewEmail } from "@/lib/compose";
 
 export type { NewEmail };
 
@@ -426,21 +426,12 @@ export async function toggleRowHiddenAction(
     });
     if (!row) return { ok: false, error: "Row not found." };
 
-    const updated = await prisma.sheetRow.update({
-      where: { id: rowId },
-      data: hidden
-        ? { hiddenAt: new Date(), hiddenById: access.user.id }
-        : { hiddenAt: null, hiddenById: null },
-      select: { hiddenAt: true, hiddenBy: { select: { name: true, email: true } } },
-    });
+    // The connector hides rows too, through this same function.
+    const updated = await setHidden(access.user.id, rowId, hidden);
 
     revalidatePath(`/c/${companyId}/overview`);
     revalidatePath(`/c/${companyId}/sheets/${row.sheetId}`);
-    return {
-      ok: true,
-      hiddenAt: updated.hiddenAt?.toISOString() ?? null,
-      hiddenBy: updated.hiddenBy?.name ?? updated.hiddenBy?.email ?? null,
-    };
+    return { ok: true, hiddenAt: updated.hiddenAt, hiddenBy: updated.hiddenBy };
   } catch (error) {
     if (error instanceof AuthError) return { ok: false, error: error.message };
     return { ok: false, error: "Could not change that. Try again." };

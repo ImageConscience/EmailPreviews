@@ -9,8 +9,24 @@
  *
  * Usage: npm run check:mcp  (needs the dev server and a database)
  */
-import { readFileSync } from "node:fs";
-import { prisma } from "@/lib/db";
+import { existsSync, readFileSync } from "node:fs";
+
+// Read .env before anything imports the database client, which reads
+// DATABASE_URL as it is constructed. `npm run dev` loads this file for you;
+// a bare script does not, and "works only if you exported it first" is a
+// miserable property for a documented command.
+if (existsSync(".env")) {
+  for (const line of readFileSync(".env", "utf8").split("\n")) {
+    const match = /^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/i.exec(line);
+    if (!match) continue;
+    const [, key, raw] = match;
+    if (process.env[key] === undefined) {
+      process.env[key] = raw.trim().replace(/^["']|["']$/g, "");
+    }
+  }
+}
+
+const { prisma } = await import("@/lib/db");
 import { mintToken } from "@/lib/api-token";
 import { describeFields, describeShortcuts } from "@/lib/field-guide";
 import { approvalFingerprint } from "@/lib/fingerprint";
@@ -168,7 +184,12 @@ check("initialize succeeds with a real token", init.body?.result?.serverInfo?.na
 
 const tools = (await rpc("tools/list", {})).body?.result?.tools ?? [];
 const names = tools.map((t: { name: string }) => t.name);
-check("every tool is listed", names.length === 7, names.join(", "));
+check("every tool is listed", names.length === 8, names.join(", "));
+check("there is a hide tool", names.includes("hide_email"));
+check(
+  "and no delete tool -- taking a row away for good stays in the app",
+  !names.some((n: string) => /delete|remove|destroy/i.test(n)),
+);
 check(
   "there is no approve or push tool -- those stay in the app",
   !names.some((n: string) => /approve|push|send|schedule/i.test(n)),
@@ -247,6 +268,33 @@ check(
   (await prisma.rowRevision.count({ where: { rowId } })) > 0,
 );
 
+// Hiding is the reversible way to take a row away, so it is checked both ways
+// and checked for leaving the row's content alone.
+const hid = await callTool("hide_email", { companyId, rowId });
+check("hide_email hides a row", hid.data?.hiddenAt != null && hid.data?.unchanged === false);
+check("and records who did it", Boolean(hid.data?.hiddenBy));
+check(
+  "hiding again is reported as no change rather than failing",
+  (await callTool("hide_email", { companyId, rowId })).data?.unchanged === true,
+);
+check(
+  "the row's content survives being hidden",
+  (await callTool("get_email", { companyId, rowId })).data?.values?.headline === "Changed",
+);
+const shown = await callTool("hide_email", { companyId, rowId, hidden: false });
+check("and it can be brought back", shown.data?.hiddenAt === null);
+check(
+  "a hidden row still appears to the connector, marked hidden",
+  await (async () => {
+    await callTool("hide_email", { companyId, rowId });
+    const listed = await callTool("list_emails", { companyId, limit: 200 });
+    const found = (listed.data ?? []).find((r: { rowId: string }) => r.rowId === rowId);
+    const ok = found?.hidden === true;
+    await callTool("hide_email", { companyId, rowId, hidden: false });
+    return ok;
+  })(),
+);
+
 // A campaign already in Klaviyo is not a draft any more.
 await prisma.klaviyoPush.create({
   data: {
@@ -260,6 +308,13 @@ const published = await callTool("set_fields", {
   companyId, rowId, values: { headline: "Nope" }, withdrawApprovals: true,
 });
 check("a row already scheduled in Klaviyo refuses every write", published.isError);
+// Hiding a live campaign would take it off the screen without stopping it.
+const hidePublished = await callTool("hide_email", { companyId, rowId });
+check("and refuses to be hidden, which would hide the problem not fix it", hidePublished.isError);
+check(
+  "but can still be brought back into view",
+  !(await callTool("hide_email", { companyId, rowId, hidden: false })).isError,
+);
 check("and says so in terms of Klaviyo, not of this app", /Klaviyo/.test(published.data?.error ?? ""));
 
 // A token reaches only what its owner reaches. Made rather than looked for:

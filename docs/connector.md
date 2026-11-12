@@ -57,9 +57,20 @@ brands.
 | `get_email` | One row's values, for reading prior content |
 | `create_email` | Start a row against a template |
 | `set_fields` | Merge values into a row |
+| `hide_email` | Take a row out of the working view, or put it back |
 
 There is no approve tool and no push tool, deliberately. Sign-off and sending
 stay on the screens where a person can see what they are agreeing to.
+
+There is no delete either, and that one is a judgement about symmetry: creating
+a row over the connector costs one call, so undoing one should not cost the
+row. `hide_email` keeps the content, the revision history and the sign-offs,
+and the overview filters hidden rows out until you ask to see them. Removing a
+row for good is done in the app, on its content sheet.
+
+Hiding a row that is already drafted or scheduled in Klaviyo is refused:
+hiding it here would not stop the send, and would take it off the screen where
+you might notice.
 
 ## Why `describe_template` is the point
 
@@ -110,6 +121,7 @@ So `set_fields`:
 npm run check:mcp     # needs the dev server and a database
 ```
 
-32 checks: the derived field guide against the real templates, then the
-endpoint itself — auth, tenant isolation against a company made for the purpose,
-both write refusals, and that a revoked token stops working at once.
+50 checks: the derived field guide against the real templates, then the
+endpoint itself — auth by all three header shapes, tenant isolation against a
+company made for the purpose, both write refusals, hiding both ways, and that a
+revoked token stops working at once.

@@ -20,6 +20,7 @@ import {
   applyFields,
   ComposeError,
   createEmail,
+  setHidden,
   writeRisk,
 } from "@/lib/compose";
 import {
@@ -60,7 +61,9 @@ export function buildServer(bearer: TokenBearer): McpServer {
         "template. Start with list_companies, then describe_template before " +
         "writing any content: it reports that template's real field list, which " +
         "fields take HTML, and which the app works out for itself and must be " +
-        "left blank. Approving and sending happen in the app, not here.",
+        "left blank. A row is taken away by hiding it, which is reversible and " +
+        "keeps its history; there is no delete. Approving and sending happen in " +
+        "the app, not here.",
     },
   );
 
@@ -291,6 +294,47 @@ export function buildServer(bearer: TokenBearer): McpServer {
         ...applied,
         withdrewApprovalsOf: risk.wouldUnapprove.length > 0 ? risk.wouldUnapprove : undefined,
       });
+    },
+  );
+
+  server.registerTool(
+    "hide_email",
+    {
+      title: "Hide or unhide an email",
+      description:
+        "Take a row out of the working view, or put it back. Hiding is how a row " +
+        "is taken away here -- it keeps its content, history and sign-offs, and can " +
+        "be undone. There is no delete: removing a row for good is done in the app.",
+      inputSchema: {
+        companyId: z.string(),
+        rowId: z.string(),
+        hidden: z
+          .boolean()
+          .optional()
+          .describe("True to hide (the default), false to bring it back."),
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    async ({ companyId, rowId, hidden = true }) => {
+      await tokenCompanyAccess(bearer, companyId, "member");
+      const row = await prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId } } });
+      if (!row) return refuse("No such row in this company.");
+
+      // A campaign that is already in Klaviyo keeps sending whatever this app
+      // shows. Hiding the row would take it off the screen where somebody might
+      // notice that, which is the opposite of what hiding is for.
+      const risk = await writeRisk(rowId);
+      if (hidden && risk.published) {
+        return refuse(
+          `This row is ${risk.published === "scheduled" ? "scheduled" : "a draft"} in Klaviyo. ` +
+            "Hiding it here would not stop that, and would take it off the screen where you " +
+            "would see it. Withdraw it in Klaviyo first.",
+          { published: risk.published },
+        );
+      }
+
+      const result = await setHidden(bearer.userId, rowId, hidden);
+      return json({ rowId, ...result });
     },
   );
 

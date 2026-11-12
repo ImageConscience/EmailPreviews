@@ -234,3 +234,54 @@ export async function createEmail(
 
     return { sheetId: sheet.id, rowId: row.id };
 }
+
+export interface HideResult {
+  hiddenAt: string | null;
+  hiddenBy: string | null;
+  /** True when the row was already in the state asked for. */
+  unchanged: boolean;
+}
+
+/**
+ * Take a row out of the working view, or put it back.
+ *
+ * Hiding is the reversible answer to "this should not be here": the row keeps
+ * its content, its history and its sign-offs, and the overview filters it out
+ * until somebody asks to see hidden items. That is why the connector can do
+ * this and cannot delete -- creating a row costs one call, so undoing one
+ * should not cost the row.
+ */
+export async function setHidden(
+  userId: string,
+  rowId: string,
+  hidden: boolean,
+): Promise<HideResult> {
+  const row = await prisma.sheetRow.findUniqueOrThrow({
+    where: { id: rowId },
+    select: { hiddenAt: true },
+  });
+  if (Boolean(row.hiddenAt) === hidden) {
+    const now = await prisma.sheetRow.findUniqueOrThrow({
+      where: { id: rowId },
+      select: { hiddenAt: true, hiddenBy: { select: { name: true, email: true } } },
+    });
+    return {
+      hiddenAt: now.hiddenAt?.toISOString() ?? null,
+      hiddenBy: now.hiddenBy?.name ?? now.hiddenBy?.email ?? null,
+      unchanged: true,
+    };
+  }
+
+  const updated = await prisma.sheetRow.update({
+    where: { id: rowId },
+    data: hidden
+      ? { hiddenAt: new Date(), hiddenById: userId }
+      : { hiddenAt: null, hiddenById: null },
+    select: { hiddenAt: true, hiddenBy: { select: { name: true, email: true } } },
+  });
+  return {
+    hiddenAt: updated.hiddenAt?.toISOString() ?? null,
+    hiddenBy: updated.hiddenBy?.name ?? updated.hiddenBy?.email ?? null,
+    unchanged: false,
+  };
+}
