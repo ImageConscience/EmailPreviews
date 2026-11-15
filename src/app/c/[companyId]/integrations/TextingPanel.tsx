@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { saveSmsSettingsAction, setSmsKeyAction } from "@/actions/sms";
+import { AudienceChooser, useSmsAudiences } from "@/components/AudienceChooser";
 
 export interface TextingState {
   provider: string | null;
@@ -15,8 +16,6 @@ export interface TextingState {
   /** The email goes to Klaviyo with a key, so texts can use that one. */
   emailKlaviyoKey: boolean;
   emailAccountName: string | null;
-  attentiveSegmentCount: number;
-  attentiveSyncedAt: string | null;
   canStoreSecrets: boolean;
 }
 
@@ -27,6 +26,12 @@ export interface TextingState {
  * the usual case; a key of its own is only needed otherwise. Attentive takes no
  * key here at all: texts and audiences go through a person's Claude session and
  * Attentive's own connector, and this panel says so rather than asking for one.
+ *
+ * The default audiences are picked from the real ones, the same way email's
+ * are. Where that list comes from differs by platform -- Klaviyo answers live,
+ * Attentive's is the copy Claude last saved -- and the picker says which, since
+ * a typed name that no longer exists is only discovered at the moment somebody
+ * was trying to send.
  */
 export function TextingPanel({
   companyId,
@@ -38,6 +43,9 @@ export function TextingPanel({
   state: TextingState;
 }) {
   const [provider, setProvider] = useState(state.provider ?? "");
+  // Read against the saved platform, not the one in the dropdown: until a
+  // switch is saved, the list on screen still belongs to the old platform.
+  const audiences = useSmsAudiences(companyId, Boolean(state.provider));
   const [audience, setAudience] = useState(state.audience);
   const [exclude, setExclude] = useState(state.exclude);
   const [addOptOut, setAddOptOut] = useState(state.addOptOut);
@@ -99,27 +107,28 @@ export function TextingPanel({
             <span className="hint">Switching clears the default audiences: names from one platform mean nothing to the other.</span>
           )}
         </label>
-        <label className="field" style={{ flex: "1 1 220px" }}>
+        <div className="field aud-setting" style={{ flex: "1 1 220px" }}>
           <span>Default audience</span>
-          <input
-            type="text"
+          <AudienceChooser
+            state={audiences}
             value={audience}
-            disabled={!canEdit || pending || switching}
-            placeholder="SMS subscribers list or segment"
-            onChange={(e) => setAudience(e.target.value)}
+            onChange={setAudience}
+            empty="Nobody — every text will have to name its own"
+            disabled={!canEdit || pending || switching || !state.provider}
           />
-          <span className="hint">Used when a text does not name one. Comma-separate several.</span>
-        </label>
-        <label className="field" style={{ flex: "1 1 220px" }}>
+          <span className="hint">Used when a text does not name one. Several are allowed.</span>
+        </div>
+        <div className="field aud-setting" style={{ flex: "1 1 220px" }}>
           <span>Default exclusion</span>
-          <input
-            type="text"
+          <AudienceChooser
+            state={audiences}
             value={exclude}
-            disabled={!canEdit || pending || switching}
-            placeholder="Optional"
-            onChange={(e) => setExclude(e.target.value)}
+            onChange={setExclude}
+            empty="No exclusions"
+            disabled={!canEdit || pending || switching || !state.provider}
           />
-        </label>
+          <span className="hint">Suppressed on every text that does not name its own.</span>
+        </div>
       </div>
 
       <label className="row" style={{ marginTop: 8 }}>
@@ -173,14 +182,14 @@ export function TextingPanel({
 
       {state.provider === "attentive" && (
         <div style={{ marginTop: 14 }}>
+          {/* The audience pickers above now say how many segments are held and
+              how old they are, so this says only what they cannot: why there is
+              no key, and the words to say to refresh the list. */}
           <p className="hint">
             No key is needed or stored. Attentive’s published API cannot create campaigns, so texts
             (and Attentive emails) are built by Claude through Attentive’s own connector, and
-            recorded here. Audiences:{" "}
-            {state.attentiveSegmentCount > 0
-              ? `${state.attentiveSegmentCount} segments, last saved by Claude on ${state.attentiveSyncedAt?.slice(0, 10)}.`
-              : "none saved yet."}{" "}
-            Ask Claude to “sync this company’s Attentive segments into Message Baker” to refresh them.
+            recorded here. To refresh the audiences above, ask Claude to “sync this company’s
+            Attentive segments into Message Baker”.
           </p>
         </div>
       )}

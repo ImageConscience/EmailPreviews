@@ -3,7 +3,6 @@ import { guardCompany } from "@/lib/guard";
 import { IntegrationsPanel } from "./IntegrationsPanel";
 import { SendingPanel } from "./SendingPanel";
 import { TextingPanel } from "./TextingPanel";
-import { cachedAttentiveSegments } from "@/lib/sms-core";
 import { isEmailProvider } from "@/lib/esp/types";
 import { secretsAvailable } from "@/lib/secret";
 import { DEFAULT_TIMEZONE } from "@/lib/zone";
@@ -44,8 +43,6 @@ export default async function IntegrationsPage({
         smsAudience: true,
         smsAudienceExclude: true,
         smsAddOptOut: true,
-        attentiveSegments: true,
-        attentiveSegmentsSyncedAt: true,
       },
     }),
     prisma.catalogProduct.count({ where: { companyId } }),
@@ -114,8 +111,6 @@ export default async function IntegrationsPage({
           ownAccountName: company?.smsAccountName ?? null,
           emailKlaviyoKey: company?.emailProvider === "klaviyo" && Boolean(company?.espKeyCipher),
           emailAccountName: company?.espAccountName ?? null,
-          attentiveSegmentCount: cachedAttentiveSegments(company?.attentiveSegments ?? null).length,
-          attentiveSyncedAt: company?.attentiveSegmentsSyncedAt?.toISOString() ?? null,
           canStoreSecrets: secretsAvailable(),
         }}
       />
