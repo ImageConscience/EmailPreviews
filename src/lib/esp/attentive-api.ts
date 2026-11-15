@@ -10,19 +10,35 @@ import { EspError } from "@/lib/esp/types";
  * given the audience and the send time, and the campaign is scheduled.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * UNVERIFIED: the paths in `ENDPOINTS` below.
+ * UNVERIFIED: the campaign paths in `ENDPOINTS` below. Read this before
+ * pointing any of it at a real account.
  *
- * The shape of the calls -- what a campaign is made of, that a message takes
- * `htmlContent`, that a message group carries the audience and the send time,
- * that scheduling is one call on the campaign -- comes from Attentive's own
- * tool definitions and is reliable. The URL each of those lives at could not
- * be read from this machine, and guessing a third-party API's paths is how
- * this app lost several afternoons to Klaviyo.
+ * What is settled. The shape of the calls -- what a campaign is made of, that
+ * a message takes `htmlContent`, that a message group carries the audience and
+ * the send time, that scheduling is one call on the campaign -- comes from
+ * Attentive's own tool definitions and is reliable. The host and version
+ * prefix below are corroborated by Attentive's own documented webhook endpoint
+ * and by several integrators: the API is served from
+ * api.attentivemobile.com/v1, and `GET /me` under it is the documented way to
+ * test a credential.
  *
- * So they are gathered here, in one object, rather than scattered through the
- * file: correcting them against the documentation is a single edit, and
- * `scripts/fixtures/attentive-mock.mjs` serves the same paths, so the mock and
- * the real thing move together.
+ * What is not. Attentive's *public* REST API documents subscribers, custom
+ * attributes, custom events, ecommerce, product catalog, privacy requests and
+ * webhooks -- and, by some accounts, a read-only campaign list. Creating a
+ * campaign, filling its message, setting its audience and scheduling it are
+ * not clearly part of it. Attentive also publishes a GraphQL API, in beta, at
+ * POST /graphql under the same base, whose fields are said to mirror the REST
+ * surface for now. The operations this file needs may well live there instead,
+ * in which case this is the wrong shape of client, not merely the wrong paths.
+ *
+ * So the paths stay gathered here, in one object: correcting them against
+ * docs.attentive.com is a single edit, and
+ * `scripts/fixtures/attentive-mock.mjs` serves exactly these, with
+ * `scripts/check-attentive.mts` asserting the two agree -- so a correction
+ * here fails the check until the mock follows, rather than the two drifting
+ * quietly apart. Until somebody has read the reference, treat a push to
+ * Attentive as unproven against the real service: it is proven only against a
+ * mock built from these same assumptions.
  * ────────────────────────────────────────────────────────────────────────────
  */
 const ENDPOINTS = {
@@ -38,7 +54,10 @@ const ENDPOINTS = {
 
 /** Overridable so the checks can point the client at the mock. */
 function baseUrl(): string {
-  return process.env.ATTENTIVE_API_BASE ?? "https://api.attentive.com";
+  // api.attentivemobile.com, not api.attentive.com: the second is the marketing
+  // site's domain and serves no API. The /v1 prefix is part of the base, so the
+  // paths above are written without it.
+  return process.env.ATTENTIVE_API_BASE ?? "https://api.attentivemobile.com/v1";
 }
 
 interface CallOptions {
