@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   addTextAction,
@@ -43,7 +44,13 @@ const DRAFT_KEY: Record<SmsField, keyof SmsRow> = {
 export function TextsBoard(props: Props) {
   const { companyId, texts, userId, provider, connected } = props;
   const visible = texts.filter((t) => !t.hidden);
-  const [selectedId, setSelectedId] = useState<string | null>(visible[0]?.rowId ?? null);
+  // ?row= from the overview, so clicking a text in the calendar opens that
+  // text. Read once, as the opening selection: following it afterwards would
+  // yank the screen away from whatever someone had since clicked on.
+  const asked = useSearchParams().get("row");
+  const [selectedId, setSelectedId] = useState<string | null>(
+    (asked && texts.some((t) => t.rowId === asked) ? asked : null) ?? visible[0]?.rowId ?? null,
+  );
   const selected = texts.find((t) => t.rowId === selectedId) ?? visible[0] ?? null;
 
   const [draft, setDraft] = useState<SmsRow | null>(selected?.sms ?? null);

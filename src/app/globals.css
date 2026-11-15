@@ -34,6 +34,8 @@
   --ok-soft: #e4f5ec;
   --sent: #6d3bd1;
   --sent-soft: #efe9fc;
+  --sms: #0b7285;
+  --sms-soft: #ddf2f6;
   --rail: #dee4ee;
   --rail-border: #c5cfdd;
   --radius: 8px;
@@ -69,6 +71,8 @@
   --ok-soft: #10301f;
   --sent: #b198f5;
   --sent-soft: #2a2140;
+  --sms: #4dc9de;
+  --sms-soft: #0f2b31;
   --rail: #0f1319;
   --rail-border: #232a34;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -1078,6 +1082,20 @@ input:focus, select:focus, textarea:focus {
    are different facts and should not read as the same one at a glance. */
 .badge-sent { background: var(--sent-soft); color: var(--sent); border-color: transparent; }
 .cal-item.is-sent { border-left-color: var(--sent); background: var(--sent-soft); }
+
+/* Texts.
+   Two things have to be readable at once: what channel this is, and how far
+   along it is. So the channel takes the left edge and keeps it, and the state
+   takes the fill -- a scheduled text reads as scheduled without stopping
+   looking like a text. The three-class rules below are what hold the edge
+   against the state rules above, which set both. */
+.badge-sms { background: var(--sms-soft); color: var(--sms); border-color: transparent; }
+.cal-item.is-text { border-left-color: var(--sms); background: var(--sms-soft); }
+.cal-item.is-text.is-approved { border-left-color: var(--sms); background: var(--ok-soft); }
+.cal-item.is-text.is-sent { border-left-color: var(--sms); background: var(--sent-soft); }
+.cal-item.is-text.is-hidden { border-left-color: var(--text-faint); }
+/* In the list the row has no edge to colour, so the title carries it. */
+.ov-table tr.is-text .ov-title { color: var(--sms); }
 /* Audience: chips for what is chosen, a select to add to it. In the rail
    rather than the envelope bar -- it is a fact about the send, not about what
    the email looks like, and it was pushing the render down the page. */

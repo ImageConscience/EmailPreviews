@@ -17,7 +17,11 @@ import {
 import { flag, isOn, useMineFilter, useViewState, validId } from "@/lib/view-state";
 import { ShareLink } from "@/components/ShareLink";
 
+/** Email or text. They share this board and almost nothing underneath it. */
+export type Channel = "email" | "text";
+
 export interface OverviewItem {
+  channel: Channel;
   rowId: string;
   sheetId: string;
   sheetName: string;
@@ -68,7 +72,7 @@ export function OverviewBoard({
   items: OverviewItem[];
   currentUserId: string;
   templates: { id: string; name: string }[];
-  sheets: { id: string; name: string }[];
+  sheets: { id: string; name: string; kind: Channel }[];
 }) {
   // Everything here is in the URL, so a view can be reloaded, navigated back
   // to, and pasted to someone else.
@@ -77,6 +81,9 @@ export function OverviewBoard({
     return {
       view: "list",
       q: "",
+      // Empty means both, so a shared link with no channel in it shows
+      // everything rather than silently half of it.
+      channel: "",
       template: "",
       sheet: "",
       hidden: flag(false),
@@ -92,6 +99,8 @@ export function OverviewBoard({
   const setView = (next: "list" | "calendar") => set({ view: next });
   const search = state.q;
   const setSearch = (next: string) => set({ q: next });
+  const channel = state.channel === "email" || state.channel === "text" ? state.channel : "";
+  const setChannel = (next: string) => set({ channel: next });
   // Both filters are remembered across visits, so both can name something that
   // has since been deleted -- and a re-uploaded sheet is a new sheet with a new
   // id, so this happens in ordinary use rather than only after a tidy-up. A
@@ -136,6 +145,9 @@ export function OverviewBoard({
   const [mine, setMineFilter] = useMineFilter(companyId, currentUserId);
 
   const hiddenCount = useMemo(() => items.filter((i) => i.hidden).length, [items]);
+  // A company that has never written a text should not be offered a filter for
+  // texts; the control appears when there is something for it to do.
+  const hasTexts = useMemo(() => items.some((i) => i.channel === "text"), [items]);
 
   /**
    * The list obeys the date range; the calendar has its own navigation and
@@ -146,10 +158,12 @@ export function OverviewBoard({
     const needle = search.trim().toLowerCase();
     return items.filter((item) => {
       if (item.hidden && !showHidden) return false;
+      if (channel && item.channel !== channel) return false;
       if (mine === "todo" && item.approvedByMe) return false;
       if (mine === "done" && !item.approvedByMe) return false;
       if (sheetFilter && item.sheetId !== sheetFilter) return false;
       if (templateFilter) {
+        if (item.channel !== "email") return false;
         if (templateFilter === UNASSIGNED ? item.templateId !== null : item.templateId !== templateFilter) {
           return false;
         }
@@ -158,7 +172,7 @@ export function OverviewBoard({
       return [item.title, item.subject, item.campaign, item.theme, item.templateName]
         .some((value) => value.toLowerCase().includes(needle));
     });
-  }, [items, mine, search, showHidden, sheetFilter, templateFilter]);
+  }, [channel, items, mine, search, showHidden, sheetFilter, templateFilter]);
 
   const listed = useMemo(() => {
     const rows = matchesExceptDate.filter((item) => inRange(item.sendDate, range));
@@ -198,6 +212,7 @@ export function OverviewBoard({
   const [creating, setCreating] = useState(false);
 
   const href = (item: OverviewItem) => {
+    if (item.channel === "text") return `/c/${companyId}/texts?row=${item.rowId}`;
     const params = new URLSearchParams({ sheet: item.sheetId, row: item.rowId });
     if (item.templateId) params.set("template", item.templateId);
     return `/c/${companyId}/preview?${params.toString()}`;
@@ -283,6 +298,20 @@ export function OverviewBoard({
           />
         </label>
 
+        {hasTexts && (
+          <label className="field" style={{ marginBottom: 0, flex: "0 1 170px" }}>
+            <span>Channel</span>
+            <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="">Email and texts</option>
+              <option value="email">Email only</option>
+              <option value="text">Texts only</option>
+            </select>
+          </label>
+        )}
+
+        {/* A text has no template, so this control would filter every one of
+            them out. It goes away rather than sitting there doing that. */}
+        {channel !== "text" && (
         <label className="field" style={{ marginBottom: 0, flex: "1 1 170px" }}>
           <span>Template</span>
           <select value={templateFilter} onChange={(e) => setTemplateFilter(e.target.value)}>
@@ -294,7 +323,11 @@ export function OverviewBoard({
             ))}
             <option value={UNASSIGNED}>Unassigned</option>
           </select>
+          {templateFilter && hasTexts && (
+            <span className="hint">Texts are left out: they have no template.</span>
+          )}
         </label>
+        )}
 
         {/* Personal, and labelled so: it filters by whoever is logged in, and
             it is the one control that a shared link does not carry. */}
@@ -459,7 +492,10 @@ function ListView({
             const newDay = item.sendDate !== lastDate;
             lastDate = item.sendDate;
             return (
-              <tr key={item.rowId} className={item.hidden ? "is-hidden" : ""}>
+              <tr
+                key={item.rowId}
+                className={`${item.hidden ? "is-hidden" : ""}${item.channel === "text" ? " is-text" : ""}`}
+              >
                 <td className="tight ov-when">
                   {newDay ? (
                     item.sendDate ? (
@@ -483,7 +519,9 @@ function ListView({
                   </div>
                 </td>
                 <td className="tight">
-                  {item.templateName ? (
+                  {item.channel === "text" ? (
+                    <span className="badge badge-sms">Text</span>
+                  ) : item.templateName ? (
                     <span className={`badge ${item.templateKnown ? "" : "badge-warn"}`}>
                       {item.templateName}
                       {item.templateKnown ? "" : " ?"}
@@ -798,8 +836,10 @@ function CalendarView({
                     href={href(item)}
                     className={
                       `cal-item${item.hidden ? " is-hidden" : ""}` +
+                      (item.channel === "text" ? " is-text" : "") +
                       // Published outranks approved: it is the later state, and
-                      // the calendar has one colour to spend per item.
+                      // an item has one fill to spend. The channel keeps the
+                      // left edge, so a scheduled text still reads as a text.
                       (item.published ? " is-sent" : item.approvals > 0 ? " is-approved" : "")
                     }
                     title={calendarTitle(item)}
@@ -830,7 +870,7 @@ function CalendarView({
                 <Link
                   key={item.rowId}
                   href={href(item)}
-                  className={`cal-item${item.hidden ? " is-hidden" : ""}`}
+                  className={`cal-item${item.hidden ? " is-hidden" : ""}${item.channel === "text" ? " is-text" : ""}`}
                   style={{ maxWidth: 260 }}
                   title={calendarTitle(item)}
                 >
@@ -888,6 +928,9 @@ function Marks({ item }: { item: OverviewItem }) {
 /** Everything the dots stand for, spelled out for the hover and for a reader. */
 function calendarTitle(item: OverviewItem): string {
   const lines = [item.title];
+  // Colour says it at a glance; the hover says it in words, which is what
+  // somebody checks when the glance is the thing they are unsure about.
+  lines.push(item.channel === "text" ? "Text" : "Email");
   if (item.templateName) lines.push(item.templateName);
   if (item.published) {
     const where = item.publishedIn ?? "the sending platform";

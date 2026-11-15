@@ -6,6 +6,8 @@ import { approvalFingerprint } from "@/lib/fingerprint";
 import { findEnvelopeColumns, findTemplateColumn, matchTemplateName } from "@/lib/template";
 import { parseSendDate, rowLabel } from "@/lib/campaign";
 import { isEmailProvider, PROVIDER_LABELS } from "@/lib/esp/types";
+import { smsFingerprint } from "@/lib/fingerprint";
+import { readSmsRow, smsLabel, smsSlots } from "@/lib/sms-row";
 import { OverviewBoard, type OverviewItem } from "./OverviewBoard";
 
 export const dynamic = "force-dynamic";
@@ -16,15 +18,23 @@ export const dynamic = "force-dynamic";
  * The preview answers "what does this one look like"; this answers "what is
  * going out, and is any of it ready". Summarising happens on the server so the
  * browser is handed one small list rather than every row of every sheet.
+ *
+ * Both channels, in one calendar. An email and a text going out the same
+ * morning are one morning's work, and a schedule that shows half of it is a
+ * schedule somebody has to hold the rest of in their head. They are summarised
+ * separately because almost nothing about them is the same underneath -- a text
+ * has no template, its own approvals table and its own pushes -- and they meet
+ * only here, as items with a channel on them.
  */
 export default async function OverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const access = await guardCompany(companyId);
 
   const [sheets, templates] = await Promise.all([
+    // Both kinds in one read. The rows of one kind carry the other's relations
+    // empty, which costs little and saves a second round trip and a merge.
     prisma.contentSheet.findMany({
-      // Emails only: text sheets have their own page and no template to render.
-      where: { companyId, kind: "email" },
+      where: { companyId },
       orderBy: { name: "asc" },
       include: {
         rows: {
@@ -37,6 +47,15 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
               orderBy: { createdAt: "asc" },
               select: {
                 templateId: true,
+                contentHash: true,
+                userId: true,
+                user: { select: { name: true, email: true } },
+              },
+            },
+            smsPush: { select: { status: true, provider: true } },
+            smsApprovals: {
+              orderBy: { createdAt: "asc" },
+              select: {
                 contentHash: true,
                 userId: true,
                 user: { select: { name: true, email: true } },
@@ -59,6 +78,73 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
   const items: OverviewItem[] = [];
   for (const sheet of sheets) {
     const columns = parseStringArray(sheet.columns);
+
+    // A text sheet reads nothing like an email one: no template, its own
+    // approvals, its own push, and the message itself where a subject would be.
+    if (sheet.kind === "sms") {
+      const slots = smsSlots(columns);
+      for (const row of sheet.rows) {
+        const sms = readSmsRow(parseRecord(row.data), slots);
+        const hash = smsFingerprint(row.data);
+
+        let approvals = 0;
+        let staleApprovals = 0;
+        let approvedByMe = false;
+        const byPerson = new Map<string, { name: string; initials: string; hue: number; stale: boolean }>();
+        for (const approval of row.smsApprovals) {
+          const current = approval.contentHash === hash;
+          if (current) approvals += 1;
+          else staleApprovals += 1;
+          if (current && approval.userId === access.user.id) approvedByMe = true;
+          const held = byPerson.get(approval.userId);
+          if (!held || (held.stale && current)) {
+            byPerson.set(approval.userId, {
+              name: approval.user.name ?? approval.user.email,
+              initials: initialsOf(approval.user.name, approval.user.email),
+              hue: avatarHue(approval.userId),
+              stale: !current,
+            });
+          }
+        }
+
+        items.push({
+          channel: "text",
+          rowId: row.id,
+          sheetId: sheet.id,
+          sheetName: sheet.name,
+          position: row.position,
+          title: smsLabel(sms),
+          campaign: sms.name,
+          theme: "",
+          templateId: null,
+          // A text has no template, and saying so with an empty string rather
+          // than a dash keeps the column honest: there is nothing to assign.
+          templateName: "",
+          templateKnown: true,
+          sendDate: parseSendDate(sms.sendDate),
+          sendTime: sms.sendTime,
+          // The message stands where a subject line would: it is what the
+          // person reading the schedule wants to recognise it by.
+          subject: sms.body,
+          approvals,
+          staleApprovals,
+          approvers: [...byPerson.values()],
+          approvedByMe,
+          notes: row._count.notes,
+          published:
+            row.smsPush?.status === "scheduled" || row.smsPush?.status === "draft"
+              ? row.smsPush.status
+              : null,
+          publishedIn: row.smsPush
+            ? PROVIDER_LABELS[isEmailProvider(row.smsPush.provider) ? row.smsPush.provider : "klaviyo"]
+            : null,
+          hidden: Boolean(row.hiddenAt),
+          hiddenBy: row.hiddenBy?.name ?? row.hiddenBy?.email ?? null,
+        });
+      }
+      continue;
+    }
+
     const templateColumn = findTemplateColumn(columns);
     const envelope = findEnvelopeColumns(columns);
 
@@ -100,6 +186,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
       }
 
       items.push({
+        channel: "email",
         rowId: row.id,
         sheetId: sheet.id,
         sheetName: sheet.name,
@@ -134,7 +221,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
       items={items}
       currentUserId={access.user.id}
       templates={templateSummaries}
-      sheets={sheets.map((s) => ({ id: s.id, name: s.name }))}
+      sheets={sheets.map((s) => ({ id: s.id, name: s.name, kind: s.kind === "sms" ? "text" : "email" }))}
     />
   );
 }
