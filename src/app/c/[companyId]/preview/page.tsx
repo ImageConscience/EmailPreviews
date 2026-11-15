@@ -20,7 +20,8 @@ export default async function PreviewPage({
       select: { id: true, name: true, placeholders: true },
     }),
     prisma.contentSheet.findMany({
-      where: { companyId },
+      // Emails only: text sheets have their own page and no template to render.
+      where: { companyId, kind: "email" },
       orderBy: { name: "asc" },
       select: { id: true, name: true, _count: { select: { rows: true } } },
     }),

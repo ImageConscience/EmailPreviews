@@ -124,7 +124,7 @@ export function buildServer(bearer: TokenBearer): McpServer {
 
       const fields = describeFields(template.html);
       const sheets = await prisma.contentSheet.findMany({
-        where: { companyId },
+        where: { companyId, kind: "email" },
         select: { columns: true },
       });
       const columns = [...new Set(sheets.flatMap((s) => parseStringArray(s.columns)))];
@@ -183,7 +183,7 @@ export function buildServer(bearer: TokenBearer): McpServer {
     async ({ companyId, rowId }) => {
       await tokenCompanyAccess(bearer, companyId);
       const row = await prisma.sheetRow.findFirst({
-        where: { id: rowId, sheet: { companyId } },
+        where: { id: rowId, sheet: { companyId, kind: "email" } },
         include: { sheet: { select: { id: true, name: true, columns: true } } },
       });
       if (!row) return refuse("No such row in this company.");
@@ -258,7 +258,7 @@ export function buildServer(bearer: TokenBearer): McpServer {
     },
     async ({ companyId, rowId, values, withdrawApprovals = false }) => {
       await tokenCompanyAccess(bearer, companyId, "member");
-      const row = await prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId } } });
+      const row = await prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId, kind: "email" } } });
       if (!row) return refuse("No such row in this company.");
 
       const risk = await writeRisk(rowId);
@@ -318,7 +318,7 @@ export function buildServer(bearer: TokenBearer): McpServer {
     },
     async ({ companyId, rowId, hidden = true }) => {
       await tokenCompanyAccess(bearer, companyId, "member");
-      const row = await prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId } } });
+      const row = await prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId, kind: "email" } } });
       if (!row) return refuse("No such row in this company.");
 
       // A campaign that is already in the sending platform keeps sending
@@ -367,7 +367,7 @@ async function exampleRows(
       .map((f) => normalizeKey(f.name));
 
     const candidates = await prisma.sheetRow.findMany({
-      where: { sheet: { companyId }, hiddenAt: null },
+      where: { sheet: { companyId, kind: "email" }, hiddenAt: null },
       select: { id: true, data: true },
     });
 
@@ -396,7 +396,7 @@ async function listEmails(
   opts: { templateId?: string; search?: string; limit?: number },
 ) {
   const sheets = await prisma.contentSheet.findMany({
-    where: { companyId },
+    where: { companyId, kind: "email" },
     orderBy: { createdAt: "desc" },
     include: { rows: { orderBy: { position: "asc" } } },
   });

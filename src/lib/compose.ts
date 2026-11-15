@@ -189,8 +189,8 @@ export async function createEmail(
     // A company with no sheet yet still has to be able to start: one is made
     // rather than sending somebody to another screen to make it first.
     let sheet = input.sheetId
-      ? await prisma.contentSheet.findFirst({ where: { id: input.sheetId, companyId } })
-      : await prisma.contentSheet.findFirst({ where: { companyId }, orderBy: { createdAt: "asc" } });
+      ? await prisma.contentSheet.findFirst({ where: { id: input.sheetId, companyId, kind: "email" } })
+      : await prisma.contentSheet.findFirst({ where: { companyId, kind: "email" }, orderBy: { createdAt: "asc" } });
     if (!sheet) {
       sheet = await prisma.contentSheet.create({
         data: {

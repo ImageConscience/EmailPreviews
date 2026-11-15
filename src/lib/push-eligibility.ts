@@ -172,7 +172,7 @@ export function checkEligibility(
 
   if (date) {
     const when = zonedToUtc(date, time, zone);
-    if (!when.utc) blockers.push(`“${date} ${time}”.trim() is not a date and time this can read.`);
+    if (!when.utc) blockers.push(`“${`${date} ${time}`.trim()}” is not a date and time this can read.`);
     else {
       sendAt = when.utc;
       warning = when.warning;

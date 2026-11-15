@@ -16,6 +16,7 @@ import { parseSheetFile } from "@/lib/sheet";
 import { takeHiddenFlags } from "@/lib/sheet-export";
 import { parseRecord, parseStringArray } from "@/lib/json";
 import { applyFields, createEmail, setHidden, type NewEmail } from "@/lib/compose";
+import { scheduledTextGuard } from "@/lib/sms-core";
 
 export type { NewEmail };
 
@@ -158,10 +159,16 @@ export async function uploadSheetAction(
       ((formData.get("name") as string | null) ?? "").trim() ||
       file.name.replace(/\.[^.]+$/, "");
 
+    // Email unless the uploader says it is texts. Fixed here: what a column means
+    // depends on it, and the approvals made against one reading would not
+    // survive switching to the other.
+    const kind = formData.get("kind") === "sms" ? "sms" : "email";
+
     const sheet = await prisma.contentSheet.create({
       data: {
         companyId,
         name,
+        kind,
         sourceFilename: file.name,
         columns: JSON.stringify(parsed.columns),
         rows: {
@@ -184,6 +191,7 @@ export async function uploadSheetAction(
     return fail(error);
   }
   revalidatePath(`/c/${companyId}/sheets`);
+  revalidatePath(`/c/${companyId}/texts`);
   redirect(`/c/${companyId}/sheets/${sheetId}`);
 }
 
@@ -330,6 +338,8 @@ export async function deleteRowAction(companyId: string, rowId: string): Promise
   await requireCompanyAccess(companyId, "member");
   const row = await prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId } } });
   if (!row) return;
+  const guard = await scheduledTextGuard(rowId);
+  if (guard) throw new AuthError(guard, 409);
   await prisma.sheetRow.delete({ where: { id: rowId } });
   revalidatePath(`/c/${companyId}/sheets/${row.sheetId}`);
 }
@@ -358,6 +368,8 @@ export async function saveRowAction(
       include: { sheet: true },
     });
     if (!row) return { ok: false, error: "Row not found." };
+    const guard = await scheduledTextGuard(row.id);
+    if (guard) return { ok: false, error: guard };
 
     // The connector writes rows too, through this same function -- two copies
     // of "save a row" would drift, and the half that drifted would be the one
@@ -425,6 +437,8 @@ export async function toggleRowHiddenAction(
       select: { id: true, sheetId: true },
     });
     if (!row) return { ok: false, error: "Row not found." };
+    const guard = await scheduledTextGuard(row.id);
+    if (guard) return { ok: false, error: guard };
 
     // The connector hides rows too, through this same function.
     const updated = await setHidden(access.user.id, rowId, hidden);

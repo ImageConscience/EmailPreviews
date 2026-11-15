@@ -24,3 +24,14 @@ export function approvalFingerprint(
     .update(templateUpdatedAt.toISOString())
     .digest("hex");
 }
+
+/**
+ * The same promise for a text: what was approved is exactly these values.
+ *
+ * No template half, because a text has none -- the row is the whole message.
+ * Prefixed so a text's hash can never equal an email's for the same row data,
+ * should the two ever be compared by mistake.
+ */
+export function smsFingerprint(rowData: string): string {
+  return createHash("sha256").update("sms ").update(rowData).digest("hex");
+}

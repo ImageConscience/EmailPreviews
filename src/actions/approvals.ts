@@ -30,7 +30,7 @@ export async function toggleApprovalAction(
     const access = await requireCompanyAccess(companyId, "member");
 
     const [row, template] = await Promise.all([
-      prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId } } }),
+      prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId, kind: "email" } } }),
       prisma.template.findFirst({ where: { id: templateId, companyId } }),
     ]);
     if (!row || !template) return { ok: false, error: "Not found." };

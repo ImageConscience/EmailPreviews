@@ -17,6 +17,14 @@ export function UploadSheetForm({ companyId }: { companyId: string }) {
       {state.error && <div className="alert alert-error">{state.error}</div>}
 
       <div className="row" style={{ alignItems: "flex-start", gap: 14 }}>
+        <label className="field" style={{ flex: "0 1 200px" }}>
+          <span>This sheet holds</span>
+          <select name="kind" defaultValue="email">
+            <option value="email">Emails</option>
+            <option value="sms">Texts (SMS / MMS)</option>
+          </select>
+          <span className="hint">Texts need only a name, message, optional image, date, time and audience.</span>
+        </label>
         <label className="field" style={{ flex: "1 1 260px" }}>
           <span>File</span>
           <input

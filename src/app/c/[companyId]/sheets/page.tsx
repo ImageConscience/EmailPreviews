@@ -65,6 +65,11 @@ export default async function SheetsPage({
                       <Link href={`/c/${companyId}/sheets/${sheet.id}`} style={{ fontWeight: 600 }}>
                         {sheet.name}
                       </Link>
+                      {sheet.kind === "sms" && (
+                        <span className="chip" style={{ marginLeft: 8 }}>
+                          Texts
+                        </span>
+                      )}
                       {sheet.sourceFilename && (
                         <span className="hint truncate">from {sheet.sourceFilename}</span>
                       )}

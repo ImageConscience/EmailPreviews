@@ -34,6 +34,8 @@ model User {
   notes       RowNote[]
   pushes      EspPush[]
   apiTokens   ApiToken[]
+  smsApprovals SmsApproval[]
+  smsPushes    SmsPush[]    @relation("SmsPusher")
 }
 
 /**
@@ -138,6 +140,36 @@ model Company {
   /// approved would make every sign-off stale, every time.
   espAudience        String?
   espAudienceExclude String?
+
+  /// Where this company's text messages go: "klaviyo", "attentive", or null
+  /// for a company that does not text. Its own choice, separate from
+  /// `emailProvider`, because a client may well mail through one platform and
+  /// text through another.
+  ///
+  /// Attentive is reached through a person's Claude session and Attentive's MCP
+  /// server, not from this app (its documented API has no campaigns), so an
+  /// Attentive company holds no key here at all.
+  smsProvider        String?
+  /// A Klaviyo key just for texting. Null means use the email key, which is the
+  /// usual case: one Klaviyo account, both channels. Only needed when the email
+  /// goes elsewhere. Encrypted like `espKeyCipher`, for the same reason.
+  smsKeyCipher       String?
+  smsKeyHint         String?
+  smsAccountName     String?
+  /// Who texts go to when a row does not say, comma separated. Separate from
+  /// the email defaults because SMS subscribers are a different list.
+  smsAudience        String?
+  smsAudienceExclude String?
+  /// Ask the platform to append the account's own "Reply STOP" wording. On by
+  /// default: a marketing text without a way out is a compliance failure, and
+  /// the copy check only lets a body without one through when this is on.
+  smsAddOptOut       Boolean   @default(true)
+
+  /// Attentive's segments for this company, as JSON [{id, name, kind}], saved
+  /// by a Claude session through Attentive's MCP server. A copy, so the
+  /// audience pickers work without this app ever holding an Attentive key.
+  attentiveSegments         String?
+  attentiveSegmentsSyncedAt DateTime?
 
   memberships Membership[]
   templates   Template[]
@@ -280,6 +312,11 @@ model ContentSheet {
   companyId      String
   name           String
   sourceFilename String?
+  /// "email" or "sms". Fixed at upload. A text sheet is a separate sheet rather
+  /// than extra columns on an email one: the columns overlap in name (date,
+  /// time, audience, name) but not in meaning, and an approval fingerprints the
+  /// whole row, so sharing one would make editing a text stale an email.
+  kind           String   @default("email")
   /// JSON array of column headers, in sheet order.
   columns        String   @default("[]")
   createdAt      DateTime @default(now())
@@ -313,8 +350,56 @@ model SheetRow {
   approvals Approval[]
   notes     RowNote[]
   pushes    EspPush[]
+  smsApprovals SmsApproval[]
+  smsPush      SmsPush?
 
   @@index([sheetId, position])
+}
+
+/// One person signing off one text.
+///
+/// A sibling of Approval rather than Approval with the template made optional:
+/// a text has no template, and a nullable column inside Approval's unique key
+/// would stop that key meaning anything (Postgres counts nulls as distinct).
+model SmsApproval {
+  id          String   @id @default(cuid())
+  rowId       String
+  userId      String
+  /// Fingerprint of the row's values when approved. See `smsFingerprint`.
+  contentHash String
+  createdAt   DateTime @default(now())
+
+  row  SheetRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([rowId, userId])
+  @@index([rowId])
+}
+
+/// What this app put into a sending platform for one text, and where.
+///
+/// One per row: a text row is one send, so pushing it again updates the
+/// campaign it made. For Attentive this records the campaign a Claude session
+/// made there, since the app does not reach Attentive itself.
+model SmsPush {
+  id           String    @id @default(cuid())
+  rowId        String    @unique
+  provider     String
+  campaignId   String
+  messageId    String
+  /// Whatever else the platform needs to find this again, as JSON.
+  refs         String    @default("{}")
+  contentHash  String
+  /// "draft" or "scheduled".
+  status       String    @default("draft")
+  scheduledFor DateTime?
+  campaignName String
+  audienceNames String   @default("")
+  pushedAt     DateTime  @default(now())
+  pushedById   String?
+
+  row      SheetRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  pushedBy User?    @relation("SmsPusher", fields: [pushedById], references: [id], onDelete: SetNull)
 }
 
 /// One person signing off one row as rendered in one template.

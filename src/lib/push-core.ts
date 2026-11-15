@@ -74,7 +74,7 @@ export async function adminIds(companyId: string, userIds: string[]): Promise<Se
  * Attentive being told Klaviyo did not answer would send somebody to check the
  * wrong account.
  */
-function failure(error: unknown, label = "the sending platform"): PushResult {
+export function failure(error: unknown, label = "the sending platform"): PushResult {
   if (error instanceof AuthError) return { ok: false, error: error.message };
   if (error instanceof SecretError) return { ok: false, error: error.message };
   if (error instanceof KlaviyoError) return { ok: false, error: error.detail };
@@ -94,7 +94,7 @@ function failure(error: unknown, label = "the sending platform"): PushResult {
  * than intended, is the kind of mistake that only shows up in the report
  * afterwards.
  */
-function resolveAudiences(
+export function resolveAudiences(
   cell: string,
   available: EspAudience[],
   /** The platform's name, so a refusal sends the person to the right screen. */
@@ -159,7 +159,7 @@ async function prepare(
       },
     }),
     prisma.sheetRow.findFirst({
-      where: { id: rowId, sheet: { companyId } },
+      where: { id: rowId, sheet: { companyId, kind: "email" } },
       select: { id: true, data: true, hiddenAt: true, sheet: { select: { columns: true } },
         approvals: { select: { templateId: true, contentHash: true, userId: true,
           user: { select: { name: true, email: true } } } } },
@@ -359,7 +359,7 @@ async function applyOverride(
 ): Promise<{ note?: string } | { error: string }> {
   const [row, template, company] = await Promise.all([
     prisma.sheetRow.findFirst({
-      where: { id: rowId, sheet: { companyId } },
+      where: { id: rowId, sheet: { companyId, kind: "email" } },
       select: { id: true, data: true, sheetId: true,
         sheet: { select: { columns: true } },
         approvals: { select: { templateId: true } } },
@@ -379,7 +379,7 @@ async function applyOverride(
   const zone = company?.espTimezone ?? DEFAULT_TIMEZONE;
   if (date) {
     const when = zonedToUtc(date, time, zone);
-    if (!when.utc) return { error: `“${date} ${time}”.trim() is not a date and time this can read.` };
+    if (!when.utc) return { error: `“${`${date} ${time}`.trim()}” is not a date and time this can read.` };
     if (mode === "scheduled" && when.utc.getTime() <= Date.now()) {
       return { error: "That send time has already passed." };
     }

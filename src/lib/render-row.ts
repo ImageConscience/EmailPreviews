@@ -95,7 +95,7 @@ export async function renderRow(
 ): Promise<RenderedRow | null> {
   const [row, template] = await Promise.all([
     prisma.sheetRow.findFirst({
-      where: { id: rowId, sheet: { companyId } },
+      where: { id: rowId, sheet: { companyId, kind: "email" } },
       select: { data: true },
     }),
     prisma.template.findFirst({ where: { id: templateId, companyId }, select: { html: true } }),

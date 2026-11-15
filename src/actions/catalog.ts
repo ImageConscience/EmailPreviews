@@ -245,7 +245,7 @@ export async function relinkProductsAction(
     const byHandle = new Map(products.map((product) => [product.handle.toLowerCase(), product]));
 
     const sheets = await prisma.contentSheet.findMany({
-      where: { companyId },
+      where: { companyId, kind: "email" },
       include: { rows: { orderBy: { position: "asc" } } },
     });
 

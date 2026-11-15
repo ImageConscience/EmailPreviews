@@ -23,7 +23,8 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
 
   const [sheets, templates] = await Promise.all([
     prisma.contentSheet.findMany({
-      where: { companyId },
+      // Emails only: text sheets have their own page and no template to render.
+      where: { companyId, kind: "email" },
       orderBy: { name: "asc" },
       include: {
         rows: {

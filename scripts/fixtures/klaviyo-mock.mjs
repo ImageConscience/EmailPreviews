@@ -68,7 +68,22 @@ let nextId = 1;
  * indistinguishable from a missing field, so the mock has to do it too.
  */
 const PUBLISHED = ["2024-10-15", "2025-01-15", "2025-04-15", "2025-07-15", "2025-10-15",
-  "2026-01-15", "2026-04-15"];
+  "2026-01-15", "2026-04-15", "2026-07-15", "2026-10-15"];
+
+/**
+ * Texts, in the shape Klaviyo gave campaigns at 2026-10-15: a campaign holds
+ * audiences and messages, a message holds variations, and a variation's SMS
+ * details are where the body and any MMS image live. Only that revision gets
+ * these answers, so a client that forgot to ask for it fails here as it would
+ * against the real thing (where it would get the old, image-less shape).
+ */
+const SMS_REVISION = "2026-10-15";
+const smsCampaigns = new Map();
+const smsMessages = new Map();
+const smsAudiences = new Map();
+const smsVariations = new Map();
+const smsSchedules = new Map();
+const images = new Map();
 const DEFINITION_REVISION = "2026-01-15";
 
 /**
@@ -119,17 +134,33 @@ createServer((req, res) => {
     res.end(JSON.stringify(body));
   };
 
+  if (url.pathname === "/__sms-status") {
+    // Lets a check play Klaviyo sending a text, which nothing in the app does.
+    const m = smsMessages.get(url.searchParams.get("message") ?? "");
+    if (m) m.status = url.searchParams.get("status") ?? m.status;
+    res.writeHead(m ? 200 : 404, { "content-type": "application/json" });
+    return res.end(JSON.stringify(m ?? { error: "no such message" }));
+  }
   if (url.pathname === "/__state") {
     return send(200, {
       calls,
       templates: [...templates.values()],
       campaigns: [...campaigns.values()],
       sendJobs,
+      sms: {
+        campaigns: [...smsCampaigns.values()],
+        messages: [...smsMessages.values()],
+        audiences: [...smsAudiences.values()],
+        variations: [...smsVariations.values()],
+        schedules: [...smsSchedules.values()],
+        images: [...images.values()],
+      },
     });
   }
   if (url.pathname === "/__reset") {
     campaigns.clear();
     sendJobs.length = 0;
+    for (const m of [smsCampaigns, smsMessages, smsAudiences, smsVariations, smsSchedules, images]) m.clear();
     calls.length = 0;
     for (const id of [...templates.keys()]) if (id !== "BASE01" && id !== "CODEONLY") templates.delete(id);
     templates.set("BASE01", { id: "BASE01", name: "Burju base", editor_type: "SYSTEM_DRAGGABLE", definition: baseDefinition() });
@@ -300,6 +331,134 @@ createServer((req, res) => {
         definition: JSON.parse(JSON.stringify(source.definition)),
       });
       return send(201, { data: { id, attributes: templates.get(id) } });
+    }
+
+    // ---- texts (2026-10-15) ------------------------------------------------
+    const smsShape = honoured === SMS_REVISION;
+    const smsStatus = (messageId) => smsMessages.get(messageId)?.status;
+
+    if (p === "/images" && req.method === "POST") {
+      const from = json?.data?.attributes?.import_from_url ?? "";
+      if (!/^(https:\/\/|data:)/.test(from)) {
+        return send(400, { errors: [{ detail: "import_from_url must be a URL or data URI." }] });
+      }
+      const id = String(nextId++);
+      images.set(id, { id, name: json.data.attributes.name, url: from, hidden: json.data.attributes.hidden });
+      return send(201, { data: { type: "image", id, attributes: { name: json.data.attributes.name,
+        image_url: `https://cdn.mock/${id}.jpg`, format: "jpeg", size: 1, hidden: Boolean(json.data.attributes.hidden),
+        updated_at: new Date().toISOString() }, links: {} } });
+    }
+
+    if (p === "/campaigns" && req.method === "POST" && json?.data?.attributes?.definition) {
+      if (!smsShape) {
+        return send(400, { errors: [{ detail: "definition is not a valid campaign attribute at this revision." }] });
+      }
+      const a = json.data.attributes;
+      if (!a.audiences?.length) return send(400, { errors: [{ detail: "At least one audience is required." }] });
+      if (a.definition.send_settings?.send_strategy === "simple" && !a.definition.send_settings.send_timezone) {
+        return send(400, { errors: [{ detail: "'simple' requires send_timezone." }] });
+      }
+      const id = `SCMP${nextId++}`;
+      const byTemp = new Map();
+      const audienceIds = a.audiences.map((aud) => {
+        const aid = `SAUD${nextId++}`;
+        byTemp.set(aud.temporary_id, aid);
+        smsAudiences.set(aid, { id: aid, campaignId: id, included: aud.included ?? [], excluded: aud.excluded ?? [] });
+        return aid;
+      });
+      const messageIds = [];
+      for (const m of a.messages ?? []) {
+        const audienceId = byTemp.get(m.audience_temporary_id);
+        if (!audienceId) return send(400, { errors: [{ detail: "audience_temporary_id matches no audience." }] });
+        const mid = `SMSG${nextId++}`;
+        smsMessages.set(mid, { id: mid, campaignId: id, audienceId, status: "draft", name: m.name });
+        for (const v of m.variations ?? []) {
+          const d = v.definition?.details ?? {};
+          if (d.text_message_type === "MMS" && !images.has(String(d.mms_static_image_asset_id))) {
+            return send(400, { errors: [{ detail: "mms_static_image_asset_id is not an image in this account." }] });
+          }
+          const vid = `SVAR${nextId++}`;
+          smsVariations.set(vid, { id: vid, messageId: mid, details: d });
+        }
+        messageIds.push(mid);
+      }
+      smsCampaigns.set(id, { id, definition: a.definition });
+      return send(201, { data: { type: "campaign", id, attributes: { definition: a.definition },
+        relationships: {
+          "campaign-messages": { data: messageIds.map((mid) => ({ type: "campaign-message", id: mid })) },
+          "campaign-audiences": { data: audienceIds.map((aid) => ({ type: "campaign-audience", id: aid })) },
+        } } });
+    }
+    const smsVariationsOf = /^\/campaign-messages\/([^/]+)\/campaign-variations$/.exec(p);
+    if (smsVariationsOf && req.method === "GET") {
+      if (!smsShape) return send(404, { errors: [{ detail: "Not found at this revision." }] });
+      if (!smsMessages.has(smsVariationsOf[1])) return send(404, { errors: [{ detail: "No message with that id." }] });
+      return send(200, { data: [...smsVariations.values()].filter((v) => v.messageId === smsVariationsOf[1])
+        .map((v) => ({ type: "campaign-variation", id: v.id, attributes: { definition: { details: v.details } } })) });
+    }
+    const smsMessageGet = /^\/campaign-messages\/([^/]+)$/.exec(p);
+    if (smsMessageGet && req.method === "GET" && smsMessages.has(smsMessageGet[1])) {
+      if (!smsShape) return send(400, { errors: [{ detail: "Use revision 2026-10-15 for this message." }] });
+      const m = smsMessages.get(smsMessageGet[1]);
+      return send(200, { data: { type: "campaign-message", id: m.id, attributes: { definition: { name: m.name, status: m.status } } } });
+    }
+    const variationMatch = /^\/campaign-variations\/([^/]+)$/.exec(p);
+    if (variationMatch && req.method === "PATCH") {
+      if (!smsShape) return send(404, { errors: [{ detail: "Not found at this revision." }] });
+      const v = smsVariations.get(variationMatch[1]);
+      if (!v) return send(404, { errors: [{ detail: "No variation with that id." }] });
+      if (smsStatus(v.messageId) !== "draft") {
+        return send(409, { errors: [{ detail: "Only a draft message's variations can be edited." }] });
+      }
+      const d = json.data.attributes.definition.details;
+      if (d.text_message_type === "MMS" && !images.has(String(d.mms_static_image_asset_id))) {
+        return send(400, { errors: [{ detail: "mms_static_image_asset_id is not an image in this account." }] });
+      }
+      v.details = d;
+      return send(200, { data: { type: "campaign-variation", id: v.id } });
+    }
+    const audienceMatch = /^\/campaign-audiences\/([^/]+)$/.exec(p);
+    if (audienceMatch && req.method === "PATCH") {
+      if (!smsShape) return send(404, { errors: [{ detail: "Not found at this revision." }] });
+      const aud = smsAudiences.get(audienceMatch[1]);
+      if (!aud) return send(404, { errors: [{ detail: "No audience with that id." }] });
+      const m = [...smsMessages.values()].find((x) => x.audienceId === aud.id);
+      if (m && m.status !== "draft") return send(409, { errors: [{ detail: "Only a draft's audience can change." }] });
+      const def = json.data.attributes.definition ?? {};
+      if (def.included) aud.included = def.included;
+      if (def.excluded) aud.excluded = def.excluded;
+      return send(200, { data: { type: "campaign-audience", id: aud.id } });
+    }
+    if (p === "/campaign-message-schedule" && req.method === "POST") {
+      if (!smsShape) return send(404, { errors: [{ detail: "Not found at this revision." }] });
+      const attrs = json.data.attributes;
+      const mid = json.data.relationships?.["campaign-message"]?.data?.id;
+      const m = smsMessages.get(mid);
+      if (!m) return send(404, { errors: [{ detail: "No message with that id." }] });
+      if (m.status !== "draft") return send(409, { errors: [{ detail: "That message is already scheduled." }] });
+      if (attrs.strategy === "static" && !(new Date(attrs.send_time).getTime() > Date.now())) {
+        return send(400, { errors: [{ detail: "send_time must be in the future." }] });
+      }
+      const sid = `SSCH${nextId++}`;
+      smsSchedules.set(sid, { id: sid, messageId: mid, strategy: attrs.strategy, sendTime: attrs.send_time });
+      m.status = "scheduled";
+      return send(201, { data: { type: "campaign-message-schedule", id: sid,
+        attributes: { strategy: attrs.strategy, send_time: attrs.send_time } } });
+    }
+    const scheduleMatch = /^\/campaign-message-schedule\/([^/]+)$/.exec(p);
+    if (scheduleMatch && req.method === "PATCH") {
+      if (!smsShape) return send(404, { errors: [{ detail: "Not found at this revision." }] });
+      const sch = smsSchedules.get(scheduleMatch[1]);
+      if (!sch) return send(404, { errors: [{ detail: "No schedule with that id." }] });
+      const action = json.data.attributes?.action;
+      const m = smsMessages.get(sch.messageId);
+      // The reference does not say what each does. Played here as the client
+      // reads them: revert puts it back to draft, cancel ends it for good.
+      if (action === "revert") m.status = "draft";
+      else if (action === "cancel") m.status = "cancelled";
+      else return send(400, { errors: [{ detail: "action must be cancel or revert." }] });
+      smsSchedules.delete(sch.id);
+      return send(200, { data: { type: "campaign-message-schedule", id: sch.id } });
     }
 
     if (p === "/campaigns" && req.method === "POST") {

@@ -16,10 +16,12 @@ interface Props {
   role: string;
   /** Admin or above on a company that has a Klaviyo key stored. */
   canPush: boolean;
+  /** The company texts: a platform is chosen or a text sheet exists. */
+  hasTexts: boolean;
   otherCompanies: { id: string; name: string }[];
 }
 
-export function TopBar({ companyId, companyName, userName, role, canPush, otherCompanies }: Props) {
+export function TopBar({ companyId, companyName, userName, role, canPush, hasTexts, otherCompanies }: Props) {
   const pathname = usePathname();
   const base = `/c/${companyId}`;
 
@@ -34,6 +36,9 @@ export function TopBar({ companyId, companyName, userName, role, canPush, otherC
   const links = [
     { href: `${base}/overview`, label: "Overview" },
     { href: `${base}/preview`, label: "Preview" },
+    // Texts write, preview, approve and push in one place: there is no
+    // template to choose, so the separate steps email needs collapse into one.
+    ...(hasTexts ? [{ href: `${base}/texts`, label: "Texts" }] : []),
     // Third only for the people who can push, and only once there is somewhere
     // to push to.
     ...(canPush ? [{ href: `${base}/push`, label: "Push" }] : []),
