@@ -15,6 +15,12 @@ import { checkEligibility, scheduleBlocker } from "@/lib/push-eligibility";
 /** What a push is asking for. */
 export type PushMode = "draft" | "scheduled";
 
+/** Why an Attentive company's email is not pushed from here, and what to do instead. */
+export const ATTENTIVE_HANDOFF =
+  "This company sends through Attentive, which this app does not reach directly: its " +
+  "published API has no campaigns. Ask Claude to hand off the approved Attentive emails; " +
+  "it builds them in Attentive through Attentive's own connector and records them here.";
+
 /**
  * A send time entered at the push instead of read from the sheet.
  *
@@ -142,7 +148,7 @@ interface Prepared {
  * explanation: a half-finished push against a client's account leaves a
  * campaign behind that somebody has to find and delete.
  */
-async function prepare(
+export async function prepare(
   companyId: string,
   rowId: string,
   templateId: string,
@@ -193,7 +199,9 @@ async function prepare(
       providerBlockers: setupBlockers(providerId, company),
       providerLabel: PROVIDER_LABELS[providerId],
       timezone: company.espTimezone,
-      connected: Boolean(company.espKeyCipher),
+      // Attentive holds no key: it is reached through a Claude session, so
+      // choosing it is the whole connection.
+      connected: providerId === "attentive" || Boolean(company.espKeyCipher),
       audience: company.espAudience,
       audienceExclude: company.espAudienceExclude,
     },
@@ -422,8 +430,9 @@ export async function performPush(
   try {
     const provider = await providerFor(companyId);
     if (!provider) {
-      const label = PROVIDER_LABELS[await providerIdFor(companyId)];
-      return { ok: false, error: `This company is not connected to ${label}.` };
+      const id = await providerIdFor(companyId);
+      if (id === "attentive") return { ok: false, error: ATTENTIVE_HANDOFF };
+      return { ok: false, error: `This company is not connected to ${PROVIDER_LABELS[id]}.` };
     }
 
     // An overridden send time is a sheet edit, and it happens first so that
@@ -564,8 +573,9 @@ export async function performSchedule(
   try {
     const provider = await providerFor(companyId);
     if (!provider) {
-      const label = PROVIDER_LABELS[await providerIdFor(companyId)];
-      return { ok: false, error: `This company is not connected to ${label}.` };
+      const id = await providerIdFor(companyId);
+      if (id === "attentive") return { ok: false, error: ATTENTIVE_HANDOFF };
+      return { ok: false, error: `This company is not connected to ${PROVIDER_LABELS[id]}.` };
     }
 
     const push = await prisma.espPush.findUnique({

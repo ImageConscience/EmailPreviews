@@ -21,7 +21,6 @@
     "check": "npm run check:roundtrip && npm run check:secrets && npm run check:zone && npm run check:blocks && npm run check:sms",
     "postinstall": "prisma generate",
     "check:mcp": "tsx scripts/check-mcp.mts",
-    "attentive:mock": "node scripts/fixtures/attentive-mock.mjs",
     "check:attentive": "tsx scripts/check-attentive.mts"
   },
   "dependencies": {

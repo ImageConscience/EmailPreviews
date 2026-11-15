@@ -58,9 +58,20 @@ brands.
 | `create_email` | Start a row against a template |
 | `set_fields` | Merge values into a row |
 | `hide_email` | Take a row out of the working view, or put it back |
+| `list_attentive_handoffs` | For an Attentive company (admin): approved emails and texts ready to build in Attentive |
+| `record_attentive_campaign` | (admin) Record the Attentive campaign Claude built for a row; refused if the row changed since approval |
+| `save_attentive_segments` | (admin) Replace the app's copy of the company's Attentive segments |
 
 There is no approve tool and no push tool, deliberately. Sign-off and sending
 stay on the screens where a person can see what they are agreeing to.
+
+The three Attentive tools do not change that. Attentive's published API has no
+campaigns, so the app cannot push there. Instead the connector hands work that
+is *already approved* to the person's Claude session. Claude builds it in
+Attentive with Attentive's own MCP tools, where the person approves each write,
+then records here what it made. Nothing here sends. Recording is refused for a
+row edited since its approval. The step-by-step workflow is in
+[skills/attentive-handoff/SKILL.md](skills/attentive-handoff/SKILL.md).
 
 There is no delete either, and that one is a judgement about symmetry: creating
 a row over the connector costs one call, so undoing one should not cost the

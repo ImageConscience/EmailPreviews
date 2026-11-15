@@ -136,7 +136,11 @@ export function SendingPanel({
       return;
     }
     setPicked(next);
-    setNote(`Now set to ${PROVIDER_LABELS[next]}. Paste a key for it to connect.`);
+    setNote(
+      next === "attentive"
+        ? "Now set to Attentive. No key is needed: approved emails are handed off through Claude."
+        : `Now set to ${PROVIDER_LABELS[next]}. Paste a key for it to connect.`,
+    );
     router.refresh();
   };
 
@@ -182,14 +186,25 @@ export function SendingPanel({
           <>
             {/* The account name is the headline, because the mistake worth
                 catching is a working key pointed at the wrong client. */}
-            <p style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 600 }}>
-              {state.accountName}
-            </p>
-            <p className="hint" style={{ marginTop: 0 }}>
-              {label} · {PROVIDER_ACCOUNT_LABELS[state.provider]}{" "}
-              <code>{state.accountId}</code> · key {state.keyHint}
-              {state.linkedAt ? ` · connected ${new Date(state.linkedAt).toLocaleDateString()}` : ""}
-            </p>
+            {state.provider === "attentive" ? (
+              <p className="hint" style={{ marginTop: 0 }}>
+                Attentive · no key held. Its published API cannot create campaigns, so approved
+                emails are handed off to Claude, which builds them in Attentive through
+                Attentive&rsquo;s own connector and records each one here. Audiences come from the
+                segment list Claude last saved.
+              </p>
+            ) : (
+              <>
+                <p style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 600 }}>
+                  {state.accountName}
+                </p>
+                <p className="hint" style={{ marginTop: 0 }}>
+                  {label} · {PROVIDER_ACCOUNT_LABELS[state.provider]}{" "}
+                  <code>{state.accountId}</code> · key {state.keyHint}
+                  {state.linkedAt ? ` · connected ${new Date(state.linkedAt).toLocaleDateString()}` : ""}
+                </p>
+              </>
+            )}
 
             <div className="field" style={{ marginTop: 16 }}>
               <span>From address</span>
@@ -380,7 +395,7 @@ export function SendingPanel({
                   <button type="button" className="btn btn-primary" disabled={!!busy} onClick={() => void saveSettings()}>
                     Save
                   </button>
-                  {confirmOff ? (
+                  {state.provider === "attentive" ? null : confirmOff ? (
                     <>
                       <span className="hint" style={{ margin: 0 }}>Remove the stored key?</span>
                       <button type="button" className="btn btn-sm btn-danger" disabled={!!busy} onClick={() => void disconnect()}>
@@ -465,6 +480,22 @@ export function SendingPanel({
               </p>
             </div>
 
+            {picked === "attentive" ? (
+              <>
+                <p className="hint">{PROVIDER_KEY_HELP.attentive}</p>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!!busy}
+                    onClick={() => void switchProvider("attentive")}
+                  >
+                    Use Attentive
+                  </button>
+                )}
+              </>
+            ) : (
+            <>
             <div className="field">
               <span>Private key</span>
               <input
@@ -487,6 +518,8 @@ export function SendingPanel({
               >
                 Connect {PROVIDER_LABELS[picked]}
               </button>
+            )}
+            </>
             )}
           </>
         )}

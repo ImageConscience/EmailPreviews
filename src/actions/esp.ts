@@ -19,6 +19,7 @@ import { CANDIDATE_REVISIONS, fetchTemplate, KlaviyoError, revision,
   type TemplateDetail } from "@/lib/klaviyo";
 import { CONTENT_MARKER, findContentBlock } from "@/lib/block-content";
 import { DEFAULT_TIMEZONE, TIMEZONES } from "@/lib/zone";
+import { cachedAttentiveSegments } from "@/lib/sms-core";
 
 /**
  * Connecting a company to its sending platform, and reading from it.
@@ -144,6 +145,14 @@ export async function connectProviderAction(
   const label = PROVIDER_LABELS[provider];
   try {
     await requireCompanyAccess(companyId, "admin");
+    if (provider === "attentive") {
+      return {
+        ok: false,
+        error:
+          "Attentive takes no key here. Choose Attentive and the approved emails are handed off " +
+          "through Claude and Attentive's own connector.",
+      };
+    }
 
     const key = apiKey.trim();
     if (!key) return { ok: false, error: `Paste a private key from ${label}.` };
@@ -286,9 +295,27 @@ export interface AudienceList {
  * fetching it is cheaper than reasoning about when a cache is stale.
  */
 export async function listAudiencesAction(companyId: string): Promise<AudienceList> {
-  const label = PROVIDER_LABELS[await providerIdFor(companyId)];
+  const providerId = await providerIdFor(companyId);
+  const label = PROVIDER_LABELS[providerId];
   try {
     await requireCompanyAccess(companyId);
+    if (providerId === "attentive") {
+      // The copy a Claude session saved through the connector; this app holds
+      // no Attentive key to ask with.
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { attentiveSegments: true },
+      });
+      const audiences = cachedAttentiveSegments(company?.attentiveSegments ?? null);
+      if (audiences.length === 0) {
+        return {
+          ok: false,
+          provider: label,
+          error: "No Attentive segments are saved yet. Ask Claude to sync them into Message Baker.",
+        };
+      }
+      return { ok: true, provider: label, audiences: audiences.sort((a, b) => a.name.localeCompare(b.name)) };
+    }
     const provider = await providerFor(companyId);
     if (!provider) {
       return { ok: false, provider: label, error: `This company is not connected to ${label}.` };

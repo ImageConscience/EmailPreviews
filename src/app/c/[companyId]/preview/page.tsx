@@ -26,7 +26,7 @@ export default async function PreviewPage({
       select: { id: true, name: true, _count: { select: { rows: true } } },
     }),
     prisma.company.findUnique({ where: { id: companyId },
-      select: { espKeyCipher: true, espAudience: true, espAudienceExclude: true } }),
+      select: { espKeyCipher: true, espAudience: true, espAudienceExclude: true, emailProvider: true } }),
   ]);
 
   return (
@@ -40,7 +40,9 @@ export default async function PreviewPage({
       }))}
       sheets={sheets.map((s) => ({ id: s.id, name: s.name, rowCount: s._count.rows }))}
       // Audience only means something once there is an account to send from.
-      klaviyoConnected={Boolean(company?.espKeyCipher)}
+      // Named for Klaviyo but means "has somewhere to send": an Attentive company
+      // holds no key, and its audiences come from the segments Claude saved.
+      klaviyoConnected={company?.emailProvider === "attentive" || Boolean(company?.espKeyCipher)}
       defaultAudience={{
         audience: company?.espAudience ?? "",
         exclude: company?.espAudienceExclude ?? "",

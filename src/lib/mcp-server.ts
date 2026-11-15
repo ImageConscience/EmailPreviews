@@ -28,6 +28,11 @@ import {
   tokenCompanies,
   tokenCompanyAccess,
 } from "@/lib/api-token";
+import {
+  listAttentiveHandoffs,
+  recordAttentiveHandoff,
+  saveAttentiveSegments,
+} from "@/lib/attentive-handoff";
 
 /**
  * The connector's view of this app.
@@ -36,6 +41,14 @@ import {
  * pushed; this is where one gets written. Anything to do with sign-off or
  * sending stays on the screens where a person can see what they are agreeing
  * to, so there is no approve tool and no push tool here -- on purpose.
+ *
+ * The one exception in spirit is Attentive, which this app cannot reach (its
+ * published API has no campaigns). For an Attentive company the connector
+ * hands *already approved* work to the person's Claude session, which builds
+ * it in Attentive through Attentive's own MCP server -- where the person
+ * approves each write -- and then records here what it made. Nothing in these
+ * tools sends anything, and recording is refused for a row that is no longer
+ * approved as it reads.
  */
 
 /** Tool results are JSON as text: precise to read, and readable in a log. */
@@ -63,7 +76,11 @@ export function buildServer(bearer: TokenBearer): McpServer {
         "fields take HTML, and which the app works out for itself and must be " +
         "left blank. A row is taken away by hiding it, which is reversible and " +
         "keeps its history; there is no delete. Approving and sending happen in " +
-        "the app, not here.",
+        "the app, not here. For a company that sends through Attentive, " +
+        "list_attentive_handoffs returns what is approved and ready; build each " +
+        "in Attentive with Attentive's own tools, then call " +
+        "record_attentive_campaign with the campaign id it created. " +
+        "save_attentive_segments keeps the app's audience pickers current.",
     },
   );
 
@@ -338,6 +355,82 @@ export function buildServer(bearer: TokenBearer): McpServer {
 
       const result = await setHidden(bearer.userId, rowId, hidden);
       return json({ rowId, ...result });
+    },
+  );
+
+  server.registerTool(
+    "list_attentive_handoffs",
+    {
+      title: "List approved work waiting to be built in Attentive",
+      description:
+        "For a company whose email and/or texts go through Attentive: every row an admin has " +
+        "approved as it now reads, ready to build in Attentive with Attentive's own MCP tools. " +
+        "Emails come with the complete rendered HTML, subject, preview text and sender; texts " +
+        "with the body and optional MMS image URL. Audiences are given as Attentive segment ids " +
+        "resolved from the saved segment list. Rows already recorded and unchanged are left out " +
+        "unless includeRecorded is true. notReady lists approved rows that cannot go yet, and why.",
+      inputSchema: {
+        companyId: z.string(),
+        includeRecorded: z.boolean().optional().describe("Also return rows already recorded as built."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ companyId, includeRecorded }) => {
+      await tokenCompanyAccess(bearer, companyId, "admin");
+      return json(await listAttentiveHandoffs(companyId, { includeRecorded }));
+    },
+  );
+
+  server.registerTool(
+    "record_attentive_campaign",
+    {
+      title: "Record a campaign built in Attentive",
+      description:
+        "After building an approved email or text in Attentive with Attentive's own tools, " +
+        "record the campaign it created so this app shows the row as in Attentive (draft or " +
+        "scheduled) and guards it like any other pushed row. Refused if the row is no longer " +
+        "approved as it reads now -- list the handoffs again in that case. This sends nothing.",
+      inputSchema: {
+        companyId: z.string(),
+        channel: z.enum(["email", "sms"]),
+        rowId: z.string(),
+        templateId: z.string().optional().describe("Required for email: the template it was rendered in."),
+        campaignId: z.string().describe("Attentive's id for the campaign that was created."),
+        messageId: z.string().optional(),
+        status: z.enum(["draft", "scheduled"]),
+        scheduledFor: z.string().optional().describe("ISO 8601 instant, when status is scheduled."),
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    async (input) => {
+      await tokenCompanyAccess(bearer, input.companyId, "admin");
+      const { companyId, ...rest } = input;
+      const result = await recordAttentiveHandoff(companyId, bearer.userId, rest);
+      return result.ok ? json({ recorded: true, ...rest }) : refuse(result.error ?? "Not recorded.");
+    },
+  );
+
+  server.registerTool(
+    "save_attentive_segments",
+    {
+      title: "Save the company's Attentive segments",
+      description:
+        "Replace this app's copy of the company's Attentive segment list with the one just read " +
+        "from Attentive (for example with Attentive's list_segments). The app holds no Attentive " +
+        "key, so this copy is what its audience pickers and defaults offer, and what " +
+        "list_attentive_handoffs resolves audience names against.",
+      inputSchema: {
+        companyId: z.string(),
+        segments: z
+          .array(z.object({ id: z.string(), name: z.string(), kind: z.string().optional() }))
+          .min(1),
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    async ({ companyId, segments }) => {
+      await tokenCompanyAccess(bearer, companyId, "admin");
+      const result = await saveAttentiveSegments(companyId, segments);
+      return result.ok ? json({ saved: result.saved }) : refuse(result.error ?? "Not saved.");
     },
   );
 

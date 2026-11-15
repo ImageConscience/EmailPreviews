@@ -83,7 +83,8 @@ export default async function IntegrationsPage({
             company && isEmailProvider(company.emailProvider) ? company.emailProvider : "klaviyo",
           // Whether a key is held, never the key: the cipher is read here only
           // to answer yes or no, and nothing derived from it reaches the browser.
-          connected: Boolean(company?.espKeyCipher),
+          // Attentive holds no key, so choosing it is the connection.
+          connected: company?.emailProvider === "attentive" || Boolean(company?.espKeyCipher),
           keyHint: company?.espKeyHint ?? null,
           accountName: company?.espAccountName ?? null,
           accountId: company?.espAccountId ?? null,

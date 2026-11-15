@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/db";
 import { decryptSecret } from "@/lib/secret";
-import { AttentiveProvider } from "@/lib/esp/attentive";
 import { KlaviyoProvider } from "@/lib/esp/klaviyo";
 import {
+  EspError,
   isEmailProvider,
   type EmailProvider,
   type EmailProviderId,
@@ -42,12 +42,12 @@ export async function providerFor(companyId: string): Promise<EmailProvider | nu
   const apiKey = decryptSecret(company.espKeyCipher);
   const id = isEmailProvider(company.emailProvider) ? company.emailProvider : "klaviyo";
 
-  switch (id) {
-    case "attentive":
-      return new AttentiveProvider(apiKey);
-    case "klaviyo":
-      return new KlaviyoProvider(apiKey, company.klaviyoBaseTemplateId);
-  }
+  // Attentive is not reached from this app: its published API has no campaigns
+  // (docs.attentive.com, read November 2026). Its email and texts are built by
+  // a person's Claude session through Attentive's MCP server and recorded here
+  // through this app's connector -- see src/lib/attentive-handoff.ts.
+  if (id === "attentive") return null;
+  return new KlaviyoProvider(apiKey, company.klaviyoBaseTemplateId);
 }
 
 /** A provider built from a key that is not stored yet, to check it before saving. */
@@ -56,9 +56,10 @@ export function providerFromKey(
   apiKey: string,
   baseTemplateId: string | null = null,
 ): EmailProvider {
-  return id === "attentive"
-    ? new AttentiveProvider(apiKey)
-    : new KlaviyoProvider(apiKey, baseTemplateId);
+  if (id === "attentive") {
+    throw new EspError("Attentive takes no key in this app; it is reached through Claude.");
+  }
+  return new KlaviyoProvider(apiKey, baseTemplateId);
 }
 
 /** The stored handles for one push, as the provider expects them back. */
@@ -99,6 +100,7 @@ export function setupBlockers(
   if (providerId === "klaviyo" && !company.klaviyoBaseTemplateId) {
     return ["No Klaviyo base template is set."];
   }
-  // Attentive takes the email as HTML, so a key is the whole setup.
+  // Attentive needs nothing here: the HTML is handed to Claude, which builds the
+  // campaign in Attentive itself.
   return [];
 }

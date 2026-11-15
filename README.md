@@ -226,14 +226,35 @@ For production: `npm run build && npm start`.
 something to talk to:
 
 ```bash
-npm run klaviyo:mock & npm run check:push        # the push, against a stand-in Klaviyo
-npm run attentive:mock & npm run check:attentive # the same, against a stand-in Attentive
+npm run klaviyo:mock & npm run check:push        # the email push, against a stand-in Klaviyo
+npm run klaviyo:mock & npm run check:sms-push    # texts (SMS/MMS) to Klaviyo, same stand-in
+npm run check:attentive                          # the Attentive handoff (database only)
 npm run dev & npm run check:mcp                  # the connector, over real HTTP
 ```
 
-`check:push` and `check:attentive` both exercise a whole push end to end, and
-`check:attentive` also covers what happens to a company's existing campaigns
-when it changes platform.
+`check:push` and `check:sms-push` exercise a whole push end to end. The SMS
+half of the mock answers only at Klaviyo revision 2026-10-15, the one the SMS
+client was written against. `check:attentive` needs no mock: this app does not
+call Attentive. See "Attentive" below.
+
+### Attentive
+
+Attentive's published API (docs.attentive.com) has no campaign endpoints, so
+this app holds no Attentive key and calls nothing there. For a company on
+Attentive, approved emails and texts are handed to a person's Claude session.
+It reads them with the connector's `list_attentive_handoffs`, builds them in
+Attentive through Attentive's own MCP server, and records each one with
+`record_attentive_campaign`. The audience pickers use the segment list Claude
+saves with `save_attentive_segments`. The workflow is written up as a skill in
+[docs/skills/attentive-handoff/SKILL.md](docs/skills/attentive-handoff/SKILL.md).
+
+### Texts
+
+A text is its own kind of sheet ("Texts" at upload), with a name, message,
+optional image (making it an MMS), send date and time, and audience. Texts are
+written, previewed, approved and pushed on the Texts page. Each company chooses
+where its texts go separately from its email: Klaviyo (pushed directly) or
+Attentive (handed off as above).
 
 ---
 
@@ -291,7 +312,10 @@ src/lib/api-token.ts     bearer tokens for callers with no browser session
 src/lib/compose.ts       creating and writing rows, shared by the app and the connector
 src/lib/esp/types.ts     what a sending platform has to be able to do; the seam
 src/lib/esp/klaviyo.ts   Klaviyo's adapter: the base-template clone lives here
-src/lib/esp/attentive.ts Attentive's adapter: it takes the HTML
+src/lib/attentive-handoff.ts  what the connector hands Claude for Attentive, and records back
+src/lib/sms.ts           SMS segment counting and copy checks
+src/lib/sms-core.ts      texts: approval, eligibility, push to Klaviyo
+src/lib/klaviyo-sms.ts   Klaviyo's SMS/MMS campaigns, at revision 2026-10-15
 src/lib/esp/index.ts     builds a company's provider from its stored settings
 src/lib/push-core.ts     the push, from eligibility to the scheduled campaign
 src/lib/push-eligibility.ts  what the queue offers and the push allows, one rule

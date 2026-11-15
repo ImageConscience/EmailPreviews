@@ -37,7 +37,7 @@ export const PROVIDER_KEY_HELP: Record<EmailProviderId, string> = {
   klaviyo:
     "A private API key from Settings → API keys in Klaviyo, with campaign and template scopes.",
   attentive:
-    "A private app key from the Attentive app you created for this. It needs campaign and segment access.",
+    "No key. Attentive's published API cannot create campaigns, so approved emails are handed off through Claude and Attentive's own connector.",
 };
 
 /** What each platform calls the identifier shown beside the account name. */

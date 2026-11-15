@@ -184,7 +184,11 @@ check("initialize succeeds with a real token", init.body?.result?.serverInfo?.na
 
 const tools = (await rpc("tools/list", {})).body?.result?.tools ?? [];
 const names = tools.map((t: { name: string }) => t.name);
-check("every tool is listed", names.length === 8, names.join(", "));
+check("every tool is listed", names.length === 11, names.join(", "));
+check(
+  "the Attentive handoff tools are there -- Attentive is reached through Claude, not the app",
+  ["list_attentive_handoffs", "record_attentive_campaign", "save_attentive_segments"].every((n) => names.includes(n)),
+);
 check("there is a hide tool", names.includes("hide_email"));
 check(
   "and no delete tool -- taking a row away for good stays in the app",
