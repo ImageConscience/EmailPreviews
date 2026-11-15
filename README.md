@@ -130,6 +130,35 @@ layout is a different email. Editing the copy or the template marks existing
 approvals stale rather than letting them silently stand, so an approval always
 means "this version was approved".
 
+**Sending.** An approved row can be pushed into the client's own sending
+platform as a campaign, either as a draft or scheduled at the time the sheet
+gives. Each company picks **one platform** under **Settings → Integrations** --
+Klaviyo or Attentive -- and everything the app does for that company goes
+through it: reading the lists and segments a sheet can name, creating the
+campaign, filling its content, scheduling it, taking it back out of the queue.
+The key is encrypted before it is stored and never shown again.
+
+The two platforms disagree about almost everything underneath, and the whole
+difference is kept in one place. `src/lib/esp/types.ts` says what a provider has
+to be able to do, phrased as what the app wants -- *a campaign carrying this
+content, going to these people, at this time* -- and each adapter gets there its
+own way. Attentive takes the email as HTML, so its adapter is short. Klaviyo
+will not put raw HTML in a campaign at all: the content has to be a block inside
+a drag-and-drop template, so every push clones the client's base template,
+hoists the document's styles into the block, detaches shared blocks, strips the
+identifiers Klaviyo refuses on create, and deletes the leftover afterwards. None
+of that reaches the orchestration, and none of it means anything to Attentive.
+
+A company can change platform later. Doing so clears the stored key, because a
+key for one is meaningless to the other, and campaigns already pushed are left
+alone: each push records which platform made it, so the app will not try to
+schedule a Klaviyo campaign through Attentive, and every sentence about an
+existing campaign names the platform it is really in.
+
+Email only, deliberately. When SMS arrives it gets its own column, its own
+selector and its own interface rather than optional fields on this one, because
+a company may well text through one platform and mail through another.
+
 ### The parts that usually go wrong
 
 - **Headers rarely match placeholders exactly.** A column called `Hero Image URL`
@@ -191,6 +220,21 @@ demo@example.com / previewme123
 
 For production: `npm run build && npm start`.
 
+### Checks
+
+`npm run check` runs the ones that need nothing but the code. The rest need
+something to talk to:
+
+```bash
+npm run klaviyo:mock & npm run check:push        # the push, against a stand-in Klaviyo
+npm run attentive:mock & npm run check:attentive # the same, against a stand-in Attentive
+npm run dev & npm run check:mcp                  # the connector, over real HTTP
+```
+
+`check:push` and `check:attentive` both exercise a whole push end to end, and
+`check:attentive` also covers what happens to a company's existing campaigns
+when it changes platform.
+
 ---
 
 ## Stack
@@ -245,6 +289,12 @@ src/lib/mcp-server.ts    the connector's tools
 src/lib/field-guide.ts   template rules, computed from the template rather than listed
 src/lib/api-token.ts     bearer tokens for callers with no browser session
 src/lib/compose.ts       creating and writing rows, shared by the app and the connector
+src/lib/esp/types.ts     what a sending platform has to be able to do; the seam
+src/lib/esp/klaviyo.ts   Klaviyo's adapter: the base-template clone lives here
+src/lib/esp/attentive.ts Attentive's adapter: it takes the HTML
+src/lib/esp/index.ts     builds a company's provider from its stored settings
+src/lib/push-core.ts     the push, from eligibility to the scheduled campaign
+src/lib/push-eligibility.ts  what the queue offers and the push allows, one rule
 src/app/c/[companyId]/   the signed-in app; preview/ is the workspace
 scripts/start.mjs        production start: check database, migrate, serve
 scripts/db-export.ts     dump every table to JSON (portable backup)

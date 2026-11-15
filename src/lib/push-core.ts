@@ -2,13 +2,10 @@ import { prisma } from "@/lib/db";
 import { AuthError } from "@/lib/auth";
 import { approvalFingerprint } from "@/lib/fingerprint";
 import { SecretError } from "@/lib/secret";
-import { KlaviyoError, assignTemplate, cancelCampaign, createCampaign, createDndTemplate,
-  deleteTemplate, fetchAudiences, fetchCampaign, fetchMessageTemplate, fetchTemplate,
-  scheduleCampaign, updateCampaign,
-  type Audience, type CampaignContent } from "@/lib/klaviyo";
-import { klaviyoKeyForCompany } from "@/lib/klaviyo-key";
+import { KlaviyoError } from "@/lib/klaviyo";
+import { PROVIDER_LABELS, isEmailProvider, providerFor, providerIdFor, refsFrom, setupBlockers, EspError,
+  type EmailProvider, type EspAudience, type EspCampaignContent } from "@/lib/esp";
 import { renderRow } from "@/lib/render-row";
-import { detachUniversalBlocks, findContentBlock, stripIdentifiers, toBlockContent } from "@/lib/block-content";
 import { audienceSlots, envelopeSlots, extractPlaceholders, findAudienceColumns,
   findEnvelopeColumns, normalizeKey } from "@/lib/template";
 import { DEFAULT_TIMEZONE, zonedToUtc } from "@/lib/zone";
@@ -42,8 +39,8 @@ export interface PushState {
   pushedBy: string | null;
   /** True when the row has been edited since it was pushed. */
   stale: boolean;
-  /** Klaviyo's own view, when it was asked. */
-  klaviyoStatus?: string | null;
+  /** The platform's own view, when it was asked. */
+  providerStatus?: string | null;
 }
 
 export interface PushResult {
@@ -70,14 +67,22 @@ export async function adminIds(companyId: string, userIds: string[]): Promise<Se
   return new Set(memberships.map((m) => m.userId));
 }
 
-function failure(error: unknown): PushResult {
+/**
+ * A failure, in words the person who pressed the button can act on.
+ *
+ * `label` is the platform's name rather than a fixed "Klaviyo": a company on
+ * Attentive being told Klaviyo did not answer would send somebody to check the
+ * wrong account.
+ */
+function failure(error: unknown, label = "the sending platform"): PushResult {
   if (error instanceof AuthError) return { ok: false, error: error.message };
   if (error instanceof SecretError) return { ok: false, error: error.message };
   if (error instanceof KlaviyoError) return { ok: false, error: error.detail };
+  if (error instanceof EspError) return { ok: false, error: error.message };
   if (error instanceof Error && error.name === "TimeoutError") {
-    return { ok: false, error: "Klaviyo did not answer within 30 seconds. Nothing was scheduled." };
+    return { ok: false, error: `${label} did not answer within 30 seconds. Nothing was scheduled.` };
   }
-  return { ok: false, error: "Could not reach Klaviyo." };
+  return { ok: false, error: `Could not reach ${label}.` };
 }
 
 /**
@@ -91,7 +96,9 @@ function failure(error: unknown): PushResult {
  */
 function resolveAudiences(
   cell: string,
-  available: Audience[],
+  available: EspAudience[],
+  /** The platform's name, so a refusal sends the person to the right screen. */
+  label: string,
 ): { ids: string[]; names: string[] } | { error: string } {
   const wanted = cell.split(",").map((part) => part.trim()).filter(Boolean);
   const ids: string[] = [];
@@ -103,14 +110,14 @@ function resolveAudiences(
     const matches = byId.length ? byId : byName;
 
     if (matches.length === 0) {
-      return { error: `No list or segment in Klaviyo is called “${term}”.` };
+      return { error: `No list or segment in ${label} is called “${term}”.` };
     }
     if (matches.length > 1) {
-      // A list and a segment sharing a name is ordinary in Klaviyo, and picking
-      // one silently would send to the wrong people.
+      // A list and a segment sharing a name is ordinary on either platform, and
+      // picking one silently would send to the wrong people.
       return {
         error:
-          `“${term}” matches ${matches.length} audiences in Klaviyo ` +
+          `“${term}” matches ${matches.length} audiences in ${label} ` +
           `(${matches.map((m) => m.kind).join(" and ")}). Use its id instead of its name.`,
       };
     }
@@ -122,13 +129,10 @@ function resolveAudiences(
 }
 
 interface Prepared {
-  content: CampaignContent;
-  html: string;
+  content: EspCampaignContent;
   contentHash: string;
   notes: string[];
   audienceNames: string;
-  baseTemplateId: string;
-  templateName: string;
 }
 
 /**
@@ -148,9 +152,10 @@ async function prepare(
     prisma.company.findUnique({
       where: { id: companyId },
       select: {
-        klaviyoFromEmail: true, klaviyoFromLabel: true, klaviyoReplyTo: true,
-        klaviyoTimezone: true, klaviyoBaseTemplateId: true, klaviyoAccountName: true,
-        klaviyoKeyCipher: true, klaviyoAudience: true, klaviyoAudienceExclude: true,
+        espFromEmail: true, espFromLabel: true, espReplyTo: true,
+        espTimezone: true, klaviyoBaseTemplateId: true, espAccountName: true,
+        espKeyCipher: true, espAudience: true, espAudienceExclude: true,
+        emailProvider: true,
       },
     }),
     prisma.sheetRow.findFirst({
@@ -165,6 +170,8 @@ async function prepare(
   if (!company) return { error: "Company not found." };
   if (!row) return { error: "Row not found." };
   if (!template) return { error: "Template not found." };
+
+  const providerId = isEmailProvider(company.emailProvider) ? company.emailProvider : "klaviyo";
 
   // Which approvers are admins on this company, since one current admin
   // sign-off is what the gate turns on.
@@ -182,12 +189,13 @@ async function prepare(
     },
     template,
     {
-      fromEmail: company.klaviyoFromEmail,
-      baseTemplateId: company.klaviyoBaseTemplateId,
-      timezone: company.klaviyoTimezone,
-      connected: Boolean(company.klaviyoKeyCipher),
-      audience: company.klaviyoAudience,
-      audienceExclude: company.klaviyoAudienceExclude,
+      fromEmail: company.espFromEmail,
+      providerBlockers: setupBlockers(providerId, company),
+      providerLabel: PROVIDER_LABELS[providerId],
+      timezone: company.espTimezone,
+      connected: Boolean(company.espKeyCipher),
+      audience: company.espAudience,
+      audienceExclude: company.espAudienceExclude,
     },
   );
   if (!check.ok) return { error: check.blockers.join(" ") };
@@ -207,29 +215,28 @@ async function prepare(
   const notes: string[] = [];
   if (check.warning) notes.push(check.warning);
   if (check.sendAt) notes.push(`Send time ${check.sendAtLabel}.`);
-  else notes.push("This row has no send date, so the campaign is left undated in Klaviyo.");
-
-  const block = toBlockContent(rendered.html);
-  notes.push(...block.notes);
+  else notes.push("This row has no send date, so the campaign is left undated.");
 
   return {
     content: {
       name: check.campaignName,
       subject: check.subject,
       previewText,
-      fromEmail: company.klaviyoFromEmail!,
-      fromLabel: company.klaviyoFromLabel ?? company.klaviyoAccountName ?? "",
-      replyTo: company.klaviyoReplyTo ?? undefined,
+      fromEmail: company.espFromEmail!,
+      fromLabel: company.espFromLabel ?? company.espAccountName ?? "",
+      replyTo: company.espReplyTo ?? undefined,
+      // The whole rendered document. Turning it into whatever the platform
+      // actually accepts -- a block inside a template, or the body as it
+      // stands -- is the provider's business, not this function's.
+      html: rendered.html,
+      designName: `${check.campaignName} — ${template.name}`,
       includedAudiences: [],
       excludedAudiences: [],
       sendAt: check.sendAt,
     },
-    html: block.html,
     contentHash: check.contentHash,
     notes,
     audienceNames: "",
-    baseTemplateId: company.klaviyoBaseTemplateId!,
-    templateName: `${check.campaignName} — ${template.name}`,
   };
 }
 
@@ -239,7 +246,7 @@ async function prepare(
  *
  * Editing a row normally invalidates every approval on it, because the
  * fingerprint covers the whole row and almost any edit changes the email. A
- * send time usually does not: it decides when Klaviyo mails the thing, and
+ * send time usually does not: it decides when the platform mails the thing, and
  * nothing about what it says. So an approval is carried forward when the
  * template it was given against provably does not print the field -- which is
  * decided by looking for the placeholder, not by assuming.
@@ -254,6 +261,8 @@ async function applySendOverride(
   approvals: { templateId: string }[],
   override: SendOverride,
   userId: string,
+  /** The platform's name, for the revision note left on the row. */
+  label: string,
 ): Promise<{ changed: boolean; note?: string } | { error: string }> {
   const slots = envelopeSlots(findEnvelopeColumns(columns));
   const current = parseRecord(row.data);
@@ -306,7 +315,7 @@ async function applySendOverride(
         rowId: row.id,
         data: row.data,
         changedById: userId,
-        note: "Send time changed while pushing to Klaviyo",
+        note: `Send time changed while pushing to ${label}`,
       },
     }),
     prisma.sheetRow.update({ where: { id: row.id }, data: { data: nextData } }),
@@ -345,6 +354,8 @@ async function applyOverride(
   userId: string,
   override: SendOverride,
   mode: PushMode,
+  /** The platform's name, for the revision note left on the row. */
+  label: string,
 ): Promise<{ note?: string } | { error: string }> {
   const [row, template, company] = await Promise.all([
     prisma.sheetRow.findFirst({
@@ -354,7 +365,7 @@ async function applyOverride(
         approvals: { select: { templateId: true } } },
     }),
     prisma.template.findFirst({ where: { id: templateId, companyId }, select: { id: true, name: true, html: true } }),
-    prisma.company.findUnique({ where: { id: companyId }, select: { klaviyoTimezone: true } }),
+    prisma.company.findUnique({ where: { id: companyId }, select: { espTimezone: true } }),
   ]);
   if (!row) return { error: "Row not found." };
   if (!template) return { error: "Template not found." };
@@ -365,7 +376,7 @@ async function applyOverride(
 
   // Read it before writing it: a date the app cannot parse would be stored on
   // the sheet and then rejected by the push, leaving the row edited for nothing.
-  const zone = company?.klaviyoTimezone ?? DEFAULT_TIMEZONE;
+  const zone = company?.espTimezone ?? DEFAULT_TIMEZONE;
   if (date) {
     const when = zonedToUtc(date, time, zone);
     if (!when.utc) return { error: `“${date} ${time}”.trim() is not a date and time this can read.` };
@@ -383,13 +394,14 @@ async function applyOverride(
     row.approvals,
     override,
     userId,
+    label,
   );
   if ("error" in applied) return { error: applied.error };
   return { note: applied.note };
 }
 
 /**
- * Put an approved row into Klaviyo as a draft campaign.
+ * Put an approved row into the company's sending platform as a draft campaign.
  *
  * Free of request context on purpose: the caller has already established who is
  * asking and what they may do, which leaves this function testable end to end
@@ -408,15 +420,20 @@ export async function performPush(
   override?: SendOverride,
 ): Promise<PushResult> {
   try {
-    const apiKey = await klaviyoKeyForCompany(companyId);
-    if (!apiKey) return { ok: false, error: "This company is not connected to Klaviyo." };
+    const provider = await providerFor(companyId);
+    if (!provider) {
+      const label = PROVIDER_LABELS[await providerIdFor(companyId)];
+      return { ok: false, error: `This company is not connected to ${label}.` };
+    }
 
     // An overridden send time is a sheet edit, and it happens first so that
     // everything below -- the eligibility check included -- reads one row with
     // one send time on it.
     const overrideNotes: string[] = [];
     if (override) {
-      const applied = await applyOverride(companyId, rowId, templateId, userId, override, mode);
+      const applied = await applyOverride(
+        companyId, rowId, templateId, userId, override, mode, provider.label,
+      );
       if ("error" in applied) return { ok: false, error: applied.error };
       if (applied.note) overrideNotes.push(applied.note);
     }
@@ -433,145 +450,53 @@ export async function performPush(
     const audienceKeys = audienceSlots(findAudienceColumns(parseStringArray(row.sheet.columns)));
     const defaults = await prisma.company.findUniqueOrThrow({
       where: { id: companyId },
-      select: { klaviyoAudience: true, klaviyoAudienceExclude: true },
+      select: { espAudience: true, espAudienceExclude: true },
     });
     // Same fallback the eligibility rule applies, so what the list offered and
     // what actually gets sent to are the same set of people.
     const audienceCell =
-      (data[audienceKeys.audience] ?? "").trim() || (defaults.klaviyoAudience ?? "").trim();
+      (data[audienceKeys.audience] ?? "").trim() || (defaults.espAudience ?? "").trim();
     if (!audienceCell) {
       return {
         ok: false,
         error:
-          `This row has no “${audienceKeys.audience}” and this company has no default audience, ` +
+          `This row has no \u201c${audienceKeys.audience}\u201d and this company has no default audience, ` +
           "so there is nobody to send it to.",
       };
     }
 
-    const available = await fetchAudiences(apiKey);
-    const included = resolveAudiences(audienceCell, available);
+    const available = await provider.audiences();
+    const included = resolveAudiences(audienceCell, available, provider.label);
     if ("error" in included) return { ok: false, error: included.error };
 
     const excludeCell =
-      (data[audienceKeys.exclude] ?? "").trim() || (defaults.klaviyoAudienceExclude ?? "").trim();
-    const excluded = excludeCell ? resolveAudiences(excludeCell, available) : { ids: [], names: [] };
+      (data[audienceKeys.exclude] ?? "").trim() || (defaults.espAudienceExclude ?? "").trim();
+    const excluded = excludeCell
+      ? resolveAudiences(excludeCell, available, provider.label)
+      : { ids: [], names: [] };
     if ("error" in excluded) return { ok: false, error: excluded.error };
 
-    const content: CampaignContent = {
+    const content: EspCampaignContent = {
       ...ready.content,
       includedAudiences: included.ids,
       excludedAudiences: excluded.ids,
     };
 
-    // --- the template clone, with our block filled ------------------------
-    const base = await fetchTemplate(apiKey, ready.baseTemplateId);
-    if (!base.definition) {
-      return {
-        ok: false,
-        error:
-          `“${base.name}” is a ${base.editorType} template, which has no blocks to fill. ` +
-          "The base template has to be a drag-and-drop one.",
-      };
-    }
-    /*
-     * Build the send's template from the base's structure, filled in, in one
-     * create -- rather than cloning it and then editing the clone.
-     *
-     * Klaviyo will not update a template that holds blocks shared with other
-     * templates, and it judges that by the template as stored: a clone of a
-     * base with a shared footer can never be written to, however the update is
-     * phrased. Assembling the finished definition here and posting it once
-     * avoids the question, and leaves nothing half-made behind if it fails.
-     */
-    const definition = JSON.parse(JSON.stringify(base.definition)) as Record<string, unknown>;
-    const target = findContentBlock(definition);
-    if ("error" in target) return { ok: false, error: target.error };
-
-    target.block.data = { ...(target.block.data ?? {}), content: ready.html };
-
-    // The shared blocks come across as ordinary ones. The content is kept; only
-    // the link to the original is given up, which is what makes this template
-    // writable and what keeps a later edit in Klaviyo from changing a send that
-    // has already been approved.
-    const detached = detachUniversalBlocks(definition);
-    if (detached > 0) {
-      const one = detached === 1;
-      ready.notes.push(
-        `${detached} reusable ${one ? "block was" : "blocks were"} copied into this campaign ` +
-          `rather than linked, so later edits to ${one ? "it" : "them"} in Klaviyo will not ` +
-          "change this send.",
-      );
-    }
-
-    // The definition names itself at every level, and Klaviyo assigns its own
-    // identifiers to anything created; asserting the old ones is refused once
-    // per element. Nothing in a definition refers to another part of it by id,
-    // so there is nothing to repoint.
-    stripIdentifiers(definition);
-
-    const created = await createDndTemplate(apiKey, ready.templateName, definition);
-    const cloneId = created.id;
-    if (created.alsoRemoved.length > 0) {
-      // Worth saying out loud: it means this app's idea of what Klaviyo will
-      // not accept is out of date, and somebody should widen the list rather
-      // than rely on the retry every send.
-      ready.notes.push(
-        `Klaviyo also refused ${created.alsoRemoved.join(", ")} on the new template; it was ` +
-          `created without ${created.alsoRemoved.length === 1 ? "it" : "them"}.`,
-      );
-    }
-
     // --- the campaign -----------------------------------------------------
-    const existing = await prisma.klaviyoPush.findUnique({
+    //
+    // How the content gets in is the platform's business, and the two differ
+    // completely: Klaviyo builds a template per send around it, Attentive takes
+    // the HTML. Neither of those decisions is visible from here, which is the
+    // point of the seam.
+    const existing = await prisma.espPush.findUnique({
       where: { rowId_templateId: { rowId, templateId } },
     });
+    // A campaign made on a platform this company has since moved away from is
+    // not this provider's to edit. Starting fresh leaves the old one alone
+    // rather than writing a Klaviyo id into an Attentive call.
+    const reusable = existing && existing.provider === provider.id ? refsFrom(existing) : null;
 
-    let refs = existing ? { campaignId: existing.campaignId, messageId: existing.messageId } : null;
-    let unscheduled = false;
-    if (refs) {
-      // Only reuse a campaign Klaviyo still has and has not sent.
-      const live = await fetchCampaign(apiKey, refs.campaignId);
-      if (!live || live.status === "Sent" || live.archived) refs = null;
-      else if (live.status === "Scheduled") {
-        // Klaviyo refuses to edit a campaign that is already in the send queue,
-        // so pushing over one means taking it out of the queue first. Doing it
-        // here rather than surfacing Klaviyo's 409 keeps the row and the
-        // campaign in step; the caller is told, and a scheduled push puts it
-        // back at the end.
-        await cancelCampaign(apiKey, refs.campaignId);
-        unscheduled = true;
-      }
-    }
-
-    if (refs) await updateCampaign(apiKey, refs, content);
-    else refs = await createCampaign(apiKey, content);
-
-    await assignTemplate(apiKey, refs.messageId, cloneId);
-
-    /*
-     * Tidy up the clone, but only once it is provably not the thing the
-     * campaign is made of.
-     *
-     * Assignment is a relationship, and if Klaviyo took its own copy then the
-     * message points at that and this clone is litter -- a template per send,
-     * piling up in the client's library forever. If instead the message points
-     * straight at this clone, deleting it would empty a campaign that may
-     * already be scheduled. So read back which it is rather than believing
-     * either story, and delete only in the first case.
-     */
-    const held = await fetchMessageTemplate(apiKey, refs.messageId).catch(() => cloneId);
-    const orphans = [cloneId, existing?.klaviyoTemplateId]
-      .filter((id): id is string => Boolean(id) && id !== held);
-    let tidied = 0;
-    for (const id of [...new Set(orphans)]) {
-      try {
-        await deleteTemplate(apiKey, id);
-        tidied += 1;
-      } catch {
-        // Cleanup is not worth failing a push that has otherwise worked; the
-        // stray template is untidy, not broken.
-      }
-    }
+    const done = await provider.upsertCampaign(reusable, content);
 
     const audienceNames = [
       ...included.names,
@@ -580,19 +505,22 @@ export async function performPush(
 
     // The point of no return, and the last thing done: everything above can be
     // undone by deleting a draft, and nothing below it can.
-    if (mode === "scheduled") await scheduleCampaign(apiKey, refs.campaignId);
+    if (mode === "scheduled") await provider.schedule(done.refs);
 
-    const saved = await prisma.klaviyoPush.upsert({
+    const saved = await prisma.espPush.upsert({
       where: { rowId_templateId: { rowId, templateId } },
       create: {
-        rowId, templateId,
-        campaignId: refs.campaignId, messageId: refs.messageId, klaviyoTemplateId: held ?? cloneId,
+        rowId, templateId, provider: provider.id,
+        campaignId: done.refs.campaignId, messageId: done.refs.messageId,
+        refs: JSON.stringify(done.refs.extra),
         contentHash: ready.contentHash, status: mode,
         scheduledFor: content.sendAt, campaignName: content.name,
         audienceNames, pushedById: userId,
       },
       update: {
-        campaignId: refs.campaignId, messageId: refs.messageId, klaviyoTemplateId: held ?? cloneId,
+        provider: provider.id,
+        campaignId: done.refs.campaignId, messageId: done.refs.messageId,
+        refs: JSON.stringify(done.refs.extra),
         contentHash: ready.contentHash, status: mode,
         scheduledFor: content.sendAt, campaignName: content.name,
         audienceNames, pushedById: userId, pushedAt: new Date(),
@@ -600,35 +528,33 @@ export async function performPush(
       include: { pushedBy: { select: { name: true, email: true } } },
     });
 
+    const where = provider.label;
     return {
       ok: true,
       notes: [
         mode === "scheduled"
-          ? `Scheduled in Klaviyo. Sending to ${audienceNames}.`
-          : `Draft created in Klaviyo. Sending to ${audienceNames} when scheduled.`,
-        ...(unscheduled && mode !== "scheduled"
-          ? ["It was scheduled in Klaviyo before this push, and is now back to a draft."]
+          ? `Scheduled in ${where}. Sending to ${audienceNames}.`
+          : `Draft created in ${where}. Sending to ${audienceNames} when scheduled.`,
+        ...(done.unqueued && mode !== "scheduled"
+          ? [`It was scheduled in ${where} before this push, and is now back to a draft.`]
           : []),
-        ...(tidied > 0
-          ? [`Tidied up ${tidied} one-off ${tidied === 1 ? "template" : "templates"} Klaviyo no ` +
-             "longer needs."]
-          : []),
+        ...done.notes,
         ...overrideNotes,
         ...ready.notes,
       ],
       push: present(saved, ready.contentHash),
     };
   } catch (error) {
-    return failure(error);
+    return failure(error, PROVIDER_LABELS[await providerIdFor(companyId)]);
   }
 }
 
 /**
- * Hand the campaign to Klaviyo's scheduler.
+ * Hand the campaign to the platform's scheduler.
  *
  * The point of no return, and the only place in this app that reaches it. Kept
- * apart from the push so that putting an email into Klaviyo and committing to
- * sending it are two decisions rather than one.
+ * apart from the push so that putting an email into the sending platform and
+ * committing to sending it are two decisions rather than one.
  */
 export async function performSchedule(
   companyId: string,
@@ -636,14 +562,31 @@ export async function performSchedule(
   templateId: string,
 ): Promise<PushResult> {
   try {
-    const apiKey = await klaviyoKeyForCompany(companyId);
-    if (!apiKey) return { ok: false, error: "This company is not connected to Klaviyo." };
+    const provider = await providerFor(companyId);
+    if (!provider) {
+      const label = PROVIDER_LABELS[await providerIdFor(companyId)];
+      return { ok: false, error: `This company is not connected to ${label}.` };
+    }
 
-    const push = await prisma.klaviyoPush.findUnique({
+    const push = await prisma.espPush.findUnique({
       where: { rowId_templateId: { rowId, templateId } },
       include: { pushedBy: { select: { name: true, email: true } } },
     });
-    if (!push) return { ok: false, error: "This row has not been pushed to Klaviyo yet." };
+    if (!push) {
+      return { ok: false, error: `This row has not been pushed to ${provider.label} yet.` };
+    }
+    // Scheduling reaches into the platform the campaign actually lives in. A
+    // company that has switched since has a campaign this provider cannot see,
+    // and asking it to schedule one would either fail oddly or, worse, find
+    // something else with that id.
+    if (push.provider !== provider.id) {
+      return {
+        ok: false,
+        error:
+          `This campaign is in ${PROVIDER_LABELS[isEmailProvider(push.provider) ? push.provider : "klaviyo"]}, ` +
+          `but this company now sends through ${provider.label}. Push it again to make it there.`,
+      };
+    }
 
     // The row must still be the row that was pushed. Editing it after a push
     // leaves the campaign holding older content, and scheduling that would send
@@ -663,9 +606,9 @@ export async function performSchedule(
       return { ok: false, error: "That send time has already passed. Change the date and push again." };
     }
 
-    await scheduleCampaign(apiKey, push.campaignId);
+    await provider.schedule(refsFrom(push));
 
-    const saved = await prisma.klaviyoPush.update({
+    const saved = await prisma.espPush.update({
       where: { id: push.id },
       data: { status: "scheduled" },
       include: { pushedBy: { select: { name: true, email: true } } },
@@ -673,7 +616,7 @@ export async function performSchedule(
 
     return { ok: true, push: present(saved, push.contentHash) };
   } catch (error) {
-    return failure(error);
+    return failure(error, PROVIDER_LABELS[await providerIdFor(companyId)]);
   }
 }
 

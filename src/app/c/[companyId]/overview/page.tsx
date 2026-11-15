@@ -5,6 +5,7 @@ import { avatarHue, initialsOf } from "@/lib/approval";
 import { approvalFingerprint } from "@/lib/fingerprint";
 import { findEnvelopeColumns, findTemplateColumn, matchTemplateName } from "@/lib/template";
 import { parseSendDate, rowLabel } from "@/lib/campaign";
+import { isEmailProvider, PROVIDER_LABELS } from "@/lib/esp/types";
 import { OverviewBoard, type OverviewItem } from "./OverviewBoard";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
           include: {
             hiddenBy: { select: { name: true, email: true } },
             _count: { select: { notes: true } },
-            pushes: { select: { templateId: true, status: true } },
+            pushes: { select: { templateId: true, status: true, provider: true } },
             approvals: {
               orderBy: { createdAt: "asc" },
               select: {
@@ -119,6 +120,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ compa
         // Only the template this row is actually shown in: a campaign pushed
         // from a template the row no longer asks for is not this row's status.
         published: publishedIn(row.pushes, matched?.id ?? null),
+        publishedIn: pushedPlatform(row.pushes, matched?.id ?? null),
         hidden: Boolean(row.hiddenAt),
         hiddenBy: row.hiddenBy?.name ?? row.hiddenBy?.email ?? null,
       });
@@ -148,7 +150,7 @@ function pick(data: Record<string, string>, names: string[]): string {
   return "";
 }
 
-/** "scheduled", "draft", or null -- what this row is in Klaviyo, if anything. */
+/** "scheduled", "draft", or null -- what this row is in its platform, if anything. */
 function publishedIn(
   pushes: { templateId: string; status: string }[],
   templateId: string | null,
@@ -157,4 +159,20 @@ function publishedIn(
   const push = pushes.find((p) => p.templateId === templateId);
   if (!push) return null;
   return push.status === "scheduled" || push.status === "draft" ? push.status : null;
+}
+
+/**
+ * Which platform it went to, by name.
+ *
+ * From the push, not the company: the calendar shows months of history, and a
+ * company that changed platform in March has campaigns in both.
+ */
+function pushedPlatform(
+  pushes: { templateId: string; status: string; provider: string }[],
+  templateId: string | null,
+): string | null {
+  if (!templateId) return null;
+  const push = pushes.find((p) => p.templateId === templateId);
+  if (!push) return null;
+  return PROVIDER_LABELS[isEmailProvider(push.provider) ? push.provider : "klaviyo"];
 }

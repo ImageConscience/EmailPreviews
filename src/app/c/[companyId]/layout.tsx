@@ -16,12 +16,12 @@ export default async function CompanyLayout({
   const access = await guardCompany(companyId);
   const [companies, company] = await Promise.all([
     listCompaniesForUser(access.user.id),
-    prisma.company.findUnique({ where: { id: companyId }, select: { klaviyoKeyCipher: true } }),
+    prisma.company.findUnique({ where: { id: companyId }, select: { espKeyCipher: true } }),
   ]);
 
   // The push tab is only meaningful to someone who could actually use it, and
   // showing it otherwise invites a click that ends in a 404 or an empty screen.
-  const canPush = hasAtLeast(access.role, "admin") && Boolean(company?.klaviyoKeyCipher);
+  const canPush = hasAtLeast(access.role, "admin") && Boolean(company?.espKeyCipher);
 
   return (
     <div className="shell">

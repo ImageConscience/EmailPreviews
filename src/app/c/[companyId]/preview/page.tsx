@@ -25,7 +25,7 @@ export default async function PreviewPage({
       select: { id: true, name: true, _count: { select: { rows: true } } },
     }),
     prisma.company.findUnique({ where: { id: companyId },
-      select: { klaviyoKeyCipher: true, klaviyoAudience: true, klaviyoAudienceExclude: true } }),
+      select: { espKeyCipher: true, espAudience: true, espAudienceExclude: true } }),
   ]);
 
   return (
@@ -39,10 +39,10 @@ export default async function PreviewPage({
       }))}
       sheets={sheets.map((s) => ({ id: s.id, name: s.name, rowCount: s._count.rows }))}
       // Audience only means something once there is an account to send from.
-      klaviyoConnected={Boolean(company?.klaviyoKeyCipher)}
+      klaviyoConnected={Boolean(company?.espKeyCipher)}
       defaultAudience={{
-        audience: company?.klaviyoAudience ?? "",
-        exclude: company?.klaviyoAudienceExclude ?? "",
+        audience: company?.espAudience ?? "",
+        exclude: company?.espAudienceExclude ?? "",
       }}
     />
   );

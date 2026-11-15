@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { pushToKlaviyoAction, type PushMode } from "@/actions/push";
+import { pushRowAction, type PushMode } from "@/actions/push";
 import { describe, zonedToUtc } from "@/lib/zone";
 import { flag, isOn, useViewState, validId } from "@/lib/view-state";
 
@@ -16,7 +16,7 @@ export interface PushedState {
   audienceNames: string;
   pushedAt: string;
   pushedBy: string | null;
-  /** The row has been edited since it was pushed, so Klaviyo holds older content. */
+  /** The row has been edited since it was pushed, so the platform holds older content. */
   stale: boolean;
 }
 
@@ -55,13 +55,14 @@ export interface PushItem {
  * the screen does not spend space explaining why things are missing. What it
  * does spend space on is the two facts you need before pressing a button that
  * writes into a client's account: which account, and what has already been
- * pushed. Rows that are already in Klaviyo stay on the list rather than
+ * pushed. Rows that are already in the platform stay on the list rather than
  * vanishing, because "did that go over?" is the question this screen exists to
  * answer as much as "send this one".
  */
 export function PushBoard({
   companyId,
   items,
+  providerLabel,
   accountName,
   fromLabel,
   timezone,
@@ -69,6 +70,8 @@ export function PushBoard({
 }: {
   companyId: string;
   items: PushItem[];
+  /** The platform's name, so every sentence on this screen names the real one. */
+  providerLabel: string;
   accountName: string;
   fromLabel: string;
   timezone: string;
@@ -126,7 +129,7 @@ export function PushBoard({
     <main className="page page-wide">
       <div className="page-head">
         <div>
-          <h1>Push to Klaviyo</h1>
+          <h1>Push to {providerLabel}</h1>
           <p>
             Into <strong>{accountName}</strong>, from {fromLabel}. Send times are read as{" "}
             {timezone.replace("_", " ")}.
@@ -233,7 +236,7 @@ export function PushBoard({
                 <th>Campaign</th>
                 <th className="tight">Sign-off</th>
                 <th className="tight">Audience</th>
-                <th className="tight">In Klaviyo</th>
+                <th className="tight">Pushed</th>
                 <th className="tight" />
               </tr>
             </thead>
@@ -299,6 +302,7 @@ export function PushBoard({
         <BulkDialog
           companyId={companyId}
           items={chosen}
+          providerLabel={providerLabel}
           accountName={accountName}
           onClose={() => setBulk(false)}
           onDone={(pushed) => {
@@ -315,6 +319,7 @@ export function PushBoard({
         <PushDialog
           companyId={companyId}
           item={open}
+          providerLabel={providerLabel}
           accountName={accountName}
           timezone={timezone}
           onClose={() => setOpen(null)}
@@ -343,12 +348,14 @@ export function PushBoard({
 function BulkDialog({
   companyId,
   items,
+  providerLabel,
   accountName,
   onClose,
   onDone,
 }: {
   companyId: string;
   items: PushItem[];
+  providerLabel: string;
   accountName: string;
   onClose: () => void;
   onDone: (pushed: Set<string>) => void;
@@ -372,7 +379,7 @@ function BulkDialog({
     for (const item of queue) {
       setResult({ ...collected, [keyOf(item)]: { ok: true, note: "…" } });
       try {
-        const outcome = await pushToKlaviyoAction(
+        const outcome = await pushRowAction(
           companyId, item.rowId, item.templateId, effectiveMode,
         );
         collected[keyOf(item)] = outcome.ok
@@ -411,7 +418,7 @@ function BulkDialog({
                 <span>
                   <strong>Draft</strong>
                   <span className="hint">
-                    All {items.length} created in Klaviyo and left alone. Nothing sends.
+                    All {items.length} created in {providerLabel} and left alone. Nothing sends.
                   </span>
                 </span>
               </label>
@@ -424,7 +431,7 @@ function BulkDialog({
                   <span className="hint">
                     {schedulable.length === 0
                       ? "None of these name a send time still in the future."
-                      : `Klaviyo will send ${schedulable.length} of them, each at its own time, ` +
+                      : `${providerLabel} will send ${schedulable.length} of them, each at its own time, ` +
                         "to its own audience."}
                   </span>
                 </span>
@@ -562,7 +569,7 @@ function Approvers({
   );
 }
 
-/** What Klaviyo already holds for this row, and whether it is still current. */
+/** What the platform already holds for this row, and whether it is still current. */
 function PushedCell({ item }: { item: PushItem }) {
   if (!item.pushed) return <span className="hint">—</span>;
   const { pushed } = item;
@@ -590,12 +597,13 @@ function PushedCell({ item }: { item: PushItem }) {
  * difference between them is the whole decision, and it should be made while
  * looking at who it goes to and when, not from a table cell. Schedule is only
  * offered when the row names a time that has not passed, because a scheduled
- * campaign with no time is not something Klaviyo will accept and not something
+ * campaign with no time is not something a platform will accept and not something
  * this screen should pretend to offer.
  */
 function PushDialog({
   companyId,
   item,
+  providerLabel,
   accountName,
   timezone,
   onClose,
@@ -603,6 +611,7 @@ function PushDialog({
 }: {
   companyId: string;
   item: PushItem;
+  providerLabel: string;
   accountName: string;
   timezone: string;
   onClose: () => void;
@@ -633,7 +642,7 @@ function PushDialog({
     setBusy(true);
     setError(null);
     try {
-      const result = await pushToKlaviyoAction(
+      const result = await pushRowAction(
         companyId,
         item.rowId,
         item.templateId,
@@ -647,11 +656,11 @@ function PushDialog({
       setNotes(result.notes ?? []);
       setDone(true);
     } catch {
-      // The push either reached Klaviyo or it did not, and from here there is
+      // The push either reached the platform or it did not, and from here there is
       // no way to tell which -- so say so rather than inviting a second press
       // that could make a second campaign.
       setError(
-        "Lost contact with the server part-way through. Check the campaign in Klaviyo before " +
+        "Lost contact with the server part-way through. Check the campaign in the sending platform before " +
           "pushing again.",
       );
     } finally {
@@ -663,7 +672,7 @@ function PushDialog({
     <div className="modal-back" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="card-head">
-          <h2 style={{ margin: 0 }}>{done ? "Pushed" : "Push to Klaviyo"}</h2>
+          <h2 style={{ margin: 0 }}>{done ? "Pushed" : `Push to ${providerLabel}`}</h2>
         </div>
 
         <div className="card-pad">
@@ -757,14 +766,14 @@ function PushDialog({
               )}
               {item.pushed?.status === "scheduled" ? (
                 <p className="hint" style={{ color: "var(--danger)" }}>
-                  This is already scheduled in Klaviyo. Klaviyo will not let a queued campaign be
+                  This is already scheduled in {providerLabel}. {providerLabel} will not let a queued campaign be
                   edited, so pushing again takes it out of the queue first — choose Schedule if it
                   should go back in.
                 </p>
               ) : (
                 item.pushed && (
                   <p className="hint">
-                    This row is already in Klaviyo as a draft. Pushing again replaces its content
+                    This row is already in {providerLabel} as a draft. Pushing again replaces its content
                     rather than creating a second campaign.
                   </p>
                 )
@@ -782,7 +791,7 @@ function PushDialog({
                   <span>
                     <strong>Draft</strong>
                     <span className="hint">
-                      Created in Klaviyo and left alone. It carries its send time if the row has
+                      Created in {providerLabel} and left alone. It carries its send time if the row has
                       one, but nothing sends until somebody schedules it.
                     </span>
                   </span>
@@ -799,7 +808,7 @@ function PushDialog({
                     <strong>Schedule</strong>
                     <span className="hint">
                       {canSchedule ? (
-                        <>Klaviyo will send this to {item.audience} at {label}.</>
+                        <>{providerLabel} will send this to {item.audience} at {label}.</>
                       ) : unreadable ? (
                         "That date and time cannot be read."
                       ) : when.utc ? (
@@ -827,7 +836,7 @@ function PushDialog({
                   onClick={() => void run()}
                 >
                   {busy
-                    ? "Talking to Klaviyo…"
+                    ? `Talking to ${providerLabel}…`
                     : effectiveMode === "scheduled"
                       ? "Push and schedule"
                       : "Push as draft"}

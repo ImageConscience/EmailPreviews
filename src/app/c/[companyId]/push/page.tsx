@@ -7,6 +7,7 @@ import { rowLabel } from "@/lib/campaign";
 import { avatarHue, initialsOf } from "@/lib/approval";
 import { envelopeSlots, findEnvelopeColumns, findTemplateColumn, matchTemplateName } from "@/lib/template";
 import { checkEligibility } from "@/lib/push-eligibility";
+import { PROVIDER_LABELS, isEmailProvider, setupBlockers } from "@/lib/esp";
 import { DEFAULT_TIMEZONE } from "@/lib/zone";
 import { PushBoard, type PushItem } from "./PushBoard";
 
@@ -32,9 +33,10 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
     prisma.company.findUniqueOrThrow({
       where: { id: companyId },
       select: {
-        klaviyoKeyCipher: true, klaviyoAccountName: true, klaviyoFromEmail: true,
-        klaviyoFromLabel: true, klaviyoTimezone: true, klaviyoBaseTemplateId: true,
-        klaviyoAudience: true, klaviyoAudienceExclude: true,
+        espKeyCipher: true, espAccountName: true, espFromEmail: true,
+        espFromLabel: true, espTimezone: true, klaviyoBaseTemplateId: true,
+        emailProvider: true,
+        espAudience: true, espAudienceExclude: true,
       },
     }),
     prisma.contentSheet.findMany({
@@ -76,14 +78,17 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
   ]);
   const admins = new Set(adminships.map((m) => m.userId));
 
-  const connected = Boolean(company.klaviyoKeyCipher);
+  const connected = Boolean(company.espKeyCipher);
+  const providerId = isEmailProvider(company.emailProvider) ? company.emailProvider : "klaviyo";
+  const providerLabel = PROVIDER_LABELS[providerId];
   const settings = {
-    fromEmail: company.klaviyoFromEmail,
-    baseTemplateId: company.klaviyoBaseTemplateId,
-    timezone: company.klaviyoTimezone,
+    fromEmail: company.espFromEmail,
+    providerBlockers: setupBlockers(providerId, company),
+    providerLabel,
+    timezone: company.espTimezone,
     connected,
-    audience: company.klaviyoAudience,
-    audienceExclude: company.klaviyoAudienceExclude,
+    audience: company.espAudience,
+    audienceExclude: company.espAudienceExclude,
   };
 
   const summaries = templates.map((t) => ({ id: t.id, name: t.name }));
@@ -182,12 +187,12 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
       <main className="page">
         <div className="page-head">
           <div>
-            <h1>Push to Klaviyo</h1>
+            <h1>Push to {providerLabel}</h1>
           </div>
         </div>
         <div className="card">
           <div className="empty">
-            <h3>This company is not connected to Klaviyo</h3>
+            <h3>This company is not connected to {providerLabel}</h3>
             <p>
               Connect an account under{" "}
               <Link href={`/c/${companyId}/integrations`}>Settings → Integrations</Link> to push
@@ -203,13 +208,14 @@ export default async function PushPage({ params }: { params: Promise<{ companyId
     <PushBoard
       companyId={companyId}
       items={items}
-      accountName={company.klaviyoAccountName ?? "the connected account"}
+      providerLabel={providerLabel}
+      accountName={company.espAccountName ?? "the connected account"}
       fromLabel={
-        [company.klaviyoFromLabel, company.klaviyoFromEmail].filter(Boolean).join(" · ") ||
+        [company.espFromLabel, company.espFromEmail].filter(Boolean).join(" · ") ||
         "no from-address set"
       }
-      timezone={company.klaviyoTimezone ?? DEFAULT_TIMEZONE}
-      ready={Boolean(company.klaviyoBaseTemplateId && company.klaviyoFromEmail)}
+      timezone={company.espTimezone ?? DEFAULT_TIMEZONE}
+      ready={setupBlockers(providerId, company).length === 0 && Boolean(company.espFromEmail)}
     />
   );
 }

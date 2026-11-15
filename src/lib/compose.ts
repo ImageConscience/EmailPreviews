@@ -8,6 +8,7 @@ import {
 import { parseRecord, parseStringArray } from "@/lib/json";
 import { approvalFingerprint } from "@/lib/fingerprint";
 import { publishedState } from "@/lib/published";
+import { isEmailProvider, PROVIDER_LABELS } from "@/lib/esp/types";
 
 /**
  * Writing to a row, from wherever the writing came from.
@@ -83,8 +84,16 @@ export async function applyFields(
 }
 
 export interface WriteRisk {
-  /** Refuse outright: the row is already in Klaviyo. */
+  /** Refuse outright: the row is already in the sending platform. */
   published: "draft" | "scheduled" | null;
+  /**
+   * The platform the live campaign is actually in, by name.
+   *
+   * Taken from the push rather than from the company, because a company that
+   * has changed platform still has campaigns in the one it left, and the
+   * refusal has to send the person to the place the campaign really is.
+   */
+  publishedIn: string | null;
   /** People whose current sign-off this write would silently withdraw. */
   wouldUnapprove: string[];
 }
@@ -107,7 +116,7 @@ export async function writeRisk(rowId: string): Promise<WriteRisk> {
           template: { select: { id: true, updatedAt: true } },
         },
       },
-      pushes: { select: { templateId: true, status: true } },
+      pushes: { select: { templateId: true, status: true, provider: true } },
     },
   });
 
@@ -122,11 +131,14 @@ export async function writeRisk(rowId: string): Promise<WriteRisk> {
 
   return {
     published: live ? (live.status as "draft" | "scheduled") : null,
+    publishedIn: live
+      ? PROVIDER_LABELS[isEmailProvider(live.provider) ? live.provider : "klaviyo"]
+      : null,
     wouldUnapprove: [...new Set(wouldUnapprove)],
   };
 }
 
-/** Whether this row is in Klaviyo under the template it is shown in. */
+/** Whether this row is in the sending platform under the template it is shown in. */
 export async function publishedFor(rowId: string, templateId: string) {
   return publishedState(rowId, templateId);
 }

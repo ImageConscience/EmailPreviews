@@ -43,7 +43,7 @@ export function ApprovalBar({
   templateId: string;
   currentUserId: string;
   approvals: ApprovalView[];
-  /** What this row is in Klaviyo in this template, if anything. */
+  /** What this row is in its sending platform in this template, if anything. */
   push: PushMark | null;
   /** Unsaved edits are pending, so there is nothing settled to approve. */
   dirty: boolean;
@@ -56,7 +56,8 @@ export function ApprovalBar({
   const mineIsStale = Boolean(mine?.stale);
 
   /**
-   * Once this pair is in Klaviyo the button stops being a toggle and becomes a
+   * Once this pair is in the platform the button stops being a toggle and
+   * becomes a
    * statement of where the email got to. It reads "Scheduled" or "Drafted"
    * rather than "Approved" because that is now the more useful fact -- and the
    * approval it went out on is not something to be quietly taken back
@@ -98,7 +99,8 @@ export function ApprovalBar({
         disabled={saving || dirty || locked}
         title={
           locked
-            ? `${published} in Klaviyo${pushedWhen(push)}. The sign-off it went out on cannot be ` +
+            ? `${published} in ${push?.provider ?? "the sending platform"}${pushedWhen(push)}. ` +
+              "The sign-off it went out on cannot be " +
               "withdrawn; edit the row if it needs changing."
             : dirty
               ? "Save your changes first — an approval records one specific version"
@@ -124,7 +126,7 @@ export function ApprovalBar({
           the button is still theirs to press, so the state is said beside it
           rather than in it. */}
       {published && !locked && (
-        <span className="badge badge-sent" title={`In Klaviyo${pushedWhen(push)}`}>
+        <span className="badge badge-sent" title={`In ${push?.provider ?? "the sending platform"}${pushedWhen(push)}`}>
           {published}
           {mineIsStale || approvals.some((a) => a.stale) ? " · edited since" : ""}
         </span>

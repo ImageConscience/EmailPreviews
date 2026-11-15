@@ -86,12 +86,14 @@ interface SheetPayload {
   }[];
 }
 
-/** What a row is in Klaviyo, in one template. */
+/** What a row is in its sending platform, in one template. */
 export interface PushMark {
   templateId: string;
   /** "draft" or "scheduled". */
   status: string;
   campaignName: string;
+  /** The platform it went to, by name, as it was at the time of the push. */
+  provider: string;
   scheduledFor: string | null;
   pushedAt: string;
   pushedBy: string | null;
@@ -556,7 +558,7 @@ export function PreviewWorkspace({
     }
   }, [currentRow, rowDefaultTemplate, templates]);
 
-  /** What this row is in Klaviyo in the template on screen, if anything. */
+  /** What this row is in its platform in the template on screen, if anything. */
   const rowPush = useMemo(
     () => (currentRow?.pushes ?? []).find((p) => p.templateId === templateId) ?? null,
     [currentRow, templateId],

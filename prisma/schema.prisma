@@ -32,7 +32,7 @@ model User {
   approvals   Approval[]
   uploads     MediaAsset[]  @relation("MediaUploader")
   notes       RowNote[]
-  pushes      KlaviyoPush[]
+  pushes      EspPush[]
   apiTokens   ApiToken[]
 }
 
@@ -94,27 +94,40 @@ model Company {
   /// When the product cache was last refreshed from that storefront.
   catalogSyncedAt DateTime?
 
-  /// Klaviyo, for the clients where we hold a key. Encrypted with the app's
-  /// ENCRYPTION_KEY rather than stored plainly: it can read a client's whole
-  /// customer list and mail them, so a copy of this database on its own must
-  /// not be enough to do either.
-  klaviyoKeyCipher   String?
+  /// Which platform this company's email goes to. One choice per company,
+  /// governing every call made on its behalf -- lookups and sends alike.
+  ///
+  /// Email only. SMS, when it comes, is a separate decision with separate
+  /// credentials: a client may well text through one platform and mail through
+  /// another, and folding both into one selector would make that unsayable.
+  emailProvider      String    @default("klaviyo")
+
+  /// The sending platform's key, for the clients where we hold one. Encrypted
+  /// with the app's ENCRYPTION_KEY rather than stored plainly: it can read a
+  /// client's whole customer list and mail them, so a copy of this database on
+  /// its own must not be enough to do either.
+  espKeyCipher       String?
   /// The last four characters, which is all anyone needs to tell two keys apart.
-  klaviyoKeyHint     String?
-  /// Which Klaviyo account the key turned out to belong to. Shown wherever a
-  /// push is offered: the dangerous mistake is not a bad key, it is a good key
-  /// for the wrong client.
-  klaviyoAccountName String?
-  klaviyoAccountId   String?
-  klaviyoFromEmail   String?
-  klaviyoFromLabel   String?
-  klaviyoReplyTo     String?
+  espKeyHint         String?
+  /// Which account the key turned out to belong to. Shown wherever a push is
+  /// offered: the dangerous mistake is not a bad key, it is a good key for the
+  /// wrong client.
+  espAccountName     String?
+  espAccountId       String?
+  espFromEmail       String?
+  espFromLabel       String?
+  espReplyTo         String?
   /// The zone the sheet's send times are written in.
-  klaviyoTimezone    String?
-  klaviyoLinkedAt    DateTime?
+  espTimezone        String?
+  espLinkedAt        DateTime?
   /// The drag-and-drop template in Klaviyo whose HTML block the content goes
   /// into. Cloned per send, so the header, footer and unsubscribe stay the
   /// client's and only the marked block is ours.
+  ///
+  /// Klaviyo's alone, and still named for it: Attentive takes the email as
+  /// HTML and needs no base at all. A column that only one provider uses is
+  /// better named after that provider than given a neutral name it would make
+  /// meaningless for the other.
   klaviyoBaseTemplateId String?
   klaviyoBaseTemplateName String?
   /// Who sends go to when a row does not say otherwise, comma separated.
@@ -123,8 +136,8 @@ model Company {
   /// campaigns go to the same place, and because an approval is fingerprinted
   /// against the row: filling an audience into every row after it had been
   /// approved would make every sign-off stale, every time.
-  klaviyoAudience        String?
-  klaviyoAudienceExclude String?
+  espAudience        String?
+  espAudienceExclude String?
 
   memberships Membership[]
   templates   Template[]
@@ -256,7 +269,7 @@ model Template {
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   approvals Approval[]
-  pushes    KlaviyoPush[]
+  pushes    EspPush[]
 
   @@index([companyId])
 }
@@ -299,7 +312,7 @@ model SheetRow {
   revisions RowRevision[]
   approvals Approval[]
   notes     RowNote[]
-  pushes    KlaviyoPush[]
+  pushes    EspPush[]
 
   @@index([sheetId, position])
 }
@@ -334,19 +347,27 @@ model Approval {
 /// campaign it made rather than leaving a second one behind for someone to
 /// find later and wonder about. Keeping the ids is what makes the second push
 /// an update instead of a duplicate.
-model KlaviyoPush {
+/// What this app has put into a sending platform, and where.
+model EspPush {
   id                String   @id @default(cuid())
   rowId             String
   templateId        String
-  /// Klaviyo's ids for what was created.
+  /// Which platform it went to. Recorded per push rather than read from the
+  /// company, because a company can change platforms and the campaigns it
+  /// already has do not move with it.
+  provider          String   @default("klaviyo")
+  /// The two handles every platform has.
   campaignId        String
   messageId         String
-  klaviyoTemplateId String
+  /// Whatever else that platform needs to find its own work again, as JSON:
+  /// Klaviyo keeps the template it made per send, Attentive the message group.
+  /// A column each would be a column per platform, most of them null.
+  refs              String   @default("{}")
   /// The approval fingerprint of what was pushed, so the app can tell whether
   /// the row has been edited since and the campaign is now out of date.
   contentHash       String
   /// "draft", "scheduled", or "cancelled" -- what this app last did, which is
-  /// not necessarily what Klaviyo shows if someone changed it there.
+  /// not necessarily what the platform shows if someone changed it there.
   status            String   @default("draft")
   scheduledFor      DateTime?
   campaignName      String

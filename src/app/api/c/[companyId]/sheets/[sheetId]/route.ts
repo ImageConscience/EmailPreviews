@@ -5,6 +5,7 @@ import { parseRecord, parseStringArray } from "@/lib/json";
 import { presentApprovals } from "@/lib/approval";
 import { approvalFingerprint } from "@/lib/fingerprint";
 import { apiError } from "@/lib/api";
+import { isEmailProvider, PROVIDER_LABELS } from "@/lib/esp/types";
 
 export const dynamic = "force-dynamic";
 
@@ -34,12 +35,15 @@ export async function GET(
               orderBy: { createdAt: "asc" },
               include: { user: { select: { name: true, email: true } } },
             },
-            // What has already gone to Klaviyo, so the sign-off can say so and
-            // refuse to be withdrawn out from under a live campaign.
+            // What has already gone to the sending platform, so the sign-off
+            // can say so and refuse to be withdrawn out from under a live
+            // campaign. The platform comes from the push rather than the
+            // company: a company that has switched still has campaigns in the
+            // one it left, and the screen has to name where they really are.
             pushes: {
               select: {
                 templateId: true, status: true, campaignName: true,
-                scheduledFor: true, pushedAt: true,
+                provider: true, scheduledFor: true, pushedAt: true,
                 pushedBy: { select: { name: true, email: true } },
               },
             },
@@ -77,6 +81,7 @@ export async function GET(
           templateId: push.templateId,
           status: push.status,
           campaignName: push.campaignName,
+          provider: PROVIDER_LABELS[isEmailProvider(push.provider) ? push.provider : "klaviyo"],
           scheduledFor: push.scheduledFor?.toISOString() ?? null,
           pushedAt: push.pushedAt.toISOString(),
           pushedBy: push.pushedBy?.name ?? push.pushedBy?.email ?? null,

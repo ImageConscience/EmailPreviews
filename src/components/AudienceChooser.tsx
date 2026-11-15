@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 
-import { listKlaviyoAudiencesAction } from "@/actions/klaviyo";
-import type { Audience } from "@/lib/klaviyo";
+import { listAudiencesAction } from "@/actions/esp";
+import type { EspAudience } from "@/lib/esp/types";
 
 /**
  * Choosing who a campaign goes to, from the account rather than from memory.
  *
- * The push matches these against Klaviyo by name and refuses anything it cannot
- * find. That is the right behaviour and a poor way to discover a typo -- you
+ * Which account that is depends on the company's chosen platform; this asks for
+ * audiences and is told which platform answered, so none of it has to know
+ * whether lists and segments came from Klaviyo or Attentive.
+ *
+ * The push matches these against the platform by name and refuses anything it
+ * cannot find. That is the right behaviour and a poor way to discover a typo -- you
  * find out at the moment you were trying to send. Picking from the real lists
  * takes that whole class of mistake out of existence.
  *
@@ -23,21 +27,36 @@ import type { Audience } from "@/lib/klaviyo";
  */
 
 export interface AudiencesState {
-  audiences: Audience[] | null;
+  audiences: EspAudience[] | null;
   error: string | null;
+  /** Whichever platform answered, for the sentences below. */
+  provider: string;
 }
 
 /** Read once per screen: two choosers should not be two round trips. */
 export function useAudiences(companyId: string, enabled = true): AudiencesState {
-  const [state, setState] = useState<AudiencesState>({ audiences: null, error: null });
+  const [state, setState] = useState<AudiencesState>({
+    audiences: null,
+    error: null,
+    // Until the answer arrives there is nothing truthful to name, and naming
+    // the wrong platform for a moment would be worse than naming none.
+    provider: "the sending platform",
+  });
 
   useEffect(() => {
     if (!enabled) return;
     let live = true;
-    void listKlaviyoAudiencesAction(companyId).then((result) => {
+    void listAudiencesAction(companyId).then((result) => {
       if (!live) return;
-      if (result.ok) setState({ audiences: result.audiences ?? [], error: null });
-      else setState({ audiences: null, error: result.error ?? "Could not read this account's lists." });
+      if (result.ok) {
+        setState({ audiences: result.audiences ?? [], error: null, provider: result.provider });
+      } else {
+        setState({
+          audiences: null,
+          error: result.error ?? "Could not read this account's lists.",
+          provider: result.provider,
+        });
+      }
     });
     return () => {
       live = false;
@@ -66,12 +85,12 @@ export function AudienceChooser({
   empty: string;
   inherited?: string | null;
 }) {
-  const { audiences, error } = state;
+  const { audiences, error, provider } = state;
   const chosen = split(value);
   const set = (next: string[]) => onChange(next.join(", "));
 
-  // A value the account does not have: renamed in Klaviyo, or typed before this
-  // picker existed. Flagged rather than dropped -- dropping it would silently
+  // A value the account does not have: renamed on the platform, or typed before
+  // this picker existed. Flagged rather than dropped -- dropping it would silently
   // change who gets the email.
   const missing = (term: string) =>
     audiences !== null &&
@@ -99,7 +118,9 @@ export function AudienceChooser({
           ))}
       </div>
 
-      {audiences === null && !error && <span className="aud-status">Reading Klaviyo…</span>}
+      {audiences === null && !error && (
+        <span className="aud-status">Reading {provider}…</span>
+      )}
 
       {audiences !== null && (
         <select
@@ -123,8 +144,8 @@ export function AudienceChooser({
         </select>
       )}
 
-      {/* Klaviyo unreachable: typing is better than being stuck, and the push
-          will say so if a name turns out not to match. */}
+      {/* The platform is unreachable: typing is better than being stuck, and the
+          push will say so if a name turns out not to match. */}
       {error && (
         <input
           type="text"

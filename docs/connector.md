@@ -68,9 +68,12 @@ row. `hide_email` keeps the content, the revision history and the sign-offs,
 and the overview filters hidden rows out until you ask to see them. Removing a
 row for good is done in the app, on its content sheet.
 
-Hiding a row that is already drafted or scheduled in Klaviyo is refused:
-hiding it here would not stop the send, and would take it off the screen where
-you might notice.
+Hiding a row that is already drafted or scheduled in the company's sending
+platform is refused: hiding it here would not stop the send, and would take it
+off the screen where you might notice. The refusal names the platform the
+campaign is actually in, which is read from the push rather than from the
+company -- a company that has switched platforms still has campaigns in the one
+it left.
 
 ## Why `describe_template` is the point
 
@@ -109,7 +112,8 @@ nobody sees.
 
 So `set_fields`:
 
-- **refuses outright** on a row already in Klaviyo, and says which;
+- **refuses outright** on a row already pushed, naming the platform it is in
+  and whether it is a draft or scheduled;
 - **names whose sign-off** the write would withdraw, and refuses until told
   again with `withdrawApprovals: true`;
 - writes a RowRevision every time, noting that the change came over the

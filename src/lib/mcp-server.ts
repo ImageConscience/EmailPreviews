@@ -241,8 +241,8 @@ export function buildServer(bearer: TokenBearer): McpServer {
       title: "Write fields to an email",
       description:
         "Merge values into a row. Only the fields you send change. Refuses a row " +
-        "already in Klaviyo, and refuses to silently withdraw an approval unless " +
-        "you pass withdrawApprovals.",
+        "already pushed to the sending platform, and refuses to silently withdraw " +
+        "an approval unless you pass withdrawApprovals.",
       inputSchema: {
         companyId: z.string(),
         rowId: z.string(),
@@ -263,14 +263,15 @@ export function buildServer(bearer: TokenBearer): McpServer {
 
       const risk = await writeRisk(rowId);
 
-      // A campaign that already exists in Klaviyo is not a draft any more.
-      // Changing it here would leave the two quietly disagreeing.
+      // A campaign that already exists in the sending platform is not a draft
+      // any more. Changing it here would leave the two quietly disagreeing.
       if (risk.published) {
+        const where = risk.publishedIn ?? "the sending platform";
         return refuse(
           risk.published === "scheduled"
-            ? "This row is already scheduled in Klaviyo. Klaviyo will not let a queued campaign be edited, so change it there or withdraw it in the app first."
-            : "This row is already in Klaviyo as a draft. Change it there, or push again from the app once it has been edited.",
-          { published: risk.published },
+            ? `This row is already scheduled in ${where}. ${where} will not let a queued campaign be edited, so change it there or withdraw it in the app first.`
+            : `This row is already in ${where} as a draft. Change it there, or push again from the app once it has been edited.`,
+          { published: risk.published, publishedIn: risk.publishedIn },
         );
       }
 
@@ -320,16 +321,18 @@ export function buildServer(bearer: TokenBearer): McpServer {
       const row = await prisma.sheetRow.findFirst({ where: { id: rowId, sheet: { companyId } } });
       if (!row) return refuse("No such row in this company.");
 
-      // A campaign that is already in Klaviyo keeps sending whatever this app
-      // shows. Hiding the row would take it off the screen where somebody might
-      // notice that, which is the opposite of what hiding is for.
+      // A campaign that is already in the sending platform keeps sending
+      // whatever this app shows. Hiding the row would take it off the screen
+      // where somebody might notice that, which is the opposite of what hiding
+      // is for.
       const risk = await writeRisk(rowId);
       if (hidden && risk.published) {
+        const where = risk.publishedIn ?? "the sending platform";
         return refuse(
-          `This row is ${risk.published === "scheduled" ? "scheduled" : "a draft"} in Klaviyo. ` +
+          `This row is ${risk.published === "scheduled" ? "scheduled" : "a draft"} in ${where}. ` +
             "Hiding it here would not stop that, and would take it off the screen where you " +
-            "would see it. Withdraw it in Klaviyo first.",
-          { published: risk.published },
+            `would see it. Withdraw it in ${where} first.`,
+          { published: risk.published, publishedIn: risk.publishedIn },
         );
       }
 

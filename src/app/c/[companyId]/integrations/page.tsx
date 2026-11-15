@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { guardCompany } from "@/lib/guard";
 import { IntegrationsPanel } from "./IntegrationsPanel";
-import { KlaviyoPanel } from "./KlaviyoPanel";
+import { SendingPanel } from "./SendingPanel";
+import { isEmailProvider } from "@/lib/esp/types";
 import { secretsAvailable } from "@/lib/secret";
 import { DEFAULT_TIMEZONE } from "@/lib/zone";
 
@@ -21,18 +22,19 @@ export default async function IntegrationsPage({
       select: {
         shopDomain: true,
         catalogSyncedAt: true,
-        klaviyoKeyCipher: true,
-        klaviyoKeyHint: true,
-        klaviyoAccountName: true,
-        klaviyoAccountId: true,
-        klaviyoLinkedAt: true,
-        klaviyoFromEmail: true,
-        klaviyoFromLabel: true,
-        klaviyoReplyTo: true,
-        klaviyoTimezone: true,
+        emailProvider: true,
+        espKeyCipher: true,
+        espKeyHint: true,
+        espAccountName: true,
+        espAccountId: true,
+        espLinkedAt: true,
+        espFromEmail: true,
+        espFromLabel: true,
+        espReplyTo: true,
+        espTimezone: true,
         klaviyoBaseTemplateId: true,
-        klaviyoAudience: true,
-        klaviyoAudienceExclude: true,
+        espAudience: true,
+        espAudienceExclude: true,
       },
     }),
     prisma.catalogProduct.count({ where: { companyId } }),
@@ -62,24 +64,26 @@ export default async function IntegrationsPage({
         sample={sample}
       />
 
-      <KlaviyoPanel
+      <SendingPanel
         companyId={companyId}
         canEdit={access.role !== "member"}
         state={{
+          provider:
+            company && isEmailProvider(company.emailProvider) ? company.emailProvider : "klaviyo",
           // Whether a key is held, never the key: the cipher is read here only
           // to answer yes or no, and nothing derived from it reaches the browser.
-          connected: Boolean(company?.klaviyoKeyCipher),
-          keyHint: company?.klaviyoKeyHint ?? null,
-          accountName: company?.klaviyoAccountName ?? null,
-          accountId: company?.klaviyoAccountId ?? null,
-          linkedAt: company?.klaviyoLinkedAt?.toISOString() ?? null,
-          fromEmail: company?.klaviyoFromEmail ?? "",
-          fromLabel: company?.klaviyoFromLabel ?? "",
-          replyTo: company?.klaviyoReplyTo ?? "",
-          timezone: company?.klaviyoTimezone ?? DEFAULT_TIMEZONE,
+          connected: Boolean(company?.espKeyCipher),
+          keyHint: company?.espKeyHint ?? null,
+          accountName: company?.espAccountName ?? null,
+          accountId: company?.espAccountId ?? null,
+          linkedAt: company?.espLinkedAt?.toISOString() ?? null,
+          fromEmail: company?.espFromEmail ?? "",
+          fromLabel: company?.espFromLabel ?? "",
+          replyTo: company?.espReplyTo ?? "",
+          timezone: company?.espTimezone ?? DEFAULT_TIMEZONE,
           baseTemplateId: company?.klaviyoBaseTemplateId ?? "",
-          audience: company?.klaviyoAudience ?? "",
-          audienceExclude: company?.klaviyoAudienceExclude ?? "",
+          audience: company?.espAudience ?? "",
+          audienceExclude: company?.espAudienceExclude ?? "",
           canStoreSecrets: secretsAvailable(),
         }}
       />

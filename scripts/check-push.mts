@@ -14,6 +14,8 @@ import { approvalFingerprint } from "../src/lib/fingerprint.ts";
 import { performPush, performSchedule } from "../src/lib/push-core.ts";
 import { CANDIDATE_REVISIONS, fetchAudiences, fetchTemplate, revision } from "../src/lib/klaviyo.ts";
 import { checkEligibility, type ApprovalForPush } from "../src/lib/push-eligibility.ts";
+import { setupBlockers } from "../src/lib/esp/index.ts";
+import { PROVIDER_LABELS } from "../src/lib/esp/types.ts";
 import { audienceSlots, findAudienceColumns } from "../src/lib/template.ts";
 import { publishedState, publishedFromStatus } from "../src/lib/published.ts";
 import { detachUniversalBlocks, stripIdentifiers } from "../src/lib/block-content.ts";
@@ -70,10 +72,10 @@ await prisma.membership.upsert({
 await prisma.company.update({
   where: { id: company.id },
   data: {
-    klaviyoKeyCipher: encryptSecret(KEY), klaviyoKeyHint: "••••00ab",
-    klaviyoAccountName: "Pretend Client Co", klaviyoAccountId: "AbC123",
-    klaviyoFromEmail: "hello@pretend.co", klaviyoFromLabel: "Pretend Client",
-    klaviyoTimezone: "America/New_York", klaviyoBaseTemplateId: "BASE01",
+    espKeyCipher: encryptSecret(KEY), espKeyHint: "••••00ab",
+    espAccountName: "Pretend Client Co", espAccountId: "AbC123",
+    espFromEmail: "hello@pretend.co", espFromLabel: "Pretend Client",
+    espTimezone: "America/New_York", klaviyoBaseTemplateId: "BASE01",
   },
 });
 
@@ -147,7 +149,7 @@ check("a stale colleague no longer blocks a current admin sign-off", r.ok, r.err
 check("...and it really was pushed", (await state()).campaigns.length === 1);
 
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 await prisma.approval.deleteMany({ where: { rowId: row.id } });
 await approve();
 
@@ -245,8 +247,13 @@ check("the campaign is scheduled", s.campaigns[0]?.status === "Scheduled");
 // The list screen and the push read one rule. These check they agree, since
 // the way they would drift is a row the list offers and the push refuses.
 console.log("\nEligibility, as the list sees it");
+// Built through `setupBlockers` rather than hand-written, so these checks
+// exercise the same answer the push screen gets: what a platform still needs
+// is the provider's opinion, and the gate only passes it on.
 const settings = {
-  fromEmail: "hello@pretend.co", baseTemplateId: "BASE01",
+  fromEmail: "hello@pretend.co",
+  providerBlockers: setupBlockers("klaviyo", { klaviyoBaseTemplateId: "BASE01" }),
+  providerLabel: PROVIDER_LABELS.klaviyo,
   timezone: "America/New_York", connected: true,
 };
 const columns = JSON.parse(sheet.columns) as string[];
@@ -289,15 +296,37 @@ check("a row dated in the past cannot be scheduled", !e.canSchedule);
 e = checkEligibility(await forPush(), tplNow, { ...settings, connected: false });
 check("no rows are offered when the company is not connected",
   !e.ok && e.blockers.some((b) => /not connected/.test(b)));
-e = checkEligibility(await forPush(), tplNow, { ...settings, baseTemplateId: null });
-check("...or when no base template is set", !e.ok && e.blockers.some((b) => /base template/.test(b)));
+e = checkEligibility(await forPush(), tplNow, {
+  ...settings,
+  providerBlockers: setupBlockers("klaviyo", { klaviyoBaseTemplateId: null }),
+});
+check("...or when Klaviyo has no base template set",
+  !e.ok && e.blockers.some((b) => /base template/.test(b)));
+
+// The same company, the same missing template, a different platform: Attentive
+// takes the HTML, so there is nothing to be missing. This is the gate being
+// per-provider rather than per-app.
+await approve();
+e = checkEligibility(await forPush(), tplNow, {
+  ...settings,
+  providerBlockers: setupBlockers("attentive", { klaviyoBaseTemplateId: null }),
+  providerLabel: PROVIDER_LABELS.attentive,
+});
+check("Attentive needs no base template, so the same row is offered", e.ok, e.blockers.join(" "));
+e = checkEligibility(await forPush(), tplNow, {
+  ...settings,
+  connected: false,
+  providerLabel: PROVIDER_LABELS.attentive,
+});
+check("...and an unconnected company is told which platform",
+  !e.ok && e.blockers.some((b) => /not connected to Attentive/.test(b)), e.blockers.join(" "));
 
 // --- pushing straight to scheduled ---------------------------------------
 // The one door that can put a real send in a client's queue in a single act,
 // so its refusals matter more than its successes.
 console.log("\nPush as scheduled, in one step");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 
 const dated = JSON.parse((await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data);
 await prisma.sheetRow.update({ where: { id: row.id },
@@ -333,7 +362,7 @@ check("Klaviyo got exactly one send job", s.sendJobs.length === 1, `${s.sendJobs
 check("the campaign is scheduled, not a draft", s.campaigns[0]?.status === "Scheduled",
   s.campaigns[0]?.status);
 check("and we recorded it as scheduled rather than a draft",
-  (await prisma.klaviyoPush.findFirstOrThrow({ where: { rowId: row.id } })).status === "scheduled");
+  (await prisma.espPush.findFirstOrThrow({ where: { rowId: row.id } })).status === "scheduled");
 
 // Klaviyo refuses to edit a campaign that is already in the send queue, so
 // pushing over a scheduled one has to take it out first. Without this the
@@ -360,7 +389,7 @@ check("and re-scheduling it puts exactly one job back",
 // the template actually prints the date, in which case it must not.
 console.log("\nOverriding the send time");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 await prisma.sheetRow.update({ where: { id: row.id },
   data: { data: JSON.stringify({ ...JSON.parse(row.data), send_date: "2026-12-01", send_time: "10:00" }) } });
 await approve();
@@ -460,7 +489,7 @@ for (const [mode, why] of [
 ] as const) {
   await fetch(`http://127.0.0.1:4599/__assign-mode?mode=${mode}`);
   await fetch("http://127.0.0.1:4599/__reset");
-  await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+  await prisma.espPush.deleteMany({ where: { rowId: row.id } });
   await approve();
 
   r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
@@ -497,7 +526,7 @@ for (const [mode, why] of [
 }
 await fetch("http://127.0.0.1:4599/__assign-mode?mode=copy");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 
 // --- templates holding shared blocks -------------------------------------
 // Klaviyo refuses to write back a template containing universal blocks, and a
@@ -589,7 +618,7 @@ console.log("\nUniversal blocks in the base template");
 console.log("\nWhen Klaviyo refuses a key this app does not know");
 await fetch("http://127.0.0.1:4599/__refuse-on-create?keys=id,template_id,data_id,content_type");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 await approve();
 
 r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
@@ -612,7 +641,7 @@ check("...saying which key it had to be told about",
 // A refusal it cannot learn from is still a refusal, not a blind retry.
 await fetch("http://127.0.0.1:4599/__refuse-on-create?keys=__opaque");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 await approve();
 r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
 check("a refusal it cannot read is passed on, not worked around",
@@ -623,7 +652,7 @@ check("...without a second attempt, since there is nothing to change",
 
 await fetch("http://127.0.0.1:4599/__refuse-on-create");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 
 // --- the API revision ----------------------------------------------------
 // A revision Klaviyo does not publish is not an error: it is treated as the
@@ -706,7 +735,7 @@ try {
 
 // And the whole push has to work in that world, not just the read.
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 await approve();
 r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
 check("and a push works against such an account", r.ok, r.error);
@@ -727,7 +756,7 @@ check("...filling the marked block as usual",
   `${filledPlain.length} blocks`);
 await fetch("http://127.0.0.1:4599/__template-mode?mode=additional-fields");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 
 // --- reading the account's lists -----------------------------------------
 // Klaviyo rejects a sparse fieldset naming a type the endpoint cannot return,
@@ -845,13 +874,13 @@ check("...and is not marked inherited", !d.audienceInherited);
 
 // End to end: the default has to reach Klaviyo, not just the list.
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 const kept2 = JSON.parse((await prisma.sheetRow.findUniqueOrThrow({ where: { id: row.id } })).data);
 await prisma.sheetRow.update({ where: { id: row.id },
   data: { data: JSON.stringify({ ...kept2, audience: "", audience_exclude: "",
     send_date: "2026-12-01", send_time: "10:00" }) } });
 await prisma.company.update({ where: { id: company.id },
-  data: { klaviyoAudience: "Newsletter", klaviyoAudienceExclude: "VIP" } });
+  data: { espAudience: "Newsletter", espAudienceExclude: "VIP" } });
 await approve();
 r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
 check("a row with no audience of its own pushes on the default", r.ok, r.error);
@@ -865,7 +894,7 @@ await prisma.sheetRow.update({ where: { id: row.id },
   data: { data: JSON.stringify({ ...kept2, audience: "Engaged 90 days", audience_exclude: "",
     send_date: "2026-12-01", send_time: "10:00" }) } });
 await approve();
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 await fetch("http://127.0.0.1:4599/__reset");
 r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
 s = await state();
@@ -877,9 +906,9 @@ check("...while still taking the company's exclusions",
   JSON.stringify(s.campaigns[0]?.attributes?.audiences?.excluded));
 
 await prisma.company.update({ where: { id: company.id },
-  data: { klaviyoAudience: null, klaviyoAudienceExclude: null } });
+  data: { espAudience: null, espAudienceExclude: null } });
 await prisma.sheetRow.update({ where: { id: row.id }, data: { data: JSON.stringify(kept2) } });
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 
 // --- the sign-off after it has gone out ----------------------------------
 // Once a pair is in Klaviyo the approval it went out on stops being a toggle.
@@ -887,7 +916,7 @@ await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
 // approved; editing the row is still the way to take something back.
 console.log("\nWithdrawing a sign-off after the push");
 await fetch("http://127.0.0.1:4599/__reset");
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 await prisma.sheetRow.update({ where: { id: row.id },
   data: { data: JSON.stringify({ ...JSON.parse(row.data), send_date: "2026-12-01", send_time: "10:00" }) } });
 await approve();
@@ -897,7 +926,7 @@ check("the row is approved before it goes", beforePush === 1, `${beforePush}`);
 
 r = await performPush(company.id, row.id, tpl.id, user.id, "draft");
 check("it pushes as a draft", r.ok, r.error);
-let mark = await prisma.klaviyoPush.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
+let mark = await prisma.espPush.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
 check("...and the push is recorded as a draft", publishedFromStatus(mark.status) === "drafted", mark.status);
 
 // The action needs a request context, so the rule itself is exercised here the
@@ -908,7 +937,7 @@ check("a drafted pair blocks a withdrawal", await blocksWithdrawal(row.id, tpl.i
 
 r = await performPush(company.id, row.id, tpl.id, user.id, "scheduled");
 check("it schedules", r.ok, r.error);
-mark = await prisma.klaviyoPush.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
+mark = await prisma.espPush.findFirstOrThrow({ where: { rowId: row.id, templateId: tpl.id } });
 check("...and is recorded as scheduled", publishedFromStatus(mark.status) === "scheduled", mark.status);
 check("a scheduled pair blocks a withdrawal too", await blocksWithdrawal(row.id, tpl.id));
 check("a cancelled one does not", publishedFromStatus("cancelled") === null);
@@ -933,7 +962,7 @@ check("...so the row is no longer eligible to push",
   !checkEligibility(await forPush(), tplLive, settings).ok);
 await prisma.sheetRow.update({ where: { id: row.id }, data: { data: JSON.stringify(held) } });
 
-await prisma.klaviyoPush.deleteMany({ where: { rowId: row.id } });
+await prisma.espPush.deleteMany({ where: { rowId: row.id } });
 
 await prisma.contentSheet.delete({ where: { id: sheet.id } });
 await prisma.template.delete({ where: { id: tpl.id } }).catch(() => {});

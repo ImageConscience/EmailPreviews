@@ -39,8 +39,10 @@ export interface OverviewItem {
   /** Whether the person looking at this has a current approval on it. */
   approvedByMe: boolean;
   notes: number;
-  /** "scheduled" or "draft" once it has gone to Klaviyo. */
+  /** "scheduled" or "draft" once it has gone to its sending platform. */
   published: string | null;
+  /** The platform it went to, by name, where it has gone to one. */
+  publishedIn: string | null;
   hidden: boolean;
   hiddenBy: string | null;
 }
@@ -888,7 +890,8 @@ function calendarTitle(item: OverviewItem): string {
   const lines = [item.title];
   if (item.templateName) lines.push(item.templateName);
   if (item.published) {
-    lines.push(item.published === "scheduled" ? "Scheduled in Klaviyo" : "Drafted in Klaviyo");
+    const where = item.publishedIn ?? "the sending platform";
+    lines.push(item.published === "scheduled" ? `Scheduled in ${where}` : `Drafted in ${where}`);
   }
   if (item.approvers.length > 0) {
     lines.push(

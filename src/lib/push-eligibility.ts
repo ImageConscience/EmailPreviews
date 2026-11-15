@@ -22,7 +22,15 @@ export const EXCLUDE_COLUMN = "audience_exclude";
 
 export interface CompanyPushSettings {
   fromEmail: string | null;
-  baseTemplateId: string | null;
+  /**
+   * What this company's sending platform still needs before anything can go,
+   * in that platform's own terms -- a base template for Klaviyo, nothing for
+   * Attentive. Computed by the provider rather than asked about here, so this
+   * gate does not have to know which platforms exist or what each one wants.
+   */
+  providerBlockers: string[];
+  /** The platform's name, for the sentences below. */
+  providerLabel: string;
   timezone: string | null;
   connected: boolean;
   /** Where sends go when a row does not say otherwise. */
@@ -111,8 +119,8 @@ export function checkEligibility(
 
   // Company-level first: these stop every row, and saying so once per row would
   // be a wall of the same sentence.
-  if (!company.connected) blockers.push("This company is not connected to Klaviyo.");
-  if (!company.baseTemplateId) blockers.push("No Klaviyo base template is set.");
+  if (!company.connected) blockers.push(`This company is not connected to ${company.providerLabel}.`);
+  blockers.push(...company.providerBlockers);
   if (!company.fromEmail) blockers.push("No from-address is set.");
 
   if (row.hiddenAt) blockers.push("The row is hidden.");

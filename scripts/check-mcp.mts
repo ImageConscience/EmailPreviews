@@ -296,11 +296,12 @@ check(
 );
 
 // A campaign already in Klaviyo is not a draft any more.
-await prisma.klaviyoPush.create({
+await prisma.espPush.create({
   data: {
     rowId,
     templateId: template.id,
-    campaignId: "check", messageId: "check", klaviyoTemplateId: "check",
+    campaignId: "check", messageId: "check",
+    provider: "klaviyo", refs: JSON.stringify({ templateId: "check" }),
     contentHash: "check", status: "scheduled", campaignName: "check:mcp row",
   },
 });
@@ -353,7 +354,7 @@ await prisma.apiToken.updateMany({ where: { hash: { not: "" }, label: "check:mcp
 check("a revoked token stops working at once", (await rpc("tools/list", {})).status === 401);
 
 /* --------------------------------------------------------------- tidy up */
-await prisma.klaviyoPush.deleteMany({ where: { rowId } });
+await prisma.espPush.deleteMany({ where: { rowId } });
 await prisma.approval.deleteMany({ where: { rowId } });
 await prisma.sheetRow.delete({ where: { id: rowId } });
 await prisma.apiToken.deleteMany({ where: { label: "check:mcp" } });
