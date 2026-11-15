@@ -88,7 +88,12 @@ interface RequestOptions {
   answered?: { revision: string | null };
 }
 
-async function call<T>(apiKey: string, path: string, options: RequestOptions = {}): Promise<T> {
+/**
+ * Exported for `klaviyo-sms.ts`, which speaks a different revision of the same
+ * API and should share this one place where keys, errors and timeouts are
+ * handled rather than grow a second.
+ */
+export async function call<T>(apiKey: string, path: string, options: RequestOptions = {}): Promise<T> {
   const url = new URL(`${base()}${path}`);
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value != null && value !== "") url.searchParams.set(key, value);
