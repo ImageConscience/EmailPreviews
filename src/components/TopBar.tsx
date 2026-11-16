@@ -91,7 +91,7 @@ export function TopBar({ companyId, companyName, userName, role, canPush, hasTex
   return (
     <header className="topbar">
       <Link href={base} className="brand">
-        Email Previews
+        Message Baker
       </Link>
       <nav>
         {links.map((link) => (

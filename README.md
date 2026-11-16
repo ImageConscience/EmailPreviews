@@ -1,4 +1,4 @@
-# Email Previews
+# Message Baker
 
 Merge spreadsheet content into HTML email templates and see the result on screen
 before anything gets sent.

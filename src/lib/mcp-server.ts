@@ -70,7 +70,7 @@ export function buildServer(bearer: TokenBearer): McpServer {
     { name: "email-previews", version: "1.0.0" },
     {
       instructions:
-        "Email Previews holds each brand's campaigns as rows against an HTML " +
+        "Message Baker holds each brand's campaigns as rows against an HTML " +
         "template. Start with list_companies, then describe_template before " +
         "writing any content: it reports that template's real field list, which " +
         "fields take HTML, and which the app works out for itself and must be " +

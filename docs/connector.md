@@ -10,7 +10,7 @@ direction: Claude reads the templates and writes the rows.
 
 Your name in the top bar → **Claude connector**.
 
-1. **Server URL** — your own Email Previews address with `/api/mcp` on the end.
+1. **Server URL** — your own Message Baker address with `/api/mcp` on the end.
    The box has it filled in already; click it and copy.
 2. **Create a token** — name it after whatever will use it, click Create, copy
    the `ep_…` string.

@@ -10,7 +10,7 @@ export default async function LoginPage() {
   return (
     <main className="auth-wrap">
       <div className="auth-card">
-        <span className="brand">Email Previews</span>
+        <span className="brand">Message Baker</span>
         <p className="tagline">Sign in to preview your templates against real content.</p>
         <div className="card card-pad">
           <LoginForm />

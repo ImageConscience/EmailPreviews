@@ -4,8 +4,10 @@ import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Email Previews",
-  description: "Merge content sheets into HTML email templates and preview them live.",
+  title: "Message Baker",
+  description:
+    "Merge content sheets into HTML email templates and text messages, preview them live, " +
+    "and send them through the client's own platform.",
 };
 
 /**

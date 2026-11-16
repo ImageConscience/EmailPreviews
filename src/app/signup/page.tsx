@@ -25,7 +25,7 @@ export default async function SignupPage({
   return (
     <main className="auth-wrap">
       <div className="auth-card">
-        <span className="brand">Email Previews</span>
+        <span className="brand">Message Baker</span>
         <p className="tagline">
           {usable
             ? `You have been invited to collaborate on ${usable.company.name}.`

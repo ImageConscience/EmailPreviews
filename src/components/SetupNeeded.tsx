@@ -16,7 +16,7 @@ export function SetupNeeded({
   return (
     <main className="auth-wrap">
       <div className="auth-card" style={{ maxWidth: 560 }}>
-        <span className="brand">Email Previews</span>
+        <span className="brand">Message Baker</span>
         <p className="tagline">Almost there — one setup step is missing.</p>
 
         <div className="card card-pad">
