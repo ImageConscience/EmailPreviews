@@ -14,7 +14,8 @@
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { approvalFingerprint } from "../src/lib/fingerprint.ts";
-import { applyFields } from "../src/lib/compose.ts";
+import { applyFields, writeRisk } from "../src/lib/compose.ts";
+import { publishedPlatform, publishedState } from "../src/lib/published.ts";
 import { performPush } from "../src/lib/push-core.ts";
 import { providerFor } from "../src/lib/esp/index.ts";
 import { performSmsPush, scheduledTextGuard, toggleSmsApproval } from "../src/lib/sms-core.ts";
@@ -158,8 +159,34 @@ console.log("\nRecording what was built");
   check("the text is recorded as scheduled", text.ok, text.error);
   check("...and is then guarded against edits like any scheduled text", Boolean(await scheduledTextGuard(textRow.id)));
 
+  // A campaign Claude built in Attentive has to hold the row down exactly as
+  // one this app pushed to Klaviyo would. Nothing in those locks asks who did
+  // the pushing -- they read the recorded push -- but "should follow" is not
+  // the same as "does", and this is the half nobody had watched go through.
+  const scheduledEmail = await recordAttentiveHandoff(company.id, user.id, {
+    channel: "email", rowId: emailRow.id, templateId: tpl.id, campaignId: "ATT-E1",
+    status: "scheduled", scheduledFor: `${nextYear}-06-02T13:00:00.000Z`,
+  });
+  check("an email can be recorded as scheduled", scheduledEmail.ok, scheduledEmail.error);
+  check("...and the app then calls it scheduled",
+    (await publishedState(emailRow.id, tpl.id)) === "scheduled");
+  check("...in Attentive, not in whatever this company sends email through today",
+    (await publishedPlatform(emailRow.id, tpl.id)) === "Attentive");
+  const risk = await writeRisk(emailRow.id);
+  check("...so the connector refuses to write to the row",
+    risk.published === "scheduled" && risk.publishedIn === "Attentive",
+    JSON.stringify({ published: risk.published, in: risk.publishedIn }));
+  check("...and the sign-off it went out on cannot be taken back",
+    risk.wouldUnapprove.length > 0, JSON.stringify(risk.wouldUnapprove));
+
+  // Back to a draft, so what follows reads the state it was written for.
+  await recordAttentiveHandoff(company.id, user.id, {
+    channel: "email", rowId: emailRow.id, templateId: tpl.id, campaignId: "ATT-E1", status: "draft",
+  });
+
   const list = await listAttentiveHandoffs(company.id);
-  check("recorded, unchanged rows are not listed again", list.email.length === 0 && list.sms.length === 0);
+  check("recorded, unchanged rows are not listed again", list.email.length === 0 && list.sms.length === 0,
+    JSON.stringify({ email: list.email.map((x) => x.rowId), sms: list.sms.map((x) => x.rowId) }));
   const all = await listAttentiveHandoffs(company.id, { includeRecorded: true });
   check("...unless asked for", all.email.length === 1 && all.email[0].existing?.campaignId === "ATT-E1");
 }
