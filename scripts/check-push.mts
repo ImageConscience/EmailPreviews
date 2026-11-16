@@ -303,6 +303,28 @@ e = checkEligibility(await forPush(), tplNow, {
 check("...or when Klaviyo has no base template set",
   !e.ok && e.blockers.some((b) => /base template/.test(b)));
 
+// What the campaign ends up called, read through the sheet's own header.
+// A sheet that spells it "Campaign Name" used to fall through to the subject,
+// silently, so the campaign in the client's account carried the subject line
+// as its name and nothing on screen said otherwise.
+const spelled = (header: string, value: string) => {
+  const columns = ["Template", header, "Subject", "Send Date", "Audience"];
+  const data = JSON.stringify({
+    Template: tpl.name, [header]: value, Subject: "The winter edit",
+    "Send Date": "2026-12-01", Audience: "Newsletter",
+  });
+  return checkEligibility(
+    { data, values: JSON.parse(data), columns, hiddenAt: null, approvals: [] },
+    tplNow,
+    settings,
+  ).campaignName;
+};
+check("a sheet headed “campaign” names the campaign", spelled("campaign", "Winter Edit") === "Winter Edit");
+check("...and so does one headed “Campaign Name”",
+  spelled("Campaign Name", "Winter Edit") === "Winter Edit", spelled("Campaign Name", "Winter Edit"));
+check("...with the subject standing in only when there is no name at all",
+  spelled("Campaign Name", "") === "The winter edit", spelled("Campaign Name", ""));
+
 // The same company, the same missing template, a different platform: Attentive
 // takes the HTML, so there is nothing to be missing. This is the gate being
 // per-provider rather than per-app.

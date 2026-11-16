@@ -114,7 +114,10 @@ export function checkEligibility(
   const ownAudience = (row.values[audienceKeys.audience] ?? "").trim();
   const audience = ownAudience || (company.audience ?? "").trim();
   const audienceInherited = !ownAudience && audience !== "";
-  const campaignName = (row.values.campaign ?? row.values.campaign_name ?? "").trim() || subject;
+  // Through the sheet's own header: a column headed "Campaign Name" is a
+  // campaign name, and reading two fixed keys instead quietly fell back to the
+  // subject for every sheet that spelled it any other way.
+  const campaignName = get(envelope.campaign) || subject;
   const contentHash = approvalFingerprint(row.data, template.id, template.updatedAt);
 
   // Company-level first: these stop every row, and saying so once per row would

@@ -87,6 +87,7 @@ export function EnvelopeFields({
 
   return (
     <div className="envelope" style={{ maxWidth: width ? `${width}px` : "100%" }}>
+      {field(slots.campaign, "Campaign", "campaign", "What this send is called")}
       {field(slots.subject, "Subject", "subject", "Subject line")}
       {field(slots.preheader, "Preview", "preheader", "Preview text shown beside the subject")}
       <div className="env-row env-schedule">

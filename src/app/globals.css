@@ -565,6 +565,11 @@ input:focus, select:focus, textarea:focus {
 }
 .envelope input:hover { border-color: var(--border); }
 .envelope input:focus { border-color: var(--accent); background: var(--surface); }
+/* The name of the send, above the line that lands in an inbox. Weighted like
+   the subject so it reads as a heading rather than a note, and smaller and
+   muted so the subject stays the thing your eye lands on: the campaign name is
+   internal, the subject is what a customer sees. */
+.envelope .campaign input { font-size: 13px; font-weight: 650; color: var(--text-muted); }
 .envelope .subject input { font-size: 15px; font-weight: 650; color: var(--text); }
 .envelope .preheader input { font-size: 13px; color: var(--text-muted); }
 .envelope .env-missing {
@@ -730,6 +735,15 @@ input:focus, select:focus, textarea:focus {
 .ov-when strong { display: block; color: var(--text); font-size: 13px; }
 .ov-time { display: block; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .ov-nodate { color: var(--text-faint); font-style: italic; }
+/* The campaign a row belongs to, above the row's own title. Small and in the
+   muted colour so it does not outshout the title, but on its own line and in
+   the colour of a label rather than of an afterthought -- enough to scan a
+   column of them and see where one campaign ends and the next begins. */
+.ov-campaign {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 1px;
+}
+.ov-table tr.is-text .ov-campaign { color: var(--sms); }
 .ov-title { font-weight: 600; color: var(--text); }
 .ov-title:hover { color: var(--accent); }
 .ov-sub { color: var(--text-faint); font-size: 12.5px; margin-top: 2px; }

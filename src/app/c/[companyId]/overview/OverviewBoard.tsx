@@ -514,11 +514,20 @@ function ListView({
                   )}
                 </td>
                 <td>
+                  {/* The column is headed Campaign and was showing the subject,
+                      with the campaign name folded into the grey line below
+                      among the sheet name and the theme. The name goes first
+                      now, and only when it says something the title does not --
+                      a text is usually called the same as its own label, and
+                      printing that twice is noise, not emphasis. */}
+                  {item.campaign && item.campaign !== item.title && (
+                    <div className="ov-campaign">{item.campaign}</div>
+                  )}
                   <Link href={href(item)} className="ov-title">
                     {item.title}
                   </Link>
                   <div className="ov-sub">
-                    {[item.campaign, item.theme, item.sheetName].filter(Boolean).join(" · ")}
+                    {[item.theme, item.sheetName].filter(Boolean).join(" · ")}
                   </div>
                 </td>
                 <td className="tight">
@@ -1013,6 +1022,7 @@ function Marks({ item }: { item: OverviewItem }) {
 /** Everything the dots stand for, spelled out for the hover and for a reader. */
 function calendarTitle(item: OverviewItem): string {
   const lines = [item.title];
+  if (item.campaign && item.campaign !== item.title) lines.push(item.campaign);
   // Colour says it at a glance; the hover says it in words, which is what
   // somebody checks when the glance is the thing they are unsure about.
   lines.push(item.channel === "text" ? "Text" : "Email");

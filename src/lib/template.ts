@@ -246,16 +246,24 @@ const METADATA_COLUMNS = [
 ];
 
 /**
- * The four things that surround an email without being inside it: the subject
- * line, the preview text beside it in the inbox, and the date and time it goes
- * out.
+ * The things that surround an email without being inside it: what the send is
+ * called, the subject line, the preview text beside it in the inbox, and the
+ * date and time it goes out.
  *
  * None of them belongs in the email body -- the sending platform sets them all
  * -- but each is part of the campaign that gets written, reviewed and approved
  * along with the copy, so the preview shows them above the render rather than
  * discarding them as columns no template uses.
+ *
+ * The campaign name joined them late. It was being treated as an ordinary
+ * sheet column, which left it in the rail among a template's own fields, where
+ * it reads as one more thing to fill in rather than as the name of the thing
+ * everything else belongs to. Its aliases are deliberately the two the push
+ * already recognises, so the name shown here is the name the campaign is
+ * created under.
  */
 const ENVELOPE_ALIASES = {
+  campaign: ["campaign", "campaign_name"],
   subject: ["subject", "subject_line"],
   preheader: ["preheader", "pre_header", "preview_text", "preview", "preheader_text"],
   sendDate: ["send_date", "date", "send_day", "scheduled_date", "schedule_date"],
@@ -305,6 +313,7 @@ export function audienceColumnNames(columns: AudienceColumns): string[] {
 }
 
 export interface EnvelopeColumns {
+  campaign: string | null;
   subject: string | null;
   preheader: string | null;
   sendDate: string | null;
@@ -315,6 +324,7 @@ export function findEnvelopeColumns(columns: string[]): EnvelopeColumns {
   const pick = (names: string[]) =>
     columns.find((column) => names.includes(normalizeKey(column))) ?? null;
   return {
+    campaign: pick(ENVELOPE_ALIASES.campaign),
     subject: pick(ENVELOPE_ALIASES.subject),
     preheader: pick(ENVELOPE_ALIASES.preheader),
     sendDate: pick(ENVELOPE_ALIASES.sendDate),
@@ -331,6 +341,7 @@ export function findEnvelopeColumns(columns: string[]): EnvelopeColumns {
  * other new field would.
  */
 const ENVELOPE_DEFAULT_KEYS = {
+  campaign: "campaign",
   subject: "subject",
   preheader: "preheader",
   sendDate: "send_date",
@@ -342,6 +353,7 @@ export type EnvelopeSlots = Record<keyof EnvelopeColumns, string>;
 /** The key each envelope field reads and writes: the sheet's, or the default. */
 export function envelopeSlots(columns: EnvelopeColumns): EnvelopeSlots {
   return {
+    campaign: columns.campaign ?? ENVELOPE_DEFAULT_KEYS.campaign,
     subject: columns.subject ?? ENVELOPE_DEFAULT_KEYS.subject,
     preheader: columns.preheader ?? ENVELOPE_DEFAULT_KEYS.preheader,
     sendDate: columns.sendDate ?? ENVELOPE_DEFAULT_KEYS.sendDate,
