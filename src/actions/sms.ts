@@ -80,9 +80,19 @@ export async function saveTextAction(
 }
 
 /** A new, empty text, in the given text sheet or in one made for it. */
+/**
+ * Start a text.
+ *
+ * The values are optional because there are two ways in. The Texts page adds a
+ * blank row beside the one you are already writing, and you fill it in place.
+ * The overview's "+ New" asks first -- it is a planning screen, so what it
+ * knows is what the thing is called and when it goes -- and the message is
+ * still written on the Texts page, where the preview and the segment count are.
+ */
 export async function addTextAction(
   companyId: string,
   sheetId?: string,
+  start?: { name?: string; sendDate?: string; sendTime?: string },
 ): Promise<{ ok: boolean; error?: string; rowId?: string }> {
   try {
     const access = await requireCompanyAccess(companyId, "member");
@@ -105,11 +115,20 @@ export async function addTextAction(
       orderBy: { position: "desc" },
       select: { position: true },
     });
+    // A send time with no date is not a time, so it is dropped rather than
+    // written for the eligibility check to refuse later.
+    const sendDate = (start?.sendDate ?? "").trim();
+    const sendTime = sendDate ? (start?.sendTime ?? "").trim() : "";
     const row = await prisma.sheetRow.create({
       data: {
         sheetId: sheet.id,
         position: (last?.position ?? -1) + 1,
-        data: JSON.stringify({ [slots.name]: "New text", [slots.body]: "" }),
+        data: JSON.stringify({
+          [slots.name]: (start?.name ?? "").trim() || "New text",
+          [slots.body]: "",
+          ...(sendDate ? { [slots.sendDate]: sendDate } : {}),
+          ...(sendTime ? { [slots.sendTime]: sendTime } : {}),
+        }),
         createdById: access.user.id,
       },
     });

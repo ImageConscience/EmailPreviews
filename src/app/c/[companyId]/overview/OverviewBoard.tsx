@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createEmailAction } from "@/actions/content";
+import { addTextAction } from "@/actions/sms";
 import type { MineFilter } from "@/lib/view-state";
 import {
   defaultRange,
@@ -241,10 +242,11 @@ export function OverviewBoard({
           </div>
         </div>
       {creating && (
-        <NewEmailDialog
+        <NewItemDialog
           companyId={companyId}
           templates={templates}
           sheets={sheets}
+          channel={channel}
           onClose={() => setCreating(false)}
         />
       )}
@@ -440,10 +442,11 @@ export function OverviewBoard({
       )}
 
       {creating && (
-        <NewEmailDialog
+        <NewItemDialog
           companyId={companyId}
           templates={templates}
           sheets={sheets}
+          channel={channel}
           onClose={() => setCreating(false)}
         />
       )}
@@ -547,30 +550,44 @@ function ListView({
 /* ------------------------------------------------------------------ */
 
 /**
- * Start an email without leaving the overview.
+ * Start an email or a text without leaving the overview.
  *
- * It asks only for what decides what a row *is*: which template it is written
- * against, what it is called, what it says in an inbox, and when it goes. The
- * copy is left for the preview, where you can see what you are typing into.
+ * It asks only for what decides what a row *is*: for an email, which template
+ * it is written against, what it is called, what it says in an inbox, and when
+ * it goes; for a text, what it is called and when it goes. The content is left
+ * for the screen built to write it on -- the preview for an email, the Texts
+ * page for a text, where the phone preview and the segment count are. Asking
+ * for a message here would be asking somebody to write one blind.
  *
- * Audience is deliberately absent. It has a company default, and its own
- * picker at the head of the preview rail, so asking for it here would be a
- * third place to set one thing.
+ * Audience is deliberately absent from both. It has a company default and its
+ * own picker on each of those screens, so asking for it here would be a third
+ * place to set one thing.
  */
-function NewEmailDialog({
+function NewItemDialog({
   companyId,
   templates,
   sheets,
+  channel,
   onClose,
 }: {
   companyId: string;
   templates: { id: string; name: string }[];
-  sheets: { id: string; name: string }[];
+  sheets: { id: string; name: string; kind: Channel }[];
+  /** What the board is filtered to, so "+ New" starts what you are looking at. */
+  channel: "" | Channel;
   onClose: () => void;
 }) {
   const router = useRouter();
+  // Sheets of one kind cannot hold the other: the columns overlap in name and
+  // not in meaning, and the server refuses it anyway. Offering both here would
+  // only be offering a mistake.
+  const emailSheets = useMemo(() => sheets.filter((s) => s.kind === "email"), [sheets]);
+  const textSheets = useMemo(() => sheets.filter((s) => s.kind === "text"), [sheets]);
+
+  const [kind, setKind] = useState<Channel>(channel === "text" ? "text" : "email");
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
-  const [sheetId, setSheetId] = useState(sheets[0]?.id ?? "");
+  const [sheetId, setSheetId] = useState(emailSheets[0]?.id ?? "");
+  const [textSheetId, setTextSheetId] = useState(textSheets[0]?.id ?? "");
   const [campaign, setCampaign] = useState("");
   const [subject, setSubject] = useState("");
   const [preheader, setPreheader] = useState("");
@@ -592,6 +609,29 @@ function NewEmailDialog({
     if (busy) return;
     setBusy(true);
     setError(null);
+
+    if (kind === "text") {
+      try {
+        const made = await addTextAction(companyId, textSheetId || undefined, {
+          name: campaign,
+          sendDate,
+          sendTime,
+        });
+        if (!made.ok || !made.rowId) {
+          setError(made.error ?? "That could not be saved.");
+          setBusy(false);
+          return;
+        }
+        // Onto the Texts page with this one open, which is where the message
+        // gets written and where the count and preview live.
+        router.push(`/c/${companyId}/texts?row=${made.rowId}`);
+      } catch {
+        setError("That could not be saved. Try again.");
+        setBusy(false);
+      }
+      return;
+    }
+
     try {
       const result = await createEmailAction(companyId, {
         sheetId,
@@ -625,14 +665,39 @@ function NewEmailDialog({
     <div className="modal-back" role="dialog" aria-modal="true" onClick={busy ? undefined : onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="card-head">
-          <h2 style={{ margin: 0 }}>New email</h2>
+          <h2 style={{ margin: 0 }}>{kind === "text" ? "New text" : "New email"}</h2>
         </div>
 
-        {templates.length === 0 ? (
+        <div className="card-pad" style={{ paddingBottom: 0 }}>
+          {/* First, because it decides what the rest of the form means. */}
+          <div className="row" style={{ gap: 4 }}>
+            <button
+              type="button"
+              className={`btn btn-sm ${kind === "email" ? "btn-primary" : ""}`}
+              disabled={busy}
+              onClick={() => setKind("email")}
+            >
+              Email
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${kind === "text" ? "btn-primary" : ""}`}
+              disabled={busy}
+              onClick={() => setKind("text")}
+            >
+              Text
+            </button>
+          </div>
+        </div>
+
+        {/* An email needs a template to be written against; a text is its own
+            content, so it is still startable on a company that has none. */}
+        {kind === "email" && templates.length === 0 ? (
           <div className="card-pad">
             <p style={{ marginTop: 0 }}>
               An email is written against a template, and this company has none yet. Add one under{" "}
-              <Link href={`/c/${companyId}/templates`}>Templates</Link> first.
+              <Link href={`/c/${companyId}/templates`}>Templates</Link> first, or start a text
+              instead.
             </p>
             <button type="button" className="btn" onClick={onClose}>
               Close
@@ -640,16 +705,18 @@ function NewEmailDialog({
           </div>
         ) : (
           <form className="card-pad" onSubmit={submit}>
-            <label className="field">
-              <span>Template</span>
-              <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {kind === "email" && (
+              <label className="field">
+                <span>Template</span>
+                <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label className="field">
               <span>Campaign name</span>
@@ -663,25 +730,29 @@ function NewEmailDialog({
               />
             </label>
 
-            <label className="field">
-              <span>Subject</span>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="What it says in an inbox"
-              />
-            </label>
+            {kind === "email" && (
+              <>
+                <label className="field">
+                  <span>Subject</span>
+                  <input
+                    type="text"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="What it says in an inbox"
+                  />
+                </label>
 
-            <label className="field">
-              <span>Preview text</span>
-              <input
-                type="text"
-                value={preheader}
-                onChange={(e) => setPreheader(e.target.value)}
-                placeholder="The line beside the subject"
-              />
-            </label>
+                <label className="field">
+                  <span>Preview text</span>
+                  <input
+                    type="text"
+                    value={preheader}
+                    onChange={(e) => setPreheader(e.target.value)}
+                    placeholder="The line beside the subject"
+                  />
+                </label>
+              </>
+            )}
 
             <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
               <label className="field" style={{ flex: "1 1 160px" }}>
@@ -694,12 +765,25 @@ function NewEmailDialog({
               </label>
             </div>
 
-            {/* Only worth asking when there is a choice to make. */}
-            {sheets.length > 1 && (
+            {/* Only worth asking when there is a choice to make, and only
+                among sheets of the kind being made. */}
+            {kind === "email" && emailSheets.length > 1 && (
               <label className="field">
                 <span>Add to sheet</span>
                 <select value={sheetId} onChange={(e) => setSheetId(e.target.value)}>
-                  {sheets.map((sheet) => (
+                  {emailSheets.map((sheet) => (
+                    <option key={sheet.id} value={sheet.id}>
+                      {sheet.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {kind === "text" && textSheets.length > 1 && (
+              <label className="field">
+                <span>Add to sheet</span>
+                <select value={textSheetId} onChange={(e) => setTextSheetId(e.target.value)}>
+                  {textSheets.map((sheet) => (
                     <option key={sheet.id} value={sheet.id}>
                       {sheet.name}
                     </option>
@@ -709,8 +793,9 @@ function NewEmailDialog({
             )}
 
             <p className="hint">
-              This makes the row and opens it in the preview. Everything else — the copy, the
-              images, who it goes to — is edited there.
+              {kind === "text"
+                ? "This makes the row and opens it on the Texts page, where the message is written — with the character count and the phone preview beside it."
+                : "This makes the row and opens it in the preview. Everything else — the copy, the images, who it goes to — is edited there."}
             </p>
 
             {error && (
