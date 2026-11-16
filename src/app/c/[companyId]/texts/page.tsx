@@ -41,7 +41,7 @@ export default async function TextsPage({ params }: { params: Promise<{ companyI
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>Texts</h1>
+          <h1>SMS Preview</h1>
           <p>
             SMS and MMS campaigns. Add an image link to make a text an MMS. Edit, check the count,
             approve, and push from here.

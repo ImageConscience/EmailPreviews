@@ -35,10 +35,10 @@ export function TopBar({ companyId, companyName, userName, role, canPush, hasTex
    */
   const links = [
     { href: `${base}/overview`, label: "Overview" },
-    { href: `${base}/preview`, label: "Preview" },
+    { href: `${base}/preview`, label: "Email Preview" },
     // Texts write, preview, approve and push in one place: there is no
     // template to choose, so the separate steps email needs collapse into one.
-    ...(hasTexts ? [{ href: `${base}/texts`, label: "Texts" }] : []),
+    ...(hasTexts ? [{ href: `${base}/texts`, label: "SMS Preview" }] : []),
     // Third only for the people who can push, and only once there is somewhere
     // to push to.
     ...(canPush ? [{ href: `${base}/push`, label: "Push" }] : []),

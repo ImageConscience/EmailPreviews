@@ -252,7 +252,9 @@ saves with `save_attentive_segments`. The workflow is written up as a skill in
 
 A text is its own kind of sheet ("Texts" at upload), with a name, message,
 optional image (making it an MMS), send date and time, and audience. Texts are
-written, previewed, approved and pushed on the Texts page. Each company chooses
+written, previewed, approved and pushed on the **SMS Preview** page, and can be
+read and written over the connector with `describe_texting`, `list_texts`,
+`get_text`, `create_text`, `set_text_fields` and `hide_text`. Each company chooses
 where its texts go separately from its email: Klaviyo (pushed directly) or
 Attentive (handed off as above).
 

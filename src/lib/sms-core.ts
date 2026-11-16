@@ -14,10 +14,10 @@ import {
 } from "@/lib/klaviyo-sms";
 import { adminIds, failure, resolveAudiences } from "@/lib/push-core";
 import { checkSms } from "@/lib/sms";
-import { readSmsRow, smsLabel, smsSlots, type SmsRow, type SmsSlots } from "@/lib/sms-row";
+import { readSmsRow, smsLabel, smsSlots, SMS_SHEET_COLUMNS, type SmsRow, type SmsSlots } from "@/lib/sms-row";
 import { parseRecord, parseStringArray } from "@/lib/json";
 import { DEFAULT_TIMEZONE, zonedToUtc } from "@/lib/zone";
-import type { EspAudience } from "@/lib/esp";
+import { PROVIDER_LABELS, type EspAudience } from "@/lib/esp";
 
 /**
  * Text messages, from an approved row to a campaign in the client's platform.
@@ -308,6 +308,141 @@ async function load(companyId: string, rowId: string): Promise<Loaded | null> {
     sms,
     hash: smsFingerprint(row.data),
   };
+}
+
+/**
+ * Start a text, with as much or as little of it as the caller knows.
+ *
+ * One place for it, because there are three ways in now -- the Texts page, the
+ * overview's "+ New", and the connector -- and each of them would otherwise
+ * have to know where a company keeps its texts, what a text sheet's columns
+ * are called, and which of them this one happens to use.
+ *
+ * Access is the caller's to check: a session has one answer for that and a
+ * token has another, and this knows about neither.
+ */
+export interface NewText {
+  sheetId?: string;
+  name?: string;
+  body?: string;
+  imageUrl?: string;
+  sendDate?: string;
+  sendTime?: string;
+  audience?: string;
+  exclude?: string;
+}
+
+export async function createText(
+  userId: string,
+  companyId: string,
+  input: NewText = {},
+): Promise<{ rowId: string; sheetId: string }> {
+  let sheet = input.sheetId
+    ? await prisma.contentSheet.findFirst({ where: { id: input.sheetId, companyId, kind: "sms" } })
+    : await prisma.contentSheet.findFirst({ where: { companyId, kind: "sms" }, orderBy: { createdAt: "desc" } });
+  if (!sheet) {
+    sheet = await prisma.contentSheet.create({
+      data: {
+        companyId,
+        name: "Texts added in app",
+        kind: "sms",
+        columns: JSON.stringify(SMS_SHEET_COLUMNS),
+      },
+    });
+  }
+  const slots = smsSlots(parseStringArray(sheet.columns));
+  const last = await prisma.sheetRow.findFirst({
+    where: { sheetId: sheet.id },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+
+  // A send time with no date is not a time, so it is dropped rather than
+  // written for the eligibility check to refuse later.
+  const sendDate = (input.sendDate ?? "").trim();
+  const sendTime = sendDate ? (input.sendTime ?? "").trim() : "";
+  const put = (key: string, value: string | undefined) =>
+    (value ?? "").trim() ? { [key]: (value ?? "").trim() } : {};
+
+  const row = await prisma.sheetRow.create({
+    data: {
+      sheetId: sheet.id,
+      position: (last?.position ?? -1) + 1,
+      data: JSON.stringify({
+        [slots.name]: (input.name ?? "").trim() || "New text",
+        // Written whether or not it has anything in it, so the column exists
+        // and the Texts page has a box to type the message into.
+        [slots.body]: input.body ?? "",
+        ...put(slots.image, input.imageUrl),
+        ...(sendDate ? { [slots.sendDate]: sendDate } : {}),
+        ...(sendTime ? { [slots.sendTime]: sendTime } : {}),
+        ...put(slots.audience, input.audience),
+        ...put(slots.exclude, input.exclude),
+      }),
+      createdById: userId,
+    },
+  });
+  return { rowId: row.id, sheetId: sheet.id };
+}
+
+/**
+ * What a write to this text would cost, before it happens.
+ *
+ * The text-shaped twin of `writeRisk`: an approval covers the whole row, so any
+ * edit withdraws it, which is fine when a person is watching the screen change
+ * and not fine when something reaches in over the connector and nobody sees.
+ */
+export interface SmsWriteRisk {
+  /** "draft" or "scheduled" once it is in the platform, else null. */
+  published: "draft" | "scheduled" | null;
+  /** Which platform it is in, by name, read from the push rather than the company. */
+  publishedIn: string | null;
+  /** People whose current sign-off this write would silently withdraw. */
+  wouldUnapprove: string[];
+}
+
+export async function smsWriteRisk(rowId: string): Promise<SmsWriteRisk> {
+  const row = await prisma.sheetRow.findUnique({
+    where: { id: rowId },
+    include: {
+      smsPush: { select: { status: true, provider: true } },
+      smsApprovals: { include: { user: { select: { name: true, email: true } } } },
+    },
+  });
+  if (!row) return { published: null, publishedIn: null, wouldUnapprove: [] };
+
+  const hash = smsFingerprint(row.data);
+  const status = row.smsPush?.status;
+  return {
+    published: status === "scheduled" || status === "draft" ? status : null,
+    publishedIn: row.smsPush
+      ? (isSmsProvider(row.smsPush.provider) ? PROVIDER_LABELS[row.smsPush.provider] : row.smsPush.provider)
+      : null,
+    wouldUnapprove: [
+      ...new Set(
+        row.smsApprovals
+          .filter((a) => a.contentHash === hash)
+          .map((a) => a.user.name ?? a.user.email),
+      ),
+    ],
+  };
+}
+
+/**
+ * What stands between this text and a push, for a caller that has only ids.
+ *
+ * `smsEligibility` wants a row already loaded, which the push has and nobody
+ * else does. This is the way in for anything asking "could this go?" -- the
+ * connector, mainly -- without duplicating a word of the rules.
+ */
+export async function textReadiness(
+  companyId: string,
+  rowId: string,
+  mode: SmsPushMode = "draft",
+): Promise<SmsEligibility | null> {
+  const loaded = await load(companyId, rowId);
+  if (!loaded) return null;
+  return smsEligibility(loaded, mode);
 }
 
 /** What stands between this text and a push. Pure apart from the role lookup. */

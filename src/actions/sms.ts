@@ -7,8 +7,8 @@ import { AuthError, requireCompanyAccess } from "@/lib/auth";
 import { applyFields } from "@/lib/compose";
 import { KlaviyoError, fetchAccount } from "@/lib/klaviyo";
 import { encryptSecret, secretHint, secretsAvailable, SecretError } from "@/lib/secret";
-import { parseStringArray } from "@/lib/json";
 import {
+  createText,
   isSmsProvider,
   performSmsPush,
   performSmsUnschedule,
@@ -18,7 +18,6 @@ import {
   type SmsPushMode,
   type SmsPushResult,
 } from "@/lib/sms-core";
-import { SMS_SHEET_COLUMNS, smsSlots } from "@/lib/sms-row";
 import type { EspAudience } from "@/lib/esp";
 
 /**
@@ -96,44 +95,9 @@ export async function addTextAction(
 ): Promise<{ ok: boolean; error?: string; rowId?: string }> {
   try {
     const access = await requireCompanyAccess(companyId, "member");
-    let sheet = sheetId
-      ? await prisma.contentSheet.findFirst({ where: { id: sheetId, companyId, kind: "sms" } })
-      : await prisma.contentSheet.findFirst({ where: { companyId, kind: "sms" }, orderBy: { createdAt: "desc" } });
-    if (!sheet) {
-      sheet = await prisma.contentSheet.create({
-        data: {
-          companyId,
-          name: "Texts added in app",
-          kind: "sms",
-          columns: JSON.stringify(SMS_SHEET_COLUMNS),
-        },
-      });
-    }
-    const slots = smsSlots(parseStringArray(sheet.columns));
-    const last = await prisma.sheetRow.findFirst({
-      where: { sheetId: sheet.id },
-      orderBy: { position: "desc" },
-      select: { position: true },
-    });
-    // A send time with no date is not a time, so it is dropped rather than
-    // written for the eligibility check to refuse later.
-    const sendDate = (start?.sendDate ?? "").trim();
-    const sendTime = sendDate ? (start?.sendTime ?? "").trim() : "";
-    const row = await prisma.sheetRow.create({
-      data: {
-        sheetId: sheet.id,
-        position: (last?.position ?? -1) + 1,
-        data: JSON.stringify({
-          [slots.name]: (start?.name ?? "").trim() || "New text",
-          [slots.body]: "",
-          ...(sendDate ? { [slots.sendDate]: sendDate } : {}),
-          ...(sendTime ? { [slots.sendTime]: sendTime } : {}),
-        }),
-        createdById: access.user.id,
-      },
-    });
+    const made = await createText(access.user.id, companyId, { sheetId, ...start });
     refresh(companyId);
-    return { ok: true, rowId: row.id };
+    return { ok: true, rowId: made.rowId };
   } catch (error) {
     return { ok: false, error: refusal(error) };
   }

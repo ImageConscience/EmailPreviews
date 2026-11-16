@@ -29,7 +29,7 @@ if (existsSync(".env")) {
 const { prisma } = await import("@/lib/db");
 import { mintToken } from "@/lib/api-token";
 import { describeFields, describeShortcuts } from "@/lib/field-guide";
-import { approvalFingerprint } from "@/lib/fingerprint";
+import { approvalFingerprint, smsFingerprint } from "@/lib/fingerprint";
 
 const BASE = process.env.MCP_BASE ?? "http://localhost:3100";
 
@@ -184,7 +184,13 @@ check("initialize succeeds with a real token", init.body?.result?.serverInfo?.na
 
 const tools = (await rpc("tools/list", {})).body?.result?.tools ?? [];
 const names = tools.map((t: { name: string }) => t.name);
-check("every tool is listed", names.length === 11, names.join(", "));
+check("every tool is listed", names.length === 17, names.join(", "));
+check(
+  "texts are reachable over the connector, not only emails",
+  ["describe_texting", "list_texts", "get_text", "create_text", "set_text_fields", "hide_text"]
+    .every((n) => names.includes(n)),
+  names.join(", "),
+);
 check(
   "the Attentive handoff tools are there -- Attentive is reached through Claude, not the app",
   ["list_attentive_handoffs", "record_attentive_campaign", "save_attentive_segments"].every((n) => names.includes(n)),
@@ -353,6 +359,99 @@ check(
   (await callTool("describe_template", { companyId, templateId: strangerTemplate.id })).isError,
 );
 
+/* ------------------------------------------------------------- texts ---- */
+//
+// The whole channel over the connector: what a text is, writing one, reading it
+// back, and the two states that must refuse a write. Texting was reachable only
+// through the app until now, which textMade a text the one thing a Claude session
+// could plan and then not write.
+console.log("\nTexts over the connector");
+
+await prisma.company.update({
+  where: { id: companyId },
+  data: {
+    smsProvider: "attentive", smsAddOptOut: true, smsAudience: "Newsletter",
+    attentiveSegments: JSON.stringify([{ id: "SEG1", name: "Newsletter", kind: "list" }]),
+    attentiveSegmentsSyncedAt: new Date(),
+  },
+});
+
+const textGuide = await callTool("describe_texting", { companyId });
+check("describe_texting names the platform", textGuide.data?.platform === "attentive", JSON.stringify(textGuide.data?.platform));
+check("...and the audiences it can name, from the saved copy",
+  textGuide.data?.audiencesFrom === "attentive" && textGuide.data?.audiences?.[0]?.name === "Newsletter",
+  JSON.stringify(textGuide.data?.audiences));
+check("...and says the opt-out wording is added for you",
+  /appends/i.test(String(textGuide.data?.optOut)), String(textGuide.data?.optOut).slice(0, 60));
+check("...and how characters count into segments",
+  textGuide.data?.counting?.gsm7?.single === 160 && textGuide.data?.counting?.ucs2?.single === 70);
+check("...and the company's default audience", textGuide.data?.defaults?.audience === "Newsletter");
+
+const textMade = await callTool("create_text", {
+  companyId, name: "Connector text", body: "Doors open at six. Reply STOP to opt out.",
+  sendDate: "2027-03-02", sendTime: "10:00", audience: "Newsletter",
+});
+check("create_text makes one", !textMade.isError && Boolean(textMade.data?.rowId), JSON.stringify(textMade.data));
+const textRowId = textMade.data?.rowId as string;
+
+const textGot = await callTool("get_text", { companyId, rowId: textRowId });
+check("get_text reads it back", textGot.data?.text?.name === "Connector text", JSON.stringify(textGot.data?.text));
+check("...with the message", textGot.data?.text?.body === "Doors open at six. Reply STOP to opt out.");
+check("...the send time and audience", textGot.data?.text?.sendDate === "2027-03-02" && textGot.data?.text?.audience === "Newsletter");
+check("...and the segment count, not a guess at one",
+  textGot.data?.counts?.encoding === "GSM-7" && textGot.data?.counts?.segments === 1, JSON.stringify(textGot.data?.counts));
+
+const textListed = await callTool("list_texts", { companyId });
+check("list_texts includes it", (textListed.data ?? []).some((t: { rowId: string }) => t.rowId === textRowId));
+
+// A curly apostrophe is one character to a person and a different encoding to a
+// carrier; the count has to say so rather than be out by half a message.
+await callTool("set_text_fields", { companyId, rowId: textRowId, values: { body: "Doors open at six — don’t be late. Reply STOP to opt out." } });
+const textWide = await callTool("get_text", { companyId, rowId: textRowId });
+check("one character outside GSM-7 moves the whole message to UCS-2",
+  textWide.data?.counts?.encoding === "UCS-2", JSON.stringify(textWide.data?.counts));
+
+// The copy rules are the push's, reported rather than re-stated.
+await prisma.company.update({ where: { id: companyId }, data: { smsAddOptOut: false } });
+await callTool("set_text_fields", { companyId, rowId: textRowId, values: { body: "No way out of this one." } });
+const noOptOut = await callTool("get_text", { companyId, rowId: textRowId });
+check("a message with no opt-out wording is reported when the platform adds none",
+  (noOptOut.data?.problems ?? []).concat(noOptOut.data?.warnings ?? []).some((m: string) => /stop|opt/i.test(m)),
+  JSON.stringify({ problems: noOptOut.data?.problems, warnings: noOptOut.data?.warnings }));
+await prisma.company.update({ where: { id: companyId }, data: { smsAddOptOut: true } });
+
+// A sign-off covers the whole message, so a write takes it away.
+await prisma.smsApproval.create({
+  data: { rowId: textRowId, userId: user.id, contentHash: smsFingerprint((await prisma.sheetRow.findUniqueOrThrow({ where: { id: textRowId } })).data) },
+});
+const wouldLose = await callTool("set_text_fields", { companyId, rowId: textRowId, values: { body: "Changed again." } });
+check("a write that would withdraw a sign-off is refused", wouldLose.isError);
+check("...and it names who would lose it", /Demo User/.test(JSON.stringify(wouldLose.data)), JSON.stringify(wouldLose.data));
+const textForced = await callTool("set_text_fields", { companyId, rowId: textRowId, values: { body: "Changed again." }, withdrawApprovals: true });
+check("...and saying so explicitly lets it through", !textForced.isError, JSON.stringify(textForced.data));
+
+// Scheduled is the state nothing may write through.
+await prisma.smsPush.create({
+  data: {
+    rowId: textRowId, provider: "attentive", campaignId: "c", messageId: "m",
+    contentHash: "x", status: "scheduled", campaignName: "Connector text",
+  },
+});
+const textBlocked = await callTool("set_text_fields", { companyId, rowId: textRowId, values: { body: "Too late." } });
+check("a scheduled text refuses every write", textBlocked.isError, JSON.stringify(textBlocked.data));
+const hideLive = await callTool("hide_text", { companyId, rowId: textRowId });
+check("...and refuses to be hidden, which would hide the problem not fix it", hideLive.isError);
+check("...saying which platform it is in", /Attentive/.test(JSON.stringify(hideLive.data)), JSON.stringify(hideLive.data));
+
+await prisma.smsPush.deleteMany({ where: { rowId: textRowId } });
+const textHidden = await callTool("hide_text", { companyId, rowId: textRowId });
+check("an unpushed text can be hidden", !textHidden.isError, JSON.stringify(textHidden.data));
+const afterHide = await callTool("list_texts", { companyId });
+check("...and drops out of the list", !(afterHide.data ?? []).some((t: { rowId: string }) => t.rowId === textRowId));
+const textShown = await callTool("list_texts", { companyId, includeHidden: true });
+check("...unless asked for", (textShown.data ?? []).some((t: { rowId: string }) => t.rowId === textRowId));
+check("...and comes back", !(await callTool("hide_text", { companyId, rowId: textRowId, hidden: false })).isError);
+
 // Revoking is immediate.
 await prisma.apiToken.updateMany({ where: { hash: { not: "" }, label: "check:mcp" }, data: { revokedAt: new Date() } });
 check("a revoked token stops working at once", (await rpc("tools/list", {})).status === 401);
@@ -360,6 +459,12 @@ check("a revoked token stops working at once", (await rpc("tools/list", {})).sta
 /* --------------------------------------------------------------- tidy up */
 await prisma.espPush.deleteMany({ where: { rowId } });
 await prisma.approval.deleteMany({ where: { rowId } });
+const textSheet = await prisma.sheetRow.findUnique({ where: { id: textRowId }, select: { sheetId: true } });
+await prisma.sheetRow.delete({ where: { id: textRowId } }).catch(() => {});
+if (textSheet) {
+  const left = await prisma.sheetRow.count({ where: { sheetId: textSheet.sheetId } });
+  if (left === 0) await prisma.contentSheet.delete({ where: { id: textSheet.sheetId } }).catch(() => {});
+}
 await prisma.sheetRow.delete({ where: { id: rowId } });
 await prisma.apiToken.deleteMany({ where: { label: "check:mcp" } });
 await prisma.template.deleteMany({ where: { companyId: stranger.id } });

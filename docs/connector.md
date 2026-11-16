@@ -52,15 +52,26 @@ brands.
 | --- | --- |
 | `list_companies` | Every brand this token reaches, and the role it has |
 | `list_templates` | A company's templates |
-| `describe_template` | **Read this first.** The annotated field list, plus worked examples |
+| `describe_template` | **Read this first for an email.** The annotated field list, plus worked examples |
 | `list_emails` | Campaigns, filterable by template or search |
 | `get_email` | One row's values, for reading prior content |
 | `create_email` | Start a row against a template |
 | `set_fields` | Merge values into a row |
 | `hide_email` | Take a row out of the working view, or put it back |
+| `describe_texting` | **Read this first for a text.** The platform, the fields, the opt-out rule, how characters count into segments, and the audiences available |
+| `list_texts` | Texts, with their sign-offs and what is already in the platform |
+| `get_text` | One text in full, with its segment count and anything wrong with the copy |
+| `create_text` | Start a text |
+| `set_text_fields` | Merge values into a text |
+| `hide_text` | Take a text out of the working view, or put it back |
 | `list_attentive_handoffs` | For an Attentive company (admin): approved emails and texts ready to build in Attentive |
 | `record_attentive_campaign` | (admin) Record the Attentive campaign Claude built for a row; refused if the row changed since approval |
 | `save_attentive_segments` | (admin) Replace the app's copy of the company's Attentive segments |
+
+Both channels have the same six moves, because a text that could be planned
+over the connector and then only written in the app would be half a channel.
+What differs is the teaching tool: an email's rules come from its template, a
+text's from the company's platform and its opt-out setting.
 
 There is no approve tool and no push tool, deliberately. Sign-off and sending
 stay on the screens where a person can see what they are agreeing to.
